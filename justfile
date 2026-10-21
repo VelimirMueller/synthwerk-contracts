@@ -6,28 +6,34 @@ default: lint gen test
 
 zizmor_version := "1.30.1"
 
-# Spectral on the specs, Biome on JSON and TS, golangci-lint on Go, actionlint + zizmor on workflows.
+# Spectral on the specs, Biome on JSON and TS, golangci-lint on both Go modules, actionlint + zizmor on workflows.
 lint:
     actionlint .github/workflows/*.yml
     uvx zizmor@{{ zizmor_version }} --offline .github/workflows
     pnpm run lint:api
     pnpm exec biome ci .
     golangci-lint run ./...
+    golangci-lint run --build-tags integration ./tests/...
+    cd go && golangci-lint run --config ../.golangci.yml ./...
 
 # Generate the Go and TS clients from the specs.
 gen:
     scripts/gen.sh
 
-# All tests: Go unit + contract tests, generated clients compile, both selftests.
-test: test-unit test-contract compile selftest
+# All tests: Go unit + contract + integration tests, generated clients compile, both selftests.
+test: test-unit test-contract test-int compile selftest
 
-# eventcompat rules (tests/unit).
+# eventcompat rules and the kit (tests/unit).
 test-unit:
     go test ./tests/unit/...
 
 # Catalog, schemas, examples and the generated Go client (tests/contract).
 test-contract:
     go test ./tests/contract/...
+
+# Outbox relay and example service against real Postgres and NATS. Needs Docker (OrbStack).
+test-int:
+    go test -tags integration -race -count=1 ./tests/integration/...
 
 # The generated clients compile.
 compile:

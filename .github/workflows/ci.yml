@@ -1,6 +1,6 @@
-# Thin caller of the synthwerk blueprint (go-ci for the tools and tests module) plus three
+# Thin caller of the synthwerk blueprint (go-ci for the tools and tests module) plus five
 # local jobs the blueprint does not cover yet (it plans a contracts-ci.yml): spec lint,
-# codegen and the breaking-change gate.
+# codegen, the breaking-change gate, the kit lint and the integration tests.
 # Required checks for the ruleset: "ci / required" (blueprint jobs) and "gate" (all jobs).
 name: ci
 
@@ -118,10 +118,59 @@ jobs:
       - name: Selftest (a renamed required field fails the gate)
         run: scripts/selftest-breaking.sh
 
+  # Local: golangci-lint on the published module in go/ (the kit) and on the
+  # integration tests (build tag integration). The blueprint lints the root module only.
+  kit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            go/go.sum
+      - name: golangci-lint (go/)
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.14.0
+          working-directory: go
+          args: --config=../.golangci.yml
+      - name: golangci-lint (tests with build tag integration)
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.14.0
+          args: --build-tags=integration ./tests/...
+
+  # Local: outbox relay and example service against real Postgres and NATS JetStream
+  # (testcontainers-go, images pinned in tests/support/containers).
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            go/go.sum
+      - name: go test -tags integration
+        run: go test -tags integration -race -count=1 ./tests/integration/...
+
   # One check over the blueprint and the local jobs ("ci / required" covers the blueprint only).
   gate:
     if: always()
-    needs: [ci, lint, codegen, breaking]
+    needs: [ci, lint, codegen, breaking, kit, integration]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}

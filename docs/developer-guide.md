@@ -8,6 +8,7 @@
 ## Needs
 
 - Go 1.27 (`go.mod` pins the toolchain), Node 24, pnpm 12, [just](https://just.systems).
+- Docker (OrbStack or Docker Desktop) for `just test-int`. If Testcontainers cannot find Docker, set `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock`.
 - golangci-lint v2, actionlint and uv (for zizmor) for `just lint`.
 - `pnpm install` once. Go tools (oapi-codegen, oasdiff) come from `go.mod` (`go tool …`).
 
@@ -19,10 +20,13 @@
 | `events/` | CloudEvents envelope, catalog, data schemas per domain, one example per type. |
 | `rules/` | Spectral ruleset, oasdiff severity levels. |
 | `codegen/` | oapi-codegen config per spec. |
-| `go/` | Go module `github.com/VelimirMueller/synthwerk-contracts/go`. Generated. |
+| `go/` | Go module `github.com/VelimirMueller/synthwerk-contracts/go`. `health/` is generated. |
+| `go/kit/` | Shared Go kit: health, log, otel, cloudevents, outbox, env. See `docs/features/go-service-kit.md`. |
+| `go/examples/service/` | Example service that wires the kit. New Go services start from a copy. |
 | `packages/ts/` | npm package `@synthwerk/contracts`. `src/gen/` is generated. |
 | `tools/eventcompat/` | The event breaking-change check (Go). |
 | `tests/unit/`, `tests/contract/` | Go tests (D-15). `tests/fixtures/` feeds the selftests. |
+| `tests/integration/` | Outbox and example service against Postgres and NATS (build tag `integration`). `tests/support/containers/` starts them. |
 | `scripts/` | `gen.sh`, `check-breaking.sh`, the selftests. |
 
 - The Go module sits in `go/`, not `packages/go/`: a Go submodule path must match its folder, and tags are `go/vX.Y.Z`.
@@ -33,9 +37,10 @@
 | Command | Does |
 |---|---|
 | `just` | lint, gen, test |
-| `just lint` | Spectral, Biome, golangci-lint, actionlint, zizmor |
+| `just lint` | Spectral, Biome, golangci-lint (both modules), actionlint, zizmor |
 | `just gen` | Go and TS clients from the specs |
-| `just test-unit` | `eventcompat` rules |
+| `just test-unit` | `eventcompat` rules, the kit |
+| `just test-int` | outbox relay and example service against real Postgres and NATS (Docker) |
 | `just test-contract` | catalog, schemas, examples, generated Go client |
 | `just compile` | `go vet` + `go build` in `go/`, `tsc --noEmit` in `packages/ts/` |
 | `just selftest` | the gates fail on a renamed required field and on each Spectral rule |
@@ -63,10 +68,13 @@
 | `lint` | Spectral, Spectral selftest, Biome |
 | `codegen` | generate, fail on drift, compile Go and TS |
 | `breaking` | `check-breaking.sh` against the PR base, breaking selftest |
+| `kit` | golangci-lint on `go/` and on the integration tests |
+| `integration` | `go test -tags integration` with Testcontainers (Postgres, NATS) |
 | `gate` | all of the above |
 | `feature-doc / check` | blueprint feature-doc check (D-16) |
 
 ## Not yet here
 
 - Publish: npm (`@synthwerk/contracts`), Go tags `go/vX.Y.Z`, release-please.
-- Python models, Go and TS types for event data, the shared kit (issue #25), MCP manifests.
+- Python models, Go and TS types for event data, MCP manifests.
+- Kit packages `authn` and `problem` (the problem contract is not in `openapi/_shared` yet), the Python kit.

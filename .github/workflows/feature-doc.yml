@@ -19,5 +19,5 @@ jobs:
       contents: read
     uses: VelimirMueller/synthwerk-blueprint/.github/workflows/feature-doc.yml@v1
     with:
-      # The contracts are the features: specs, event schemas, rules and the gate tools.
-      source-globs: "openapi/**,events/**,rules/**,tools/**,codegen/**,scripts/**"
+      # The contracts are the features: specs, event schemas, rules, the gate tools and the Go kit.
+      source-globs: "openapi/**,events/**,rules/**,tools/**,codegen/**,scripts/**,go/kit/**,go/examples/**"
