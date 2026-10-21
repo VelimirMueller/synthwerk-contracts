@@ -139,7 +139,7 @@ export interface operations {
                      *         {
                      *           "name": "signoz",
                      *           "status": "degraded",
-                     *           "latency_ms": 1500,
+                     *           "latency_ms": 800,
                      *           "detail": "export queue full"
                      *         }
                      *       ]
@@ -163,7 +163,7 @@ export interface operations {
                      *         {
                      *           "name": "postgres",
                      *           "status": "down",
-                     *           "latency_ms": 3000,
+                     *           "latency_ms": 4,
                      *           "detail": "connection refused"
                      *         }
                      *       ]

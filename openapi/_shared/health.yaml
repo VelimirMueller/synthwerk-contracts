@@ -59,7 +59,7 @@ paths:
                     latency_ms: 2
                   - name: signoz
                     status: degraded
-                    latency_ms: 1500
+                    latency_ms: 800
                     detail: export queue full
         "503":
           description: Status `down`. Do not send traffic.
@@ -74,7 +74,7 @@ paths:
                 checks:
                   - name: postgres
                     status: down
-                    latency_ms: 3000
+                    latency_ms: 4
                     detail: connection refused
 components:
   schemas:

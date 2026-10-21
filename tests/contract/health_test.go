@@ -100,7 +100,7 @@ func TestHealthClient(t *testing.T) {
 		if got == nil || got.Status != health.ReadinessStatusDegraded || len(got.Checks) != 2 {
 			t.Fatalf("got %+v", got)
 		}
-		if c := got.Checks[1]; c.Name != "signoz" || c.LatencyMs != 1500 || c.Detail == nil || *c.Detail != "export queue full" {
+		if c := got.Checks[1]; c.Name != "signoz" || c.LatencyMs != 800 || c.Detail == nil || *c.Detail != "export queue full" {
 			t.Fatalf("check: %+v", c)
 		}
 	})
