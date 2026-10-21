@@ -1,0 +1,18 @@
+{
+  "specversion": "1.0",
+  "id": "0199f3a2-7c1e-7b4a-9d2e-5f6a7b8c9d0e",
+  "source": "/synthwerk/pulse/dev",
+  "type": "dev.synthwerk.pulse.target.status_changed.v1",
+  "subject": "identity",
+  "time": "2026-10-21T08:15:30Z",
+  "datacontenttype": "application/json",
+  "dataschema": "https://schemas.synthwerk.dev/events/pulse/target.status_changed.v1.json",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  "actor": "service:pulse",
+  "data": {
+    "target": "identity",
+    "from": "ok",
+    "to": "down",
+    "checks": [{ "name": "postgres", "status": "down" }, { "name": "nats", "status": "ok" }]
+  }
+}

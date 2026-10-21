@@ -1,0 +1,20 @@
+{
+  "specversion": "1.0",
+  "id": "0199f3a4-1d2c-7e3f-8a4b-6c7d8e9f0a1b",
+  "source": "/synthwerk/llm/dev",
+  "type": "dev.synthwerk.llm.toolcall.executed.v1",
+  "subject": "6f1c2d3e-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+  "time": "2026-10-21T08:16:02Z",
+  "datacontenttype": "application/json",
+  "dataschema": "https://schemas.synthwerk.dev/events/llm/toolcall.executed.v1.json",
+  "tenantid": "org_7d3e9a",
+  "traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+  "actor": "user:283746192837461928",
+  "data": {
+    "tool": "pulse_get_health",
+    "scope": "tenant",
+    "conversation_id": "6f1c2d3e-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+    "outcome": "ok",
+    "duration_ms": 42
+  }
+}

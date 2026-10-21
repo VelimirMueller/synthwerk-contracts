@@ -1,0 +1,136 @@
+# Thin caller of the synthwerk blueprint (go-ci for the tools and tests module) plus three
+# local jobs the blueprint does not cover yet (it plans a contracts-ci.yml): spec lint,
+# codegen and the breaking-change gate.
+# Required checks for the ruleset: "ci / required" (blueprint jobs) and "gate" (all jobs).
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
+jobs:
+  # Blueprint: gofmt, golangci-lint, go test (tests/unit, tests/contract), go build.
+  ci:
+    permissions:
+      contents: read
+    uses: VelimirMueller/synthwerk-blueprint/.github/workflows/go-ci.yml@v1
+
+  # Local: Spectral on every spec, Biome on JSON and TS, and the Spectral selftest.
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Spectral (rules/spectral.yaml)
+        run: pnpm run lint:api
+      - name: Spectral selftest (every custom rule fires)
+        run: scripts/selftest-spectral.sh
+      - name: Biome
+        run: pnpm exec biome ci .
+
+  # Local: generate the Go and TS clients, fail on drift, compile both.
+  codegen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate (oapi-codegen, openapi-typescript)
+        run: scripts/gen.sh
+      - name: No drift between specs and generated code
+        run: |
+          if ! git diff --exit-code -- go packages/ts/src/gen; then
+            echo "::error::Generated code is out of date. Run just gen and commit the result."
+            exit 1
+          fi
+      - name: Go client compiles (go vet, go build)
+        working-directory: go
+        run: |
+          go vet ./...
+          go build ./...
+      - name: TS client compiles (tsc --noEmit)
+        run: pnpm run typecheck
+
+  # Local: oasdiff + eventcompat against the PR base, and the selftest that proves the gate.
+  breaking:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Breaking-change check against the PR base
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: scripts/check-breaking.sh "$BASE_SHA"
+      - name: Breaking-change check against the previous commit
+        if: github.event_name == 'push'
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [[ "$BEFORE_SHA" =~ ^0+$ ]] || ! git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null; then
+            echo "No previous commit to compare. Skipped."
+            exit 0
+          fi
+          scripts/check-breaking.sh "$BEFORE_SHA"
+      - name: Selftest (a renamed required field fails the gate)
+        run: scripts/selftest-breaking.sh
+
+  # One check over the blueprint and the local jobs ("ci / required" covers the blueprint only).
+  gate:
+    if: always()
+    needs: [ci, lint, codegen, breaking]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: All jobs passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Results: $RESULTS"
+          for result in $RESULTS; do
+            [[ "$result" == "success" ]] || exit 1
+          done

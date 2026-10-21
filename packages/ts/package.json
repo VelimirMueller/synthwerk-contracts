@@ -1,0 +1,22 @@
+{
+  "name": "@synthwerk/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Typed fetch clients for the Synthwerk APIs, generated from synthwerk-contracts.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "gen": "openapi-typescript ../../openapi/_shared/health.yaml -o src/gen/health.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "openapi-fetch": "0.17.0"
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.13.0",
+    "typescript": "6.0.3"
+  }
+}

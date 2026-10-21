@@ -1,0 +1,21 @@
+{
+  "name": "synthwerk-contracts",
+  "private": true,
+  "description": "OpenAPI and CloudEvents contracts of Synthwerk, with generated Go and TypeScript clients.",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@12.10.1",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "lint:api": "spectral lint --ruleset rules/spectral.yaml --fail-severity warn 'openapi/**/*.yaml'",
+    "lint:biome": "biome ci .",
+    "gen:ts": "pnpm --filter @synthwerk/contracts gen",
+    "typecheck": "pnpm --filter @synthwerk/contracts typecheck"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@stoplight/spectral-cli": "6.17.0"
+  }
+}
