@@ -137,6 +137,9 @@ func TestExampleService(t *testing.T) {
 		for m := range batch.Messages() {
 			msgs = append(msgs, m)
 		}
+		if err := batch.Error(); err != nil {
+			t.Fatal(err)
+		}
 		if len(msgs) != 1 || msgs[0].Subject() != "evt.pulse.target.status_changed.v1" {
 			t.Fatalf("%d messages, want 1 on evt.pulse.target.status_changed.v1", len(msgs))
 		}
