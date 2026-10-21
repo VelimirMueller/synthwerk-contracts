@@ -5,7 +5,8 @@
 #   Events: tools/eventcompat (rules in docs/features/breaking-checks.md).
 #
 # Usage: scripts/check-breaking.sh <base> [<head-dir>]
-#   <base>      a git ref (for example origin/main) or a dir that holds openapi/ and events/
+#   <base>      a git ref (for example origin/main) or a dir that holds openapi/ or events/.
+#               A ref without them (a commit before the first contract) has nothing to break.
 #   <head-dir>  default: the repo root
 set -euo pipefail
 
@@ -13,7 +14,12 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 base=$1
 head=$(cd "${2:-$root}" && pwd)
 
-if [[ ! -d "$base" ]]; then
+if [[ -d "$base" ]]; then
+  if [[ ! -d "$base/openapi" && ! -d "$base/events" ]]; then
+    echo "check-breaking: $base holds no openapi/ and no events/. Wrong dir?" >&2
+    exit 2
+  fi
+else
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT
   git -C "$root" archive "$base" | tar -x -C "$tmp"

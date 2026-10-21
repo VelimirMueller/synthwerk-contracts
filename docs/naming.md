@@ -15,7 +15,7 @@
 | `<entity>` | Thing the fact is about. Singular, `snake_case`. | `toolcall`, `label_set` |
 | `<verb>` | What happened. Past tense, `snake_case`. | `executed`, `status_changed` |
 | `v<N>` | Major version of the data schema. Starts at `v1`. | `v1` |
-| NATS subject | `evt.` + the type without `dev.synthwerk.` | `evt.llm.toolcall.executed.v1` |
+| NATS subject (catalog `nats_subject`) | `evt.` + the type without `dev.synthwerk.` | `evt.llm.toolcall.executed.v1` |
 | Stream | `EVT_<DOMAIN>` for facts, `JOBS_<DOMAIN>` for work queues | `EVT_LLM` |
 | `source` | `/synthwerk/<service>/<env>`, env is `local`, `dev`, `stg` or `prd` | `/synthwerk/llm/prd` |
 | `subject` | Id of the main entity | conversation id |

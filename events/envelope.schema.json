@@ -35,7 +35,7 @@
       "maxLength": 128
     },
     "time": {
-      "description": "When the fact happened (RFC 3339, UTC).",
+      "description": "When the fact happened (RFC 3339). Producers send UTC.",
       "type": "string",
       "format": "date-time",
       "maxLength": 40

@@ -39,9 +39,10 @@ updated: 2026-10-21
 | Add required field | fails (request) | fails |
 | Remove or rename field | fails | fails |
 | Make a required field optional | fails (response) | fails |
-| Change type, format or const | fails | fails |
+| Change type, format or const | fails | fails (also `$ref`, `prefixItems`) |
 | Add enum value | warns (`rules/oasdiff-levels.txt`) | warns |
 | Remove enum value | fails | fails |
+| Drop the whole enum | fails | warns (consumers must tolerate any value) |
 | Remove spec or schema file | fails | fails |
 
 | Spectral rule | Checks |

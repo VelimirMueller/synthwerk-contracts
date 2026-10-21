@@ -21,7 +21,7 @@ updated: 2026-10-21
 ## What it does
 
 - `events/envelope.schema.json`: the CloudEvents attributes, the Synthwerk rules and the extensions `tenantid`, `traceparent`, `actor`.
-- `events/catalog.yaml`: per type the subject, stream, producer, consumers, status, schema and example.
+- `events/catalog.yaml`: per type the NATS subject, stream, producer, consumers, status, schema and example.
 - `events/<domain>/<entity>.<verb>.v<N>.schema.json`: the `data` schema of one type.
 - `events/examples/<type>.json`: one full, valid event per type.
 

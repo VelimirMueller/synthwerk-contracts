@@ -85,6 +85,11 @@ func TestCompare(t *testing.T) {
 			want: []string{"WARN to: enum value unknown added: consumers must tolerate it"},
 		},
 		{
+			name: "Compare - enum dropped - warning only",
+			edit: func(s map[string]any) { delete(props(s)["to"].(map[string]any), "enum") },
+			want: []string{"WARN to: enum removed: consumers can get any value"},
+		},
+		{
 			name: "Compare - nested item property renamed - breaking",
 			edit: func(s map[string]any) {
 				item := props(s)["checks"].(map[string]any)["items"].(map[string]any)

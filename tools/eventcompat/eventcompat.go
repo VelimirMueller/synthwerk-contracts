@@ -126,7 +126,8 @@ func (c *comparer) node(path string, base, head map[string]any) {
 	if bt, ht := typeSet(base), typeSet(head); !slices.Equal(bt, ht) {
 		c.add(Breaking, path, "type changed from %v to %v", bt, ht)
 	}
-	for _, key := range []string{"format", "const", "$ref"} {
+	// prefixItems (tuples) is compared as a whole: any change counts as breaking.
+	for _, key := range []string{"format", "const", "$ref", "prefixItems"} {
 		if !reflect.DeepEqual(base[key], head[key]) {
 			c.add(Breaking, path, "%s changed from %v to %v", key, base[key], head[key])
 		}
@@ -149,6 +150,7 @@ func (c *comparer) enum(path string, base, head map[string]any) {
 	}
 	he, ok := head["enum"].([]any)
 	if !ok {
+		// Same consumer risk as a new enum value (plan §5.4: warn), only wider.
 		c.add(Warning, path, "enum removed: consumers can get any value")
 		return
 	}

@@ -4,7 +4,10 @@ set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
-for config in codegen/oapi-codegen.*.yaml; do
+shopt -s nullglob
+configs=(codegen/oapi-codegen.*.yaml)
+[[ ${#configs[@]} -gt 0 ]] || { echo "gen: no codegen/oapi-codegen.*.yaml" >&2; exit 1; }
+for config in "${configs[@]}"; do
   name=$(basename "$config" .yaml)
   name=${name#oapi-codegen.}
   spec=openapi/_shared/$name.yaml

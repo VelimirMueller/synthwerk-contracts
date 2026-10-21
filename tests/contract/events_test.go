@@ -23,7 +23,7 @@ var typeRule = regexp.MustCompile(`^dev\.synthwerk\.([a-z][a-z0-9]*)\.([a-z][a-z
 
 type catalogEntry struct {
 	Type      string   `yaml:"type"`
-	Subject   string   `yaml:"subject"`
+	NATSSubj  string   `yaml:"nats_subject"`
 	Stream    string   `yaml:"stream"`
 	Producer  string   `yaml:"producer"`
 	Consumers []string `yaml:"consumers"`
@@ -98,7 +98,7 @@ func TestCatalog(t *testing.T) {
 			domain, entity, verb, version := m[1], m[2], m[3], m[4]
 
 			// Names derive from the type (docs/naming.md).
-			checkEqual(t, "subject", e.Subject, "evt."+strings.TrimPrefix(e.Type, "dev.synthwerk."))
+			checkEqual(t, "nats_subject", e.NATSSubj, "evt."+strings.TrimPrefix(e.Type, "dev.synthwerk."))
 			checkEqual(t, "stream", e.Stream, "EVT_"+strings.ToUpper(domain))
 			checkEqual(t, "producer", e.Producer, domain)
 			checkEqual(t, "schema", e.Schema, domain+"/"+entity+"."+verb+"."+version+".schema.json")

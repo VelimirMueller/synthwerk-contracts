@@ -1,9 +1,10 @@
 # Event catalog: one entry per CloudEvents type.
+# nats_subject is the NATS subject, not the CloudEvents subject attribute (the entity id).
 # Naming rules: docs/naming.md. Lifecycle: draft -> active -> deprecated -> retired.
 # tests/contract checks every entry against its schema, its example and the naming rules.
 events:
   - type: dev.synthwerk.pulse.target.status_changed.v1
-    subject: evt.pulse.target.status_changed.v1
+    nats_subject: evt.pulse.target.status_changed.v1
     stream: EVT_PULSE
     producer: pulse
     consumers: [pulse, studio]
@@ -12,7 +13,7 @@ events:
     example: examples/dev.synthwerk.pulse.target.status_changed.v1.json
 
   - type: dev.synthwerk.llm.toolcall.executed.v1
-    subject: evt.llm.toolcall.executed.v1
+    nats_subject: evt.llm.toolcall.executed.v1
     stream: EVT_LLM
     producer: llm
     consumers: [pulse]
