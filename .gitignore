@@ -1,0 +1,11 @@
+# OS and editors
+.DS_Store
+.idea/
+.vscode/
+
+# Node
+node_modules/
+*.tsbuildinfo
+
+# Worktrees of the dev pipeline
+.worktrees/

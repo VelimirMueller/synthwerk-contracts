@@ -1,0 +1,7 @@
+packages:
+  - packages/*
+
+# Dependencies whose install scripts may run (pnpm blocks all others).
+allowBuilds:
+  # Usage telemetry of a Spectral dependency. Not needed.
+  "@scarf/scarf": false
