@@ -35,7 +35,7 @@
 <p>
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="assets/readme/what-v2-light.svg">
-  <img alt="Health API: GET /healthz and GET /readyz for every service. Pulse reads both. Event envelope: CloudEvents 1.0.2 plus tenantid, traceparent and actor. Event catalog: Per type: subject, stream, producer, consumers, status, schema, example. Naming rule: dev.synthwerk.&lt;domain&gt;.&lt;entity&gt;.&lt;verb&gt;.v&lt;N&gt;, verb in the past tense" src="assets/readme/what-v2-dark.svg" width="100%">
+  <img alt="Health API: GET /healthz and GET /readyz for every service. Pulse reads both. Event envelope: CloudEvents 1.0.2 plus tenantid, traceparent and actor. Event catalog: Per type: NATS subject, stream, producer, consumers, status, schema, example. Naming rule: dev.synthwerk.&lt;domain&gt;.&lt;entity&gt;.&lt;verb&gt;.v&lt;N&gt;, verb in the past tense" src="assets/readme/what-v2-dark.svg" width="100%">
 </picture>
 </p>
 

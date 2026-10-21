@@ -11,7 +11,7 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
-base=$1
+base=${1:?usage: scripts/check-breaking.sh <base-ref-or-dir> [<head-dir>]}
 head=$(cd "${2:-$root}" && pwd)
 
 if [[ -d "$base" ]]; then
