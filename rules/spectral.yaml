@@ -1,0 +1,64 @@
+# Spectral ruleset for every spec in openapi/. Run: just lint
+# Rules: docs/naming.md (names) and synthwerk-contracts plan §9 (security).
+extends: [["spectral:oas", "recommended"]]
+
+rules:
+  # A shared spec has no server of its own. Each service adds its servers.
+  oas3-api-servers: off
+
+  synthwerk-operation-id:
+    description: operationId is <service>.<verb><Noun>, for example identity.listMembers.
+    severity: error
+    given: "$.paths[*][get,put,post,delete,patch,head,options,trace].operationId"
+    then:
+      function: pattern
+      functionOptions:
+        match: "^[a-z][a-z0-9]*\\.[a-z]+[A-Z][A-Za-z0-9]*$"
+
+  synthwerk-path:
+    description: Paths are /v<N>/<plural-noun> in kebab-case, custom verbs as :verb. Probes /healthz and /readyz are the exception.
+    severity: error
+    given: "$.paths"
+    then:
+      field: "@key"
+      function: pattern
+      functionOptions:
+        match: "^(/healthz|/readyz|/v[1-9][0-9]*(/([a-z][a-z0-9-]*|\\{[a-z][A-Za-z0-9]*\\}))+(:[a-z][A-Za-z]*)?)$"
+
+  synthwerk-security:
+    description: Every operation needs a security requirement. Only the allow-listed public paths may skip it.
+    severity: error
+    given: "$.paths[?(!@property.match(/^\\/(healthz|readyz)$/))][get,put,post,delete,patch]"
+    then:
+      - field: security
+        function: truthy
+      - field: security
+        function: length
+        functionOptions:
+          min: 1
+
+  synthwerk-string-max-length:
+    description: Every string has maxLength (no unbounded input). Enums and consts are bounded already.
+    severity: error
+    given: "$..[?(@ && @.type === 'string' && @.enum === undefined && @.const === undefined)]"
+    then:
+      field: maxLength
+      function: defined
+
+  synthwerk-array-max-items:
+    description: Every array has maxItems (no unbounded input).
+    severity: error
+    given: "$..[?(@ && @.type === 'array')]"
+    then:
+      field: maxItems
+      function: defined
+
+  synthwerk-property-snake-case:
+    description: Schema properties are snake_case, like the event data fields.
+    severity: error
+    given: "$..properties"
+    then:
+      field: "@key"
+      function: pattern
+      functionOptions:
+        match: "^[a-z][a-z0-9_]*$"

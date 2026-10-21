@@ -1,0 +1,50 @@
+# Breaks each custom rule in rules/spectral.yaml once. scripts/selftest-spectral.sh expects every rule to fire.
+openapi: 3.1.0
+info:
+  title: Spectral selftest
+  version: 0.0.0
+  description: Not a real API.
+  contact:
+    name: test
+tags:
+  - name: test
+    description: test
+paths:
+  /Members:
+    get:
+      operationId: listMembers
+      summary: Bad names, no security
+      description: Bad names, no security.
+      tags: [test]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  memberIds:
+                    type: array
+                    items:
+                      type: string
+                      maxLength: 36
+                  note:
+                    type: string
+  /v1/members/{memberId}:
+    get:
+      operationId: identity.getMember
+      summary: Empty security
+      description: An empty list means no auth. Only the allow-list may do that.
+      tags: [test]
+      security: []
+      parameters:
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 36
+      responses:
+        "204":
+          description: ok

@@ -1,0 +1,40 @@
+# A pull request that renames one required field per contract: Readiness.version -> release (API)
+# and toolcall conversation_id -> chat_id (event). scripts/selftest-breaking.sh expects the check to fail.
+diff -ru a/events/llm/toolcall.executed.v1.schema.json b/events/llm/toolcall.executed.v1.schema.json
+--- a/events/llm/toolcall.executed.v1.schema.json
++++ b/events/llm/toolcall.executed.v1.schema.json
+@@ -5,7 +5,7 @@
+   "description": "Audit fact (D-26, FR-54): the AI called one read-only MCP tool. CloudEvents subject: the conversation id. The actor extension names the user. No tool arguments and no tool results: they can hold personal data.",
+   "type": "object",
+   "additionalProperties": false,
+-  "required": ["tool", "scope", "conversation_id", "outcome", "duration_ms"],
++  "required": ["tool", "scope", "chat_id", "outcome", "duration_ms"],
+   "properties": {
+     "tool": {
+       "description": "MCP tool name, <service>_<verb>_<noun>.",
+@@ -17,7 +17,7 @@
+       "description": "Token scope of the call (D-14).",
+       "enum": ["platform-admin", "tenant", "user"]
+     },
+-    "conversation_id": {
++    "chat_id": {
+       "type": "string",
+       "format": "uuid",
+       "maxLength": 36
+diff -ru a/openapi/_shared/health.yaml b/openapi/_shared/health.yaml
+--- a/openapi/_shared/health.yaml
++++ b/openapi/_shared/health.yaml
+@@ -96,11 +96,11 @@
+     Readiness:
+       type: object
+       additionalProperties: false
+-      required: [status, version, commit, checks]
++      required: [status, release, commit, checks]
+       properties:
+         status:
+           $ref: "#/components/schemas/ReadinessStatus"
+-        version:
++        release:
+           type: string
+           maxLength: 64
+           description: Release version of the service, for example `0.4.1`.
