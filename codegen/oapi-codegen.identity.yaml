@@ -1,0 +1,10 @@
+# oapi-codegen v2 config: Go types and client for openapi/identity/openapi.yaml.
+# Run: just gen
+package: identity
+generate:
+  models: true
+  client: true
+output: go/identity/identity.gen.go
+compatibility:
+  # Enum constants carry their type name (RoleOwner, not Owner): no clashes across schemas.
+  always-prefix-enum-values: true

@@ -20,3 +20,21 @@ events:
     status: draft
     schema: llm/toolcall.executed.v1.schema.json
     example: examples/dev.synthwerk.llm.toolcall.executed.v1.json
+
+  - type: dev.synthwerk.llm.message.completed.v1
+    nats_subject: evt.llm.message.completed.v1
+    stream: EVT_LLM
+    producer: llm
+    consumers: [pulse]
+    status: draft
+    schema: llm/message.completed.v1.schema.json
+    example: examples/dev.synthwerk.llm.message.completed.v1.json
+
+  - type: dev.synthwerk.identity.org.created.v1
+    nats_subject: evt.identity.org.created.v1
+    stream: EVT_IDENTITY
+    producer: identity
+    consumers: [pulse]
+    status: draft
+    schema: identity/org.created.v1.schema.json
+    example: examples/dev.synthwerk.identity.org.created.v1.json

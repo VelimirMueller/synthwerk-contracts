@@ -9,7 +9,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "gen": "openapi-typescript ../../openapi/_shared/health.yaml -o src/gen/health.ts",
+    "gen": "openapi-typescript ../../openapi/_shared/health.yaml -o src/gen/health.ts && openapi-typescript ../../openapi/llm/openapi.yaml -o src/gen/llm.ts && openapi-typescript ../../openapi/identity/openapi.yaml -o src/gen/identity.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

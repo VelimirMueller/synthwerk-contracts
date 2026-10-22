@@ -1,0 +1,10 @@
+# oapi-codegen v2 config: Go types and client for openapi/llm/openapi.yaml.
+# Run: just gen
+package: llm
+generate:
+  models: true
+  client: true
+output: go/llm/llm.gen.go
+compatibility:
+  # Enum constants carry their type name (MessageRoleUser, not User): no clashes across schemas.
+  always-prefix-enum-values: true
