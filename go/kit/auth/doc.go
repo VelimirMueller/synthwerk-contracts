@@ -7,9 +7,10 @@
 //     also refreshes after MaxAge. When a refresh fails, the last good key set stays.
 //   - A ClaimsMapper turns the verified claims into a Principal (subject, org, roles,
 //     scopes). ZitadelMapper is the default. Its claim names are in zitadel.go.
-//   - Middleware puts the Principal in the request context. RequireRole, RequireOrg
-//     and RequireScope guard single routes. Refusals are RFC 9457 problem+json with a
-//     stable code: 401 unauthenticated, 403 forbidden, 503 auth_unavailable.
+//   - Middleware puts the Principal in the request context. RequireRole, RequireOrg,
+//     RequireScope and RequireMFA guard single routes. Refusals are RFC 9457
+//     problem+json with a stable code: 401 unauthenticated, 403 forbidden or
+//     mfa_required, 503 auth_unavailable.
 //   - Package authtest serves a JWKS over httptest and mints tokens, so services test
 //     without Zitadel.
 //
@@ -21,6 +22,20 @@
 //	mux := http.NewServeMux()
 //	mux.Handle("/v1/", auth.Middleware(v, api)) // /healthz and /readyz stay open
 //	healthHandler.Register(mux)
+//
+// Zitadel tokens (v4.20.0):
+//
+//   - "aud" is [client id, project id]. Set Audiences to the project id, so every app
+//     of the project passes.
+//   - The org id claim exists only when the client requests the scope
+//     "urn:zitadel:iam:user:resourceowner". Without it ZitadelMapper refuses the
+//     token (401), so a client that forgets the scope fails at once.
+//   - Roles: Principal.Roles are the keys of the roles claim whose inner map holds
+//     the token's org id. Grants in other orgs are ignored.
+//   - No scope claim: Principal.Scopes stays empty and RequireScope refuses, until an
+//     Action sets synthwerk:scope.
+//   - Force MFA is enforced only by the Zitadel login UI. Put RequireMFA on admin and
+//     platform routes; it reads "amr".
 //
 // RequireOrg reads a path value, so register it on the mux that matches the pattern.
 // Add v.Ready as a readiness check ("jwks") so a service is not ready without keys.

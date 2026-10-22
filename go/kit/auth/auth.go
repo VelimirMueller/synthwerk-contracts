@@ -34,10 +34,8 @@ const maxTokenLen = 16 << 10
 // algorithms is the allow-list. Never "none", never HS*.
 var algorithms = []jose.SignatureAlgorithm{jose.RS256, jose.ES256}
 
-// DefaultAcceptedTypes are the header "typ" values of an access token (RFC 9068).
-//
-// TODO(SW-M2-0.5): Zitadel JWT access tokens may carry typ "JWT". The spike confirms
-// it; drop "JWT" when they carry "at+jwt".
+// DefaultAcceptedTypes are the header "typ" values of an access token. "at+jwt" is
+// RFC 9068; Zitadel access tokens carry "JWT" (confirmed v4.20.0).
 var DefaultAcceptedTypes = []string{"at+jwt", "application/at+jwt", "JWT"}
 
 // idTokenClaims occur only in OIDC ID tokens. A token with one is never an access token.
@@ -229,6 +227,7 @@ func (v *Verifier) Verify(ctx context.Context, raw string) (*Principal, error) {
 	if err != nil {
 		return nil, refuse(fmt.Errorf("%w: %w", ErrClaims, err))
 	}
+	p.AMR = strs(all["amr"])
 	p.Raw = all
 	return p, nil
 }

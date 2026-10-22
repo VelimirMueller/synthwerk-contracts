@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -100,7 +101,7 @@ func TestVerify(t *testing.T) {
 				if err != nil {
 					t.Fatalf("got %v, want a principal", err)
 				}
-				if p.Subject == "" || p.OrgID == "" || p.Raw["iss"] != iss.URL() {
+				if p.Subject == "" || p.OrgID == "" || p.ClientID != authtest.ClientID || p.Raw["iss"] != iss.URL() {
 					t.Fatalf("principal %+v lacks sub, org or raw claims", p)
 				}
 				return
@@ -230,6 +231,34 @@ func TestZitadelMapper(t *testing.T) {
 		}
 	})
 
+	t.Run("Map - Zitadel v4.20.0 access token - org roles and client id", func(t *testing.T) {
+		// Payload of the spike token (bob, demo org), plus a grant in another org.
+		p, err := auth.ZitadelMapper{}.Map(map[string]any{
+			"aud":           []any{"396304353310373123", "396304353209644291"},
+			"client_id":     "396304353310373123",
+			"sub":           "396304400538170627",
+			auth.ClaimOrgID: "396304399212770563",
+			auth.ClaimRoles: map[string]any{
+				"admin":  map[string]any{"396304399212770563": "demo.localhost"},
+				"member": map[string]any{"396304399212770563": "demo.localhost"},
+				"owner":  map[string]any{"396304225400878339": "zitadel.localhost"},
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Equal(p.Roles, []string{"admin", "member"}) || p.ClientID != "396304353310373123" || len(p.Scopes) != 0 {
+			t.Fatalf("got %+v, want roles [admin member], the client id and no scopes", p)
+		}
+	})
+
+	t.Run("Map - no client_id, azp set - azp as client id", func(t *testing.T) {
+		p, err := auth.ZitadelMapper{}.Map(map[string]any{"sub": "u", auth.ClaimOrgID: "o", "azp": "app-1"})
+		if err != nil || p.ClientID != "app-1" {
+			t.Fatalf("got %+v %v, want client id app-1", p, err)
+		}
+	})
+
 	t.Run("Map - operator granted in the platform org - operator", func(t *testing.T) {
 		roles := map[string]any{auth.RoleOperator: map[string]any{"org-platform": "x"}}
 		p, err := auth.ZitadelMapper{PlatformOrgID: "org-platform"}.Map(claims(roles))
@@ -261,6 +290,7 @@ func TestMiddleware(t *testing.T) {
 	api := http.NewServeMux()
 	api.Handle("GET /v1/orgs/{org}/members", auth.RequireOrg("org")(auth.RequireRole(auth.RoleAdmin, auth.RoleOwner)(ok)))
 	api.Handle("GET /v1/chat", auth.RequireScope("user")(ok))
+	api.Handle("GET /v1/admin", auth.RequireMFA()(ok))
 	handler := auth.Middleware(v, api)
 
 	admin := iss.Mint(t, authtest.Claims("u1", "org-1", auth.RoleAdmin))
@@ -281,6 +311,9 @@ func TestMiddleware(t *testing.T) {
 		{"RequireRole - member on an admin route - 403", "/v1/orgs/org-1/members", "Bearer " + member, http.StatusForbidden, auth.CodeForbidden},
 		{"RequireOrg - admin of another org - 403", "/v1/orgs/org-2/members", "Bearer " + admin, http.StatusForbidden, auth.CodeForbidden},
 		{"RequireScope - no user scope - 403", "/v1/chat", "Bearer " + admin, http.StatusForbidden, auth.CodeForbidden},
+		{"RequireMFA - amr user and mfa - 204", "/v1/admin", "Bearer " + iss.Mint(t, map[string]any{"amr": []string{"user", "mfa"}}), http.StatusNoContent, ""},
+		{"RequireMFA - amr pwd only - 403", "/v1/admin", "Bearer " + iss.Mint(t, map[string]any{"amr": []string{"pwd"}}), http.StatusForbidden, auth.CodeMFARequired},
+		{"RequireMFA - no amr - 403", "/v1/admin", "Bearer " + admin, http.StatusForbidden, auth.CodeMFARequired},
 		{"RequireScope - user scope - 204", "/v1/chat", "Bearer " + iss.Mint(t, map[string]any{auth.ClaimScope: "user"}), http.StatusNoContent, ""},
 	}
 	for _, tc := range tests {

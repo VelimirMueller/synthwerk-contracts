@@ -36,6 +36,7 @@ const (
 	Audience = "synthwerk-api"
 	Subject  = "user-1"
 	OrgID    = "org-1"
+	ClientID = "client-1"
 	Lifetime = 5 * time.Minute
 )
 
@@ -109,8 +110,8 @@ func (i *Issuer) Rotate(t testing.TB, alg jose.SignatureAlgorithm) string {
 	return k.id
 }
 
-// Mint returns a token signed with the current key. It sets iss, aud, sub, org id,
-// iat, nbf and exp (Lifetime); claims override them, and a nil value removes a claim.
+// Mint returns a token signed with the current key, in the Zitadel v4 shape. It sets
+// iss, aud, sub, client_id, org id, iat, nbf and exp (Lifetime); claims override them, and a nil value removes a claim.
 // The header typ is "JWT".
 func (i *Issuer) Mint(t testing.TB, claims map[string]any) string {
 	t.Helper()
@@ -172,13 +173,14 @@ func Roles(org string, roles ...string) map[string]any {
 func (i *Issuer) claims(over map[string]any) map[string]any {
 	now := time.Now()
 	c := map[string]any{
-		"iss":           i.URL(),
-		"aud":           []string{Audience},
-		"sub":           Subject,
-		auth.ClaimOrgID: OrgID,
-		"iat":           now.Unix(),
-		"nbf":           now.Unix(),
-		"exp":           now.Add(Lifetime).Unix(),
+		"iss":              i.URL(),
+		"aud":              []string{Audience},
+		"sub":              Subject,
+		auth.ClaimClientID: ClientID,
+		auth.ClaimOrgID:    OrgID,
+		"iat":              now.Unix(),
+		"nbf":              now.Unix(),
+		"exp":              now.Add(Lifetime).Unix(),
 	}
 	maps.Copy(c, over)
 	maps.DeleteFunc(c, func(_ string, v any) bool { return v == nil })

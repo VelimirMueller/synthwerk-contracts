@@ -12,6 +12,7 @@ import (
 const (
 	CodeUnauthenticated = "unauthenticated"
 	CodeForbidden       = "forbidden"
+	CodeMFARequired     = "mfa_required"
 	CodeUnavailable     = "auth_unavailable"
 )
 
@@ -58,6 +59,15 @@ func RequireScope(scopes ...string) func(http.Handler) http.Handler {
 	})
 }
 
+// RequireMFA lets a request through when the sign-in used MFA (amr contains "mfa").
+// No Principal: 401. Else 403 mfa_required. Use it on admin and platform routes:
+// Zitadel enforces Force MFA only in its login UI, so a token from a custom login
+// client can still be password only.
+func RequireMFA() func(http.Handler) http.Handler {
+	return requireCode(CodeMFARequired, "This request needs a sign-in with MFA.",
+		func(_ *http.Request, p *Principal) bool { return p.HasMFA() })
+}
+
 // RequireOrg lets a request through when the path value param (for example "org" in
 // /v1/orgs/{org}) equals the Principal's OrgID. No Principal: 401. Else 403.
 // Register the guarded handler on the mux that matches the pattern, so the path value
@@ -70,6 +80,10 @@ func RequireOrg(param string) func(http.Handler) http.Handler {
 }
 
 func require(allow func(*http.Request, *Principal) bool) func(http.Handler) http.Handler {
+	return requireCode(CodeForbidden, "The token does not allow this request.", allow)
+}
+
+func requireCode(code, detail string, allow func(*http.Request, *Principal) bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			p, ok := FromContext(r.Context())
@@ -79,7 +93,7 @@ func require(allow func(*http.Request, *Principal) bool) func(http.Handler) http
 				return
 			}
 			if !allow(r, p) {
-				writeProblem(w, http.StatusForbidden, CodeForbidden, "The token does not allow this request.")
+				writeProblem(w, http.StatusForbidden, code, detail)
 				return
 			}
 			next.ServeHTTP(w, r)

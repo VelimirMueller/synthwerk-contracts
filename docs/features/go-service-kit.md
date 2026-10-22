@@ -28,7 +28,7 @@ updated: 2026-10-23
 | `kit/cloudevents` | Builds and checks CloudEvents 1.0.2 events: UUIDv7 id, `source`, `traceparent`, NATS subject from the type. |
 | `kit/outbox` | Outbox table, `Enqueue` in the caller's transaction, and the relay to JetStream with `Nats-Msg-Id` = event id. |
 | `kit/env` | Reads `SYNTHWERK_<SERVICE>_*` and `SYNTHWERK_PLATFORM_ENV` (D-40). |
-| `kit/auth` | Verifies Zitadel access tokens against the issuer JWKS (D-20, D-23). Maps claims to a `Principal` (subject, org, roles, scopes). HTTP middleware and `RequireRole`, `RequireOrg`, `RequireScope`. |
+| `kit/auth` | Verifies Zitadel access tokens against the issuer JWKS (D-20, D-23). Maps claims to a `Principal` (subject, org, roles, scopes). HTTP middleware and `RequireRole`, `RequireOrg`, `RequireScope`, `RequireMFA`. |
 | `kit/auth/authtest` | Fake issuer for tests: serves discovery and a JWKS over `httptest`, mints signed tokens. |
 
 - `/readyz` answers 503 `down` until `MarkStarted`. Then it runs every check in parallel, each with its own timeout (default 300 ms, all within 900 ms).
@@ -39,7 +39,11 @@ updated: 2026-10-23
 - The JWKS cache refreshes after 15 min, and at once on an unknown `kid`, at most once per 10 s. When a refresh fails, the last good keys stay in use.
 - `ZitadelMapper` keeps a role only when the roles claim grants it in the token's org. `operator` counts only when granted in `PlatformOrgID`. A token without `sub` or org id is refused.
 - ID tokens never pass as access tokens: the header `typ` must be on an allow-list, and a token with `nonce` or `at_hash` is refused.
-- The Zitadel claim names are not verified against a real token yet (SW-M2-0.5). They live in `go/kit/auth/zitadel.go` only.
+- Claim names and the token shape are verified against Zitadel v4.20.0 (spike SW-M2-0.5, 2026-10-23). They live in `go/kit/auth/zitadel.go` only.
+- Zitadel `aud` is `[client id, project id]`. Set `Audiences` to the project id.
+- The org id claim exists only with the scope `urn:zitadel:iam:user:resourceowner`. Without it the token is refused (401).
+- Zitadel access tokens have `client_id`, no `azp` and no `scope` claim. `Principal.ClientID` reads `client_id`, else `azp`. `Principal.Scopes` stays empty until an Action sets `synthwerk:scope`.
+- `RequireMFA` needs `amr` to contain `mfa` (passkey: `["user","mfa"]`; password only: `["pwd"]`). Zitadel enforces Force MFA only in its login UI, so admin and platform routes check `amr` themselves.
 - Without an OTLP endpoint the service installs no exporter and logs one `WARN` line (`otel.exporter.disabled`). Spans still get ids for the logs.
 
 ## How to use
@@ -69,7 +73,7 @@ updated: 2026-10-23
 | `source` env | `local`, `dev`, `stg`, `prd`. Env `ci` publishes as `local` (the envelope has no `ci`). |
 | Published rows | Stay in the table. Clean-up is not in the kit yet. |
 | JWT algorithms | RS256, ES256. `none` and HS* are refused. RSA keys below 2048 bits are skipped. |
-| JWT header `typ` | `at+jwt`, `application/at+jwt`, `JWT` by default (`Config.AcceptedTypes`). No `typ` is refused unless the list has `""`. |
+| JWT header `typ` | `at+jwt`, `application/at+jwt`, `JWT` (Zitadel v4.20.0) by default (`Config.AcceptedTypes`). No `typ` is refused unless the list has `""`. |
 | ID tokens | A token with `nonce` or `at_hash` is refused, whatever its `typ`. |
 | JWT leeway | 30 s default, 60 s max |
 | JWKS cache | 15 min max age, refresh on unknown `kid` at most once per 10 s, 5 s fetch timeout, 1 MiB body |
@@ -88,6 +92,7 @@ updated: 2026-10-23
 | 400 | none (plain text) | Example service: bad target name or body. |
 | 401 | `about:blank`, code `unauthenticated` | `kit/auth`: no Bearer token, or the token is refused. Header `WWW-Authenticate: Bearer`. |
 | 403 | `about:blank`, code `forbidden` | `kit/auth`: role, org or scope does not match. |
+| 403 | `about:blank`, code `mfa_required` | `kit/auth`: `RequireMFA` and the sign-in had no MFA. |
 | 503 | `about:blank`, code `auth_unavailable` | `kit/auth`: the JWKS cannot be loaded and no key is known. |
 
 ## Tests
@@ -105,6 +110,8 @@ updated: 2026-10-23
 - `tests/unit/kit/auth_test.go` — `Verify - unknown kid - refreshes JWKS once, then rejects`
 - `tests/unit/kit/auth_test.go` — `Verify - key rotated after the first fetch - refreshes once, then accepts`
 - `tests/unit/kit/auth_test.go` — `RequireRole - member on an admin route - 403`
+- `tests/unit/kit/auth_test.go` — `RequireMFA - amr pwd only - 403`
+- `tests/unit/kit/auth_test.go` — `Map - Zitadel v4.20.0 access token - org roles and client id`
 - `tests/unit/kit/health_test.go` — `readyz - check hangs - answers within the budget with timeout`
 - `tests/unit/kit/log_test.go` — `log line - forbidden keys anywhere - keys dropped`
 - `tests/unit/kit/otel_test.go` — `Setup - endpoint not set - no exporter, one warning`
@@ -115,3 +122,4 @@ updated: 2026-10-23
 |---|---|
 | 2026-10-21 | First version: health, log, otel, cloudevents, outbox, env, example service. |
 | 2026-10-23 | `kit/auth` and `kit/auth/authtest`: JWT verify with a JWKS cache, Zitadel claims mapper, HTTP middleware (SW-M2-0.1). |
+| 2026-10-23 | `kit/auth`: Zitadel v4.20.0 token shape (`client_id`, `aud`, org scope), `RequireMFA` (SW-M2-0.5). |

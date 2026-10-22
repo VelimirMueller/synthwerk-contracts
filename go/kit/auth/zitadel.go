@@ -6,22 +6,25 @@ import (
 	"strings"
 )
 
-// Zitadel claim names (architecture §5.4). All names in one place.
+// Zitadel claim names. All names in one place.
 //
-// TODO(SW-M2-0.5): the names and shapes are not verified against a real Zitadel v4
-// token yet. The spike captures one; change only this file when they differ.
+// Verified against Zitadel v4.20.0 on 2026-10-23 (spike SW-M2-0.5): ClaimOrgID,
+// ClaimRoles and ClaimClientID, and the header typ "JWT". Access tokens have no "azp"
+// and no "scope" claim; "aud" is [client id, project id].
 const (
-	// ClaimOrgID is the org of the user: a string.
+	// ClaimOrgID is the org of the user: a string. Zitadel sets it only when the
+	// client requests the scope "urn:zitadel:iam:user:resourceowner".
 	ClaimOrgID = "urn:zitadel:iam:user:resourceowner:id"
 	// ClaimRoles is the project roles claim: {"<role>": {"<org id>": "<org domain>"}}.
 	ClaimRoles = "urn:zitadel:iam:org:project:roles"
-	// ClaimScope is the AI scope (custom, set by an Action): "user" or a
-	// space-separated list, or a list of strings.
+	// ClaimClientID is the client id of the app: studio, widget or sdk.
+	ClaimClientID = "client_id"
+	// ClaimScope is the AI scope (custom claim, set by an Action): "user" or a
+	// space-separated list, or a list of strings. Not verified: no Zitadel token
+	// carries it today, so Scopes stay empty.
 	ClaimScope = "synthwerk:scope"
-	// ClaimOrigin binds a widget token to one origin (#30).
+	// ClaimOrigin binds a widget token to one origin (#30). Not verified.
 	ClaimOrigin = "synthwerk:origin"
-	// ClaimAuthorizedParty is the client id: studio, widget or sdk.
-	ClaimAuthorizedParty = "azp"
 )
 
 // ZitadelMapper maps Zitadel access token claims. A token without "sub" or org id is
@@ -49,11 +52,16 @@ func (m ZitadelMapper) Map(claims map[string]any) (*Principal, error) {
 	if len(errs) > 0 {
 		return nil, errors.Join(errs...)
 	}
+	client, _ := claims[ClaimClientID].(string)
+	if client == "" {
+		client, _ = claims["azp"].(string) // ID tokens and other issuers
+	}
 	return &Principal{
-		Subject: sub,
-		OrgID:   org,
-		Roles:   m.roles(claims[ClaimRoles], org),
-		Scopes:  strs(claims[ClaimScope]),
+		Subject:  sub,
+		OrgID:    org,
+		ClientID: client,
+		Roles:    m.roles(claims[ClaimRoles], org),
+		Scopes:   strs(claims[ClaimScope]),
 	}, nil
 }
 

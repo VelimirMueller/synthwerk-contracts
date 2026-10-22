@@ -23,8 +23,14 @@ type Principal struct {
 	// Roles the caller has in OrgID, plus RoleOperator. Sorted, no duplicates.
 	Roles []string
 	// Scopes are the AI scopes (synthwerk:scope), not roles. Do not mix the two.
+	// Empty for Zitadel tokens today: no Action sets the claim.
 	Scopes []string
-	// Raw holds every verified claim. Read other claims (azp, synthwerk:origin) here.
+	// ClientID is the app that got the token (client_id, else azp).
+	ClientID string
+	// AMR are the authentication methods ("amr"), for example ["user", "mfa"] after a
+	// passkey or ["pwd"] after a password only. Set by Verify.
+	AMR []string
+	// Raw holds every verified claim. Read other claims (synthwerk:origin) here.
 	Raw map[string]any
 }
 
@@ -33,6 +39,9 @@ func (p *Principal) HasRole(role string) bool { return slices.Contains(p.Roles, 
 
 // HasScope reports whether p has scope.
 func (p *Principal) HasScope(scope string) bool { return slices.Contains(p.Scopes, scope) }
+
+// HasMFA reports whether the sign-in used more than one factor (amr contains "mfa").
+func (p *Principal) HasMFA() bool { return slices.Contains(p.AMR, "mfa") }
 
 // IsOperator reports whether p has the platform role operator.
 func (p *Principal) IsOperator() bool { return p.HasRole(RoleOperator) }
