@@ -111,19 +111,26 @@ func (i *Issuer) Rotate(t testing.TB, alg jose.SignatureAlgorithm) string {
 
 // Mint returns a token signed with the current key. It sets iss, aud, sub, org id,
 // iat, nbf and exp (Lifetime); claims override them, and a nil value removes a claim.
+// The header typ is "JWT".
 func (i *Issuer) Mint(t testing.TB, claims map[string]any) string {
+	t.Helper()
+	return i.MintType(t, "JWT", claims)
+}
+
+// MintType is Mint with the header typ, for example "at+jwt". Empty: no typ header.
+func (i *Issuer) MintType(t testing.TB, typ string, claims map[string]any) string {
 	t.Helper()
 	i.mu.Lock()
 	k := i.current
 	i.mu.Unlock()
-	return sign(t, k.alg, jose.JSONWebKey{Key: k.priv, KeyID: k.id}, i.claims(claims))
+	return sign(t, k.alg, typ, jose.JSONWebKey{Key: k.priv, KeyID: k.id}, i.claims(claims))
 }
 
 // MintUnpublished returns a token signed with a new key that the JWKS does not have.
 func (i *Issuer) MintUnpublished(t testing.TB, claims map[string]any) string {
 	t.Helper()
 	k := newKey(t, jose.RS256)
-	return sign(t, k.alg, jose.JSONWebKey{Key: k.priv, KeyID: k.id}, i.claims(claims))
+	return sign(t, k.alg, "JWT", jose.JSONWebKey{Key: k.priv, KeyID: k.id}, i.claims(claims))
 }
 
 // MintHS256 returns a token signed with HS256 under the kid of the current key.
@@ -133,7 +140,7 @@ func (i *Issuer) MintHS256(t testing.TB, claims map[string]any) string {
 	i.mu.Lock()
 	kid := i.current.id
 	i.mu.Unlock()
-	return sign(t, jose.HS256, jose.JSONWebKey{Key: []byte("0123456789abcdef0123456789abcdef"), KeyID: kid}, i.claims(claims))
+	return sign(t, jose.HS256, "JWT", jose.JSONWebKey{Key: []byte("0123456789abcdef0123456789abcdef"), KeyID: kid}, i.claims(claims))
 }
 
 // MintNone returns an unsigned token (alg "none"). A verifier must refuse it.
@@ -198,9 +205,13 @@ func newKey(t testing.TB, alg jose.SignatureAlgorithm) signingKey {
 	return signingKey{id: hex.EncodeToString(id), alg: alg, priv: priv}
 }
 
-func sign(t testing.TB, alg jose.SignatureAlgorithm, key jose.JSONWebKey, claims map[string]any) string {
+func sign(t testing.TB, alg jose.SignatureAlgorithm, typ string, key jose.JSONWebKey, claims map[string]any) string {
 	t.Helper()
-	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: alg, Key: key}, (&jose.SignerOptions{}).WithType("JWT"))
+	opts := &jose.SignerOptions{}
+	if typ != "" {
+		opts = opts.WithType(jose.ContentType(typ))
+	}
+	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: alg, Key: key}, opts)
 	if err != nil {
 		t.Fatal(err)
 	}

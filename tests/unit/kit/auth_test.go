@@ -68,6 +68,24 @@ func TestVerify(t *testing.T) {
 			return a[0] + "." + a[1] + "." + b[2]
 		}, auth.ErrSignature},
 		{"Verify - not a JWT - rejects", func(*testing.T) string { return "abc.def" }, auth.ErrMalformed},
+		{"Verify - typ at+jwt - accepts", func(t *testing.T) string {
+			return iss.MintType(t, "at+jwt", nil)
+		}, nil},
+		{"Verify - typ application/AT+JWT - accepts", func(t *testing.T) string {
+			return iss.MintType(t, "application/AT+JWT", nil)
+		}, nil},
+		{"Verify - ID token, typ JWT with nonce - rejects", func(t *testing.T) string {
+			return iss.Mint(t, map[string]any{"nonce": "n-0S6_WzA2Mj"})
+		}, auth.ErrTokenType},
+		{"Verify - ID token, typ at+jwt with at_hash - rejects", func(t *testing.T) string {
+			return iss.MintType(t, "at+jwt", map[string]any{"at_hash": "77QmUPtjPfzWtF2AnpK9RQ"})
+		}, auth.ErrTokenType},
+		{"Verify - typ not in the allow-list - rejects", func(t *testing.T) string {
+			return iss.MintType(t, "id+jwt", nil)
+		}, auth.ErrTokenType},
+		{"Verify - no typ, default allow-list - rejects", func(t *testing.T) string {
+			return iss.MintType(t, "", nil)
+		}, auth.ErrTokenType},
 		{"Claims - missing sub - rejects", func(t *testing.T) string {
 			return iss.Mint(t, map[string]any{"sub": nil})
 		}, auth.ErrClaims},
@@ -92,6 +110,18 @@ func TestVerify(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("Verify - custom allow-list - only its types pass", func(t *testing.T) {
+		cfg := iss.Config()
+		cfg.AcceptedTypes = []string{"at+jwt", ""}
+		v := newVerifier(t, cfg)
+		for typ, want := range map[string]error{"at+jwt": nil, "": nil, "JWT": auth.ErrTokenType} {
+			_, err := v.Verify(t.Context(), iss.MintType(t, typ, nil))
+			if (want == nil && err != nil) || (want != nil && !errors.Is(err, want)) {
+				t.Errorf("typ %q: got %v, want %v", typ, err, want)
+			}
+		}
+	})
 
 	t.Run("Verify - valid ES256 token - principal with org roles", func(t *testing.T) {
 		iss := authtest.NewIssuer(t)

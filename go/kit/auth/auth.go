@@ -34,6 +34,15 @@ const maxTokenLen = 16 << 10
 // algorithms is the allow-list. Never "none", never HS*.
 var algorithms = []jose.SignatureAlgorithm{jose.RS256, jose.ES256}
 
+// DefaultAcceptedTypes are the header "typ" values of an access token (RFC 9068).
+//
+// TODO(SW-M2-0.5): Zitadel JWT access tokens may carry typ "JWT". The spike confirms
+// it; drop "JWT" when they carry "at+jwt".
+var DefaultAcceptedTypes = []string{"at+jwt", "application/at+jwt", "JWT"}
+
+// idTokenClaims occur only in OIDC ID tokens. A token with one is never an access token.
+var idTokenClaims = []string{"nonce", "at_hash"}
+
 // ErrUnauthenticated wraps every refusal of a token: the caller answers 401.
 // errors.Is also matches the reason, for example ErrExpired.
 var ErrUnauthenticated = errors.New("auth: unauthenticated")
@@ -45,6 +54,7 @@ var ErrUnavailable = errors.New("auth: key set unavailable")
 var (
 	ErrMalformed   = errors.New("malformed token")
 	ErrAlgorithm   = errors.New("algorithm not allowed")
+	ErrTokenType   = errors.New("not an access token")
 	ErrUnknownKey  = errors.New("unknown key id")
 	ErrSignature   = errors.New("bad signature")
 	ErrExpired     = errors.New("token expired")
@@ -74,6 +84,10 @@ type Config struct {
 	HTTPClient *http.Client
 	// Mapper turns verified claims into a Principal. Default ZitadelMapper{}.
 	Mapper ClaimsMapper
+	// AcceptedTypes is the allow-list of the header "typ". Compared without case and
+	// without the "application/" prefix. Nil: DefaultAcceptedTypes. A token without
+	// typ passes only when the list contains "".
+	AcceptedTypes []string
 }
 
 // Verifier checks access tokens. It is safe for concurrent use.
@@ -82,6 +96,7 @@ type Verifier struct {
 	audiences []string
 	leeway    time.Duration
 	mapper    ClaimsMapper
+	types     map[string]bool
 	keys      *keySet
 }
 
@@ -130,11 +145,19 @@ func NewVerifier(cfg Config) (*Verifier, error) {
 	if cfg.Mapper == nil {
 		cfg.Mapper = ZitadelMapper{}
 	}
+	if cfg.AcceptedTypes == nil {
+		cfg.AcceptedTypes = DefaultAcceptedTypes
+	}
+	types := make(map[string]bool, len(cfg.AcceptedTypes))
+	for _, t := range cfg.AcceptedTypes {
+		types[normType(t)] = true
+	}
 	return &Verifier{
 		issuer:    cfg.Issuer,
 		audiences: append([]string(nil), cfg.Audiences...),
 		leeway:    cfg.Leeway,
 		mapper:    cfg.Mapper,
+		types:     types,
 		keys: &keySet{
 			client:     cfg.HTTPClient,
 			issuer:     cfg.Issuer,
@@ -152,9 +175,12 @@ func (v *Verifier) Verify(ctx context.Context, raw string) (*Principal, error) {
 	if raw == "" || len(raw) > maxTokenLen {
 		return nil, refuse(ErrMalformed)
 	}
-	alg, kid, err := peekHeader(raw)
+	alg, kid, typ, err := peekHeader(raw)
 	if err != nil {
 		return nil, err
+	}
+	if !v.types[normType(typ)] {
+		return nil, refuse(fmt.Errorf("%w: typ %q", ErrTokenType, typ))
 	}
 	tok, err := jwt.ParseSigned(raw, algorithms)
 	if err != nil {
@@ -175,6 +201,11 @@ func (v *Verifier) Verify(ctx context.Context, raw string) (*Principal, error) {
 			return nil, refuse(ErrSignature)
 		}
 		return nil, refuse(ErrMalformed)
+	}
+	for _, c := range idTokenClaims {
+		if _, ok := all[c]; ok {
+			return nil, refuse(fmt.Errorf("%w: ID token claim %s", ErrTokenType, c))
+		}
 	}
 	if std.Expiry == nil {
 		return nil, refuse(fmt.Errorf("%w: no exp", ErrClaims))
@@ -208,31 +239,38 @@ func (v *Verifier) Ready(ctx context.Context) error { return v.keys.ready(ctx) }
 
 func refuse(reason error) error { return fmt.Errorf("%w: %w", ErrUnauthenticated, reason) }
 
-// peekHeader reads alg and kid before the library parses the token, so a token with
+// normType makes "application/AT+JWT" and "at+jwt" equal (RFC 7515 §4.1.9).
+func normType(t string) string {
+	t = strings.ToLower(strings.TrimSpace(t))
+	return strings.TrimPrefix(t, "application/")
+}
+
+// peekHeader reads alg, kid and typ before the library parses the token, so a token with
 // a forbidden algorithm fails as ErrAlgorithm and never reaches a key lookup.
-func peekHeader(raw string) (alg, kid string, err error) {
+func peekHeader(raw string) (alg, kid, typ string, err error) {
 	head, _, ok := strings.Cut(raw, ".")
 	if !ok {
-		return "", "", refuse(ErrMalformed)
+		return "", "", "", refuse(ErrMalformed)
 	}
 	b, err := base64.RawURLEncoding.DecodeString(head)
 	if err != nil {
-		return "", "", refuse(ErrMalformed)
+		return "", "", "", refuse(ErrMalformed)
 	}
 	var h struct {
 		Alg string `json:"alg"`
 		Kid string `json:"kid"`
+		Typ string `json:"typ"`
 	}
 	if err := json.Unmarshal(b, &h); err != nil {
-		return "", "", refuse(ErrMalformed)
+		return "", "", "", refuse(ErrMalformed)
 	}
 	if h.Alg != string(jose.RS256) && h.Alg != string(jose.ES256) {
-		return "", "", refuse(ErrAlgorithm)
+		return "", "", "", refuse(ErrAlgorithm)
 	}
 	if h.Kid == "" {
-		return "", "", refuse(fmt.Errorf("%w: no kid", ErrMalformed))
+		return "", "", "", refuse(fmt.Errorf("%w: no kid", ErrMalformed))
 	}
-	return h.Alg, h.Kid, nil
+	return h.Alg, h.Kid, h.Typ, nil
 }
 
 // keyFits reports whether the JWK may verify a token signed with alg.

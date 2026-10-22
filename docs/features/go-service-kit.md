@@ -38,6 +38,7 @@ updated: 2026-10-23
 - `auth.Verifier` allows RS256 and ES256 only. It checks `iss`, `aud` (any of a list), `exp` (required), `nbf` and `iat` with 30 s leeway (max 60 s).
 - The JWKS cache refreshes after 15 min, and at once on an unknown `kid`, at most once per 10 s. When a refresh fails, the last good keys stay in use.
 - `ZitadelMapper` keeps a role only when the roles claim grants it in the token's org. `operator` counts only when granted in `PlatformOrgID`. A token without `sub` or org id is refused.
+- ID tokens never pass as access tokens: the header `typ` must be on an allow-list, and a token with `nonce` or `at_hash` is refused.
 - The Zitadel claim names are not verified against a real token yet (SW-M2-0.5). They live in `go/kit/auth/zitadel.go` only.
 - Without an OTLP endpoint the service installs no exporter and logs one `WARN` line (`otel.exporter.disabled`). Spans still get ids for the logs.
 
@@ -68,6 +69,8 @@ updated: 2026-10-23
 | `source` env | `local`, `dev`, `stg`, `prd`. Env `ci` publishes as `local` (the envelope has no `ci`). |
 | Published rows | Stay in the table. Clean-up is not in the kit yet. |
 | JWT algorithms | RS256, ES256. `none` and HS* are refused. RSA keys below 2048 bits are skipped. |
+| JWT header `typ` | `at+jwt`, `application/at+jwt`, `JWT` by default (`Config.AcceptedTypes`). No `typ` is refused unless the list has `""`. |
+| ID tokens | A token with `nonce` or `at_hash` is refused, whatever its `typ`. |
 | JWT leeway | 30 s default, 60 s max |
 | JWKS cache | 15 min max age, refresh on unknown `kid` at most once per 10 s, 5 s fetch timeout, 1 MiB body |
 
