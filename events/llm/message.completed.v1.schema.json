@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.synthwerk.dev/events/llm/message.completed.v1.json",
+  "title": "llm.message.completed.v1",
+  "description": "The gateway finished one assistant answer (M2 spec #32). Sent for every end state: completed, failed, canceled. CloudEvents subject: the message id. The tenantid extension holds the org id, the actor extension names the user. Metadata only: no prompt, no answer text.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "conversation_id",
+    "message_id",
+    "model",
+    "provider",
+    "input_tokens",
+    "output_tokens",
+    "latency_ms",
+    "status"
+  ],
+  "properties": {
+    "conversation_id": {
+      "type": "string",
+      "format": "uuid",
+      "maxLength": 36
+    },
+    "message_id": {
+      "description": "Id of the assistant message. Same as the done event of the stream.",
+      "type": "string",
+      "format": "uuid",
+      "maxLength": 36
+    },
+    "model": {
+      "description": "Model alias, for example default. Never a provider model name.",
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_-]*$"
+    },
+    "provider": {
+      "description": "Provider adapter that answered, for example ollama, openai_compat or fake.",
+      "type": "string",
+      "maxLength": 32,
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "input_tokens": {
+      "description": "Provider token count. Same as the usage event of the stream.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10000000
+    },
+    "output_tokens": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10000000
+    },
+    "latency_ms": {
+      "description": "Time from the request to the end of the stream.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3600000
+    },
+    "ttft_ms": {
+      "description": "Time to the first token. Absent when no token came.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3600000
+    },
+    "status": {
+      "description": "completed: the answer is complete. failed: the model call failed. canceled: the client closed the stream.",
+      "enum": ["completed", "failed", "canceled"]
+    }
+  }
+}

@@ -6,9 +6,9 @@ epic: E1
 owner: contracts
 paths: ["events/**"]
 api: []
-events: ["dev.synthwerk.pulse.target.status_changed.v1", "dev.synthwerk.llm.toolcall.executed.v1"]
+events: ["dev.synthwerk.pulse.target.status_changed.v1", "dev.synthwerk.llm.toolcall.executed.v1", "dev.synthwerk.llm.message.completed.v1", "dev.synthwerk.identity.org.created.v1"]
 mcp: []
-updated: 2026-10-21
+updated: 2026-10-23
 ---
 
 # Event schemas
@@ -46,6 +46,8 @@ updated: 2026-10-21
 |---|---|
 | `dev.synthwerk.pulse.target.status_changed.v1` | Pulse sees a new readiness status of a target. |
 | `dev.synthwerk.llm.toolcall.executed.v1` | Audit fact (D-26): the AI called one read-only MCP tool. |
+| `dev.synthwerk.llm.message.completed.v1` | An LLM answer ends: completed, failed or canceled. Metadata only. |
+| `dev.synthwerk.identity.org.created.v1` | Identity created an org and its first owner. |
 
 ## Errors
 
@@ -64,3 +66,4 @@ updated: 2026-10-21
 | Date | Change |
 |---|---|
 | 2026-10-21 | First version: envelope, catalog, pulse status change, LLM tool-call audit fact. |
+| 2026-10-23 | Add `llm.message.completed.v1` and `identity.org.created.v1` (stream `EVT_IDENTITY`). |
