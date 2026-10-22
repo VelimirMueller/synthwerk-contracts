@@ -8,13 +8,13 @@ paths: ["go/kit/**", "go/examples/**"]
 api: ["GET /healthz", "GET /readyz"]
 events: ["dev.synthwerk.pulse.target.status_changed.v1"]
 mcp: []
-updated: 2026-10-21
+updated: 2026-10-23
 ---
 
 # Go service kit
 
 > **In 30 seconds**
-> - Shared Go packages for identity, llm and pulse: health probes, JSON logs, OpenTelemetry, CloudEvents and the transactional outbox.
+> - Shared Go packages for identity, llm and pulse: health probes, JSON logs, OpenTelemetry, CloudEvents, the transactional outbox and JWT auth.
 > - Module `github.com/VelimirMueller/synthwerk-contracts/go`, folder `go/kit/`. An example service in `go/examples/service/` wires every package.
 > - Integration tests prove the outbox against a real Postgres and NATS JetStream in CI.
 
@@ -28,11 +28,17 @@ updated: 2026-10-21
 | `kit/cloudevents` | Builds and checks CloudEvents 1.0.2 events: UUIDv7 id, `source`, `traceparent`, NATS subject from the type. |
 | `kit/outbox` | Outbox table, `Enqueue` in the caller's transaction, and the relay to JetStream with `Nats-Msg-Id` = event id. |
 | `kit/env` | Reads `SYNTHWERK_<SERVICE>_*` and `SYNTHWERK_PLATFORM_ENV` (D-40). |
+| `kit/auth` | Verifies Zitadel access tokens against the issuer JWKS (D-20, D-23). Maps claims to a `Principal` (subject, org, roles, scopes). HTTP middleware and `RequireRole`, `RequireOrg`, `RequireScope`. |
+| `kit/auth/authtest` | Fake issuer for tests: serves discovery and a JWKS over `httptest`, mints signed tokens. |
 
 - `/readyz` answers 503 `down` until `MarkStarted`. Then it runs every check in parallel, each with its own timeout (default 300 ms, all within 900 ms).
 - A failed critical check gives `down` (503). A failed optional check gives `degraded` (200). `detail` is constant text, never the error.
 - The relay locks rows with `FOR UPDATE SKIP LOCKED`, publishes, and marks them in one database transaction. Several relays can run at once.
 - A crash after the publish and before the commit leaves the row unpublished. The next run publishes it again with the same `Nats-Msg-Id`. JetStream drops the copy, so a consumer gets the event once.
+- `auth.Verifier` allows RS256 and ES256 only. It checks `iss`, `aud` (any of a list), `exp` (required), `nbf` and `iat` with 30 s leeway (max 60 s).
+- The JWKS cache refreshes after 15 min, and at once on an unknown `kid`, at most once per 10 s. When a refresh fails, the last good keys stay in use.
+- `ZitadelMapper` keeps a role only when the roles claim grants it in the token's org. `operator` counts only when granted in `PlatformOrgID`. A token without `sub` or org id is refused.
+- The Zitadel claim names are not verified against a real token yet (SW-M2-0.5). They live in `go/kit/auth/zitadel.go` only.
 - Without an OTLP endpoint the service installs no exporter and logs one `WARN` line (`otel.exporter.disabled`). Spans still get ids for the logs.
 
 ## How to use
@@ -44,6 +50,8 @@ updated: 2026-10-21
 5. Start one `outbox.Relay` per process with `relay.Run(ctx)`.
 6. Add one `health.Check` per dependency. Call `MarkStarted` when the service can serve.
 7. Wrap the mux: `otelhttp.NewHandler(log.HTTP(logger, mux), service)`.
+8. Auth: `auth.NewVerifier(auth.Config{Issuer, Audiences})`. Mount the API mux under `auth.Middleware(v, api)`; keep `/healthz` and `/readyz` outside. Add `v.Ready` as the `jwks` readiness check.
+9. Tests: `authtest.NewIssuer(t)`, `auth.NewVerifier(iss.Config())`, `iss.Mint(t, authtest.Claims(sub, org, roles...))`.
 
 ## Rules and limits
 
@@ -59,6 +67,9 @@ updated: 2026-10-21
 | Log format | `json` (default). `console` only in env `local`. |
 | `source` env | `local`, `dev`, `stg`, `prd`. Env `ci` publishes as `local` (the envelope has no `ci`). |
 | Published rows | Stay in the table. Clean-up is not in the kit yet. |
+| JWT algorithms | RS256, ES256. `none` and HS* are refused. RSA keys below 2048 bits are skipped. |
+| JWT leeway | 30 s default, 60 s max |
+| JWKS cache | 15 min max age, refresh on unknown `kid` at most once per 10 s, 5 s fetch timeout, 1 MiB body |
 
 ## Events
 
@@ -72,6 +83,9 @@ updated: 2026-10-21
 |---|---|---|
 | 503 | none (body is `Readiness`) | Startup is not complete, or a critical check is `down`. |
 | 400 | none (plain text) | Example service: bad target name or body. |
+| 401 | `about:blank`, code `unauthenticated` | `kit/auth`: no Bearer token, or the token is refused. Header `WWW-Authenticate: Bearer`. |
+| 403 | `about:blank`, code `forbidden` | `kit/auth`: role, org or scope does not match. |
+| 503 | `about:blank`, code `auth_unavailable` | `kit/auth`: the JWKS cannot be loaded and no key is known. |
 
 ## Tests
 
@@ -83,6 +97,11 @@ updated: 2026-10-21
 - `tests/contract/kit_test.go` — `readyz - critical check fails - 503 matches schema`
 - `tests/contract/kit_test.go` — `NATSSubject - every catalog type - equals catalog nats_subject`
 - `tests/contract/kit_test.go` — `New - every catalog example - envelope validates`
+- `tests/unit/kit/auth_test.go` — `Verify - expired token - rejects`
+- `tests/unit/kit/auth_test.go` — `Verify - alg none - rejects`
+- `tests/unit/kit/auth_test.go` — `Verify - unknown kid - refreshes JWKS once, then rejects`
+- `tests/unit/kit/auth_test.go` — `Verify - key rotated after the first fetch - refreshes once, then accepts`
+- `tests/unit/kit/auth_test.go` — `RequireRole - member on an admin route - 403`
 - `tests/unit/kit/health_test.go` — `readyz - check hangs - answers within the budget with timeout`
 - `tests/unit/kit/log_test.go` — `log line - forbidden keys anywhere - keys dropped`
 - `tests/unit/kit/otel_test.go` — `Setup - endpoint not set - no exporter, one warning`
@@ -92,3 +111,4 @@ updated: 2026-10-21
 | Date | Change |
 |---|---|
 | 2026-10-21 | First version: health, log, otel, cloudevents, outbox, env, example service. |
+| 2026-10-23 | `kit/auth` and `kit/auth/authtest`: JWT verify with a JWKS cache, Zitadel claims mapper, HTTP middleware (SW-M2-0.1). |
