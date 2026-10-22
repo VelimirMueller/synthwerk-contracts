@@ -21,7 +21,7 @@
 | `rules/` | Spectral ruleset, oasdiff severity levels. |
 | `codegen/` | oapi-codegen config per spec. |
 | `go/` | Go module `github.com/VelimirMueller/synthwerk-contracts/go`. `health/` is generated. |
-| `go/kit/` | Shared Go kit: health, log, otel, cloudevents, outbox, env. See `docs/features/go-service-kit.md`. |
+| `go/kit/` | Shared Go kit: health, log, otel, cloudevents, outbox, env, auth. See `docs/features/go-service-kit.md`. |
 | `go/examples/service/` | Example service that wires the kit. New Go services start from a copy. |
 | `packages/ts/` | npm package `@synthwerk/contracts`. `src/gen/` is generated. |
 | `tools/eventcompat/` | The event breaking-change check (Go). |
@@ -77,4 +77,4 @@
 
 - Publish: npm (`@synthwerk/contracts`), Go tags `go/vX.Y.Z`, release-please.
 - Python models, Go and TS types for event data, MCP manifests.
-- Kit packages `authn` and `problem` (the problem contract is not in `openapi/_shared` yet), the Python kit.
+- Kit package `problem` (the problem contract is not in `openapi/_shared` yet), the Python kit.
