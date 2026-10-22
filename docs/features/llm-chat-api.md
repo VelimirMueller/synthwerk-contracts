@@ -55,7 +55,7 @@ data: <one line of JSON>
 
 ## How to use
 
-1. Call the routes from Go with `llm.NewClientWithResponses(baseURL)`.
+1. Call the routes from Go with `llm.NewClientWithResponses(baseURL)`. For the send route, use `llm.NewClient(baseURL)` and `LlmSendMessage`: it returns the raw `*http.Response`. `LlmSendMessageWithResponse` reads the whole stream before it returns.
 2. Call them from TS with `createLlmClient({ baseUrl })`. Read the send route with `parseAs: "stream"`.
 3. Parse each frame into `StreamEvent`. Switch on `event`.
 4. Branch on the problem `code`, never on `title`. Accept unknown codes.
