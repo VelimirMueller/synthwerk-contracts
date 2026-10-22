@@ -1,5 +1,8 @@
 package contract_test
 
+// strict (json.Unmarshal with DisallowUnknownFields) is defined in health_test.go
+// in this package; `go test ./tests/contract` builds and passes.
+
 import (
 	"context"
 	"encoding/json"
