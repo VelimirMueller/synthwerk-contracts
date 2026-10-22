@@ -63,6 +63,10 @@ func RequireScope(scopes ...string) func(http.Handler) http.Handler {
 // No Principal: 401. Else 403 mfa_required. Use it on admin and platform routes:
 // Zitadel enforces Force MFA only in its login UI, so a token from a custom login
 // client can still be password only.
+//
+// Zitadel v4.20.0 access tokens carry no "amr" claim. RequireMFA refuses every
+// Zitadel token until a Zitadel Action (pre-access-token) copies "amr" into the
+// access token; that is part of #28. Do not mount RequireMFA before then.
 func RequireMFA() func(http.Handler) http.Handler {
 	return requireCode(CodeMFARequired, "This request needs a sign-in with MFA.",
 		func(_ *http.Request, p *Principal) bool { return p.HasMFA() })

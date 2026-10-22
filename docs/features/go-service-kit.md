@@ -44,6 +44,8 @@ updated: 2026-10-23
 - The org id claim exists only with the scope `urn:zitadel:iam:user:resourceowner`. Without it the token is refused (401).
 - Zitadel access tokens have `client_id`, no `azp` and no `scope` claim. `Principal.ClientID` reads `client_id`, else `azp`. `Principal.Scopes` stays empty until an Action sets `synthwerk:scope`.
 - `RequireMFA` needs `amr` to contain `mfa` (passkey: `["user","mfa"]`; password only: `["pwd"]`). Zitadel enforces Force MFA only in its login UI, so admin and platform routes check `amr` themselves.
+- Zitadel v4.20.0 access tokens carry no `amr` claim. `RequireMFA` refuses every Zitadel token until a Zitadel Action (pre-access-token) copies `amr` into the access token; that is part of #28. Do not mount `RequireMFA` before then.
+- The Zitadel project role key for the platform role must be `operator` (D-44), not `platform_admin`.
 - Without an OTLP endpoint the service installs no exporter and logs one `WARN` line (`otel.exporter.disabled`). Spans still get ids for the logs.
 
 ## How to use

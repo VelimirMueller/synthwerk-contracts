@@ -34,6 +34,8 @@ const (
 // token's org. RoleOperator counts only when it is granted in PlatformOrgID.
 type ZitadelMapper struct {
 	// PlatformOrgID is the id of the Zitadel org "synthwerk" that grants operator.
+	// The Zitadel project role key must be "operator" (RoleOperator, D-44), not
+	// "platform_admin": another key never maps to RoleOperator.
 	// Empty: no token gets RoleOperator.
 	PlatformOrgID string
 }

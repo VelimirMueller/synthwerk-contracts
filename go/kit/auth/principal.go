@@ -6,7 +6,8 @@ import (
 )
 
 // Roles (D-44). owner, admin and member are org roles. operator is a platform role
-// outside every org.
+// outside every org. The Zitadel project role keys must equal these values: the
+// platform role key is "operator" (D-44), not "platform_admin".
 const (
 	RoleOwner    = "owner"
 	RoleAdmin    = "admin"
