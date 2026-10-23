@@ -101,3 +101,4 @@ data: <one line of JSON>
 | Date | Change |
 |---|---|
 | 2026-10-23 | First version: conversations, stream events, problem codes, `message.completed` event. |
+| 2026-10-23 | `message.completed` carries the org id in the `orgid` extension. `tenantid` is deprecated (D-44). |

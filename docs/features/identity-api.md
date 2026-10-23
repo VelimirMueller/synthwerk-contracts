@@ -70,3 +70,4 @@ updated: 2026-10-23
 | Date | Change |
 |---|---|
 | 2026-10-23 | First version: stubs for the caller and orgs, `org.created` event. |
+| 2026-10-23 | `org.created` carries the org id in the `orgid` extension. `tenantid` is deprecated (D-44). |
