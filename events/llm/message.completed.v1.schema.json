@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.synthwerk.dev/events/llm/message.completed.v1.json",
   "title": "llm.message.completed.v1",
-  "description": "The gateway finished one assistant answer (M2 spec #32). Sent for every end state: completed, failed, canceled. CloudEvents subject: the message id. The tenantid extension holds the org id, the actor extension names the user. Metadata only: no prompt, no answer text.",
+  "description": "The gateway finished one assistant answer (M2 spec #32). Sent for every end state: completed, failed, canceled. CloudEvents subject: the message id. The orgid extension holds the org id (D-44; tenantid is deprecated), the actor extension names the user. Metadata only: no prompt, no answer text.",
   "type": "object",
   "additionalProperties": false,
   "required": [

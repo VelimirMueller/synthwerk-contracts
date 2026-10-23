@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.synthwerk.dev/events/identity/org.created.v1.json",
   "title": "identity.org.created.v1",
-  "description": "Identity created an org and its first owner (M2 spec #29). CloudEvents subject: the org id. The tenantid extension holds the same org id. No email, no personal name.",
+  "description": "Identity created an org and its first owner (M2 spec #29). CloudEvents subject: the org id. The orgid extension holds the same org id (D-44; tenantid is deprecated). No email, no personal name.",
   "type": "object",
   "additionalProperties": false,
   "required": ["org_id", "name", "slug", "owner_sub"],

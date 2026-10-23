@@ -17,9 +17,18 @@ events:
     stream: EVT_LLM
     producer: llm
     consumers: [pulse]
-    status: draft
+    status: deprecated # D-44: scope vocabulary tenant/platform-admin renamed to org/operator. Superseded by v2.
     schema: llm/toolcall.executed.v1.schema.json
     example: examples/dev.synthwerk.llm.toolcall.executed.v1.json
+
+  - type: dev.synthwerk.llm.toolcall.executed.v2
+    nats_subject: evt.llm.toolcall.executed.v2
+    stream: EVT_LLM
+    producer: llm
+    consumers: [pulse]
+    status: draft
+    schema: llm/toolcall.executed.v2.schema.json
+    example: examples/dev.synthwerk.llm.toolcall.executed.v2.json
 
   - type: dev.synthwerk.llm.message.completed.v1
     nats_subject: evt.llm.message.completed.v1

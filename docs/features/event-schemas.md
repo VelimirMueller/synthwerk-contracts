@@ -6,7 +6,7 @@ epic: E1
 owner: contracts
 paths: ["events/**"]
 api: []
-events: ["dev.synthwerk.pulse.target.status_changed.v1", "dev.synthwerk.llm.toolcall.executed.v1", "dev.synthwerk.llm.message.completed.v1", "dev.synthwerk.identity.org.created.v1"]
+events: ["dev.synthwerk.pulse.target.status_changed.v1", "dev.synthwerk.llm.toolcall.executed.v1", "dev.synthwerk.llm.toolcall.executed.v2", "dev.synthwerk.llm.message.completed.v1", "dev.synthwerk.identity.org.created.v1"]
 mcp: []
 updated: 2026-10-23
 ---
@@ -20,7 +20,7 @@ updated: 2026-10-23
 
 ## What it does
 
-- `events/envelope.schema.json`: the CloudEvents attributes, the Synthwerk rules and the extensions `tenantid`, `traceparent`, `actor`.
+- `events/envelope.schema.json`: the CloudEvents attributes, the Synthwerk rules and the extensions `orgid`, `traceparent`, `actor`. The `tenantid` extension is deprecated (D-44): producers must not set it, consumers must still accept it.
 - `events/catalog.yaml`: per type the NATS subject, stream, producer, consumers, status, schema and example.
 - `events/<domain>/<entity>.<verb>.v<N>.schema.json`: the `data` schema of one type.
 - `events/examples/<type>.json`: one full, valid event per type.
@@ -36,6 +36,7 @@ updated: 2026-10-23
 | Rule | Value |
 |---|---|
 | Lifecycle | `draft` → `active` → `deprecated` → `retired` |
+| Vocabulary | `org`, never `tenant`; `operator`, never `platform-admin` (D-44) |
 | Unknown fields | rejected (`additionalProperties: false`) |
 | Personal data | no email, IP, prompt or content in `data`. `actor` holds a subject id only. |
 | Breaking change | new type `.v<N+1>`, see `docs/features/contract-checks.md` |
@@ -45,7 +46,8 @@ updated: 2026-10-23
 | Type | When |
 |---|---|
 | `dev.synthwerk.pulse.target.status_changed.v1` | Pulse sees a new readiness status of a target. |
-| `dev.synthwerk.llm.toolcall.executed.v1` | Audit fact (D-26): the AI called one read-only MCP tool. |
+| `dev.synthwerk.llm.toolcall.executed.v1` | Audit fact (D-26): the AI called one read-only MCP tool. Deprecated (D-44): the scope vocabulary moved to v2. |
+| `dev.synthwerk.llm.toolcall.executed.v2` | Same audit fact. Scope is `org`, `user`, `operator` (D-44). Replaces deprecated v1. |
 | `dev.synthwerk.llm.message.completed.v1` | An LLM answer ends: completed, failed or canceled. Metadata only. |
 | `dev.synthwerk.identity.org.created.v1` | Identity created an org and its first owner. |
 
@@ -67,3 +69,4 @@ updated: 2026-10-23
 |---|---|
 | 2026-10-21 | First version: envelope, catalog, pulse status change, LLM tool-call audit fact. |
 | 2026-10-23 | Add `llm.message.completed.v1` and `identity.org.created.v1` (stream `EVT_IDENTITY`). |
+| 2026-10-23 | D-44: `orgid` extension added, `tenantid` deprecated; `toolcall.executed.v2` replaces v1 (scope `org`, `user`, `operator`). |

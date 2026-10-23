@@ -87,7 +87,7 @@
         },
         {
           "lead": "Event envelope",
-          "text": "CloudEvents 1.0.2 plus `tenantid`, `traceparent` and `actor`."
+          "text": "CloudEvents 1.0.2 plus `orgid`, `traceparent` and `actor`. `tenantid` is deprecated (D-44)."
         },
         {
           "lead": "Event catalog",
@@ -192,7 +192,11 @@
         },
         {
           "cmd": "llm.toolcall.executed.v1",
-          "text": "Audit fact: the AI called one read-only MCP tool."
+          "text": "Audit fact: the AI called one read-only MCP tool. Deprecated (D-44): use v2."
+        },
+        {
+          "cmd": "llm.toolcall.executed.v2",
+          "text": "Same fact. Scope: org, user, operator."
         }
       ]
     },

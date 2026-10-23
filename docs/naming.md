@@ -4,6 +4,7 @@
 > - Every event type is `dev.synthwerk.<domain>.<entity>.<verb>.v<N>`. The verb is in the past tense.
 > - The NATS subject, the stream, the schema file and the schema `$id` all derive from the type.
 > - A breaking change never edits a published name. It adds `.v<N+1>` or `/v<N+1>/`.
+> - The vocabulary is `org`, never `tenant`; `operator`, never `platform-admin` (D-44).
 > - `tests/contract` and `rules/spectral.yaml` check these rules in CI.
 
 ## Events (CloudEvents 1.0.2)
@@ -20,7 +21,7 @@
 | `source` | `/synthwerk/<service>/<env>`, env is `local`, `dev`, `stg` or `prd` | `/synthwerk/llm/prd` |
 | `subject` | Id of the main entity | conversation id |
 | `id` | UUIDv7. Also the `Nats-Msg-Id` for dedupe. | `0199f3a4-1d2c-7e3f-…` |
-| Extensions | `tenantid`, `traceparent`, `actor`. Lowercase, no other names. | `actor: user:2837…` |
+| Extensions | `orgid`, `traceparent`, `actor`. Lowercase, no other names. `tenantid` is deprecated (D-44), still valid on the wire. | `actor: user:2837…` |
 | Data fields | `snake_case` | `conversation_id`, `duration_ms` |
 | Schema file | `events/<domain>/<entity>.<verb>.v<N>.schema.json` | `events/llm/toolcall.executed.v1.schema.json` |
 | Schema `$id` | `https://schemas.synthwerk.dev/events/<domain>/<entity>.<verb>.v<N>.json` | |
@@ -31,6 +32,12 @@
 - `actor` is `user:<sub>`, `service:<name>` or `system`. Never an email or a name.
 - Data never holds an email, an IP, a prompt or message content.
 - The domain `schemas.synthwerk.dev` is a placeholder (plan Q-C1). Tools resolve `$id` locally, never over the network.
+
+## Vocabulary (D-44)
+
+- The word is `org`, never `tenant`. The word is `operator`, never `platform-admin`.
+- The envelope extension is `orgid`. The `tenantid` extension is deprecated: producers must not set it, consumers must still accept it. A published name is never edited or removed.
+- An enum rename is a breaking change: `llm.toolcall.executed.v2` carries `org`, `user`, `operator` where v1 carried `tenant`, `user`, `platform-admin`.
 
 ## When to bump `v<N>`
 

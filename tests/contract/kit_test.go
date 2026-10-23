@@ -132,7 +132,7 @@ func TestKitCloudEvents(t *testing.T) {
 				t.Fatal(err)
 			}
 			ev, err := cloudevents.New(context.Background(), e.Type, src, example["data"],
-				cloudevents.WithSubject("x"), cloudevents.WithActor("system"), cloudevents.WithTenant("t_1"))
+				cloudevents.WithSubject("x"), cloudevents.WithActor("system"), cloudevents.WithOrg("t_1"))
 			if err != nil {
 				t.Fatalf("%s: %v", e.Type, err)
 			}
