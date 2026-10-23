@@ -1,200 +1,305 @@
-# Thin caller of the synthwerk blueprint (go-ci for the tools and tests module) plus six
-# local jobs the blueprint does not cover yet (it plans a contracts-ci.yml): spec lint,
-# codegen, the breaking-change gate, the kit lint, the integration tests and the shell lint.
-# Required checks for the ruleset: "ci / required" (blueprint jobs) and "gate" (all jobs).
+# Fleet library CI (fleet-standard templates/library/public), stack go, plus six contract
+# jobs the fleet stages do not cover: spec lint, codegen, the breaking-change gate, the kit
+# lint, the integration tests and the shell lint (fleet.yml: WF-NAME-02 exception).
+# PRs and manual runs only (CI-COST-05, CI-COST-19). Required check context: conclusion.
 name: ci
 
 on:
   pull_request:
-  push:
-    branches: [main]
+    branches: [develop, main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      e2e:
+        description: Run the e2e stage
+        type: boolean
+        default: false
 
 permissions: {}
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 defaults:
   run:
-    shell: bash --noprofile --norc -euo pipefail {0}
+    shell: bash
+
+concurrency:
+  group: ci-${{ github.event.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  # Blueprint: gofmt, golangci-lint, go test (tests/unit, tests/contract), go build.
-  ci:
+  changes:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
-    uses: VelimirMueller/synthwerk-blueprint/.github/workflows/go-ci.yml@v1
+      pull-requests: read
+    outputs:
+      code: ${{ github.event_name != 'pull_request' || steps.filter.outputs.code == 'true' }}
+    steps:
+      - name: Detect code changes
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        with:
+          predicate-quantifier: every
+          filters: |
+            code:
+              - '!**/*.md'
+              - '!docs/**'
+              - '!LICENSE'
+              - '!.github/ISSUE_TEMPLATE/**'
 
-  # Local: Spectral on every spec, Biome on JSON and TS, and the Spectral selftest.
+  # Fleet: gofmt, go vet, golangci-lint on the root module, actionlint + zizmor.
   lint:
+    needs: changes
+    if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'true' }}
+    permissions:
+      contents: read
+    uses: VelimirMueller/fleet-workflows/.github/workflows/_ci-lint.yml@v0.0.1
+    with:
+      stack: go
+
+  # Fleet: tests/unit and tests/contract. -coverpkg counts the kit and the generated
+  # clients in ./go, which the tests exercise from separate test packages.
+  unit:
+    needs: [changes, lint]
+    if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'true' }}
+    permissions:
+      contents: read
+    uses: VelimirMueller/fleet-workflows/.github/workflows/_ci-unit.yml@v0.0.1
+    with:
+      stack: go
+      command: >-
+        go test -race -covermode=atomic
+        -coverpkg=github.com/VelimirMueller/synthwerk-contracts/...
+        -coverprofile=coverage/cover.out ./...
+      # Below the fleet floor of 80: coverage is 47.8 % today (2026-10-23). fleet check does
+      # not read a Go floor yet, so no fleet.yml record is possible; raise it with the tests.
+      coverage-floor: 45
+
+  e2e:
+    needs: [changes, unit]
+    if: ${{ !failure() && !cancelled() && github.event_name == 'workflow_dispatch' && inputs.e2e }}
+    permissions:
+      contents: read
+    uses: VelimirMueller/fleet-workflows/.github/workflows/_ci-e2e.yml@v0.0.1
+    with:
+      stack: go
+
+  build:
+    needs: [changes, e2e]
+    if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'true' }}
+    permissions:
+      contents: read
+    uses: VelimirMueller/fleet-workflows/.github/workflows/_ci-build.yml@v0.0.1
+    with:
+      stack: go
+      pack: true
+
+  # Spectral on every spec, the Spectral selftest, Biome on JSON and TS.
+  spec:
+    needs: changes
+    if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out the source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - name: Install pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - name: Install Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Spectral (rules/spectral.yaml)
+      - name: Install the dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Lint the specs with Spectral
         run: pnpm run lint:api
-      - name: Spectral selftest (every custom rule fires)
+      - name: Prove that every custom Spectral rule fires
         run: scripts/selftest-spectral.sh
-      - name: Biome
+      - name: Check JSON and TS with Biome
         run: pnpm exec biome ci .
 
-  # Local: generate the Go and TS clients, fail on drift, compile both.
+  # Generate the Go and TS clients, fail on drift, compile both.
   codegen:
+    needs: changes
+    if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out the source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - name: Install Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: true
           cache-dependency-path: go.sum
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - name: Install pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - name: Install Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Generate (oapi-codegen, openapi-typescript)
+      - name: Install the dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate the clients with oapi-codegen and openapi-typescript
         run: scripts/gen.sh
-      - name: No drift between specs and generated code
+      - name: Fail on drift between specs and generated code
         run: |
           if ! git diff --exit-code -- go packages/ts/src/gen; then
             echo "::error::Generated code is out of date. Run just gen and commit the result."
             exit 1
           fi
-      - name: Go client compiles (go vet, go build)
+      - name: Compile the Go client with go vet and go build
         working-directory: go
         run: |
           go vet ./...
           go build ./...
-      - name: TS client compiles (tsc --noEmit)
+      - name: Compile the TS client with tsc
         run: pnpm run typecheck
 
-  # Local: oasdiff + eventcompat against the PR base, and the selftest that proves the gate.
+  # oasdiff + eventcompat against the PR base, and the selftest that proves the gate.
   breaking:
+    needs: changes
+    if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out the source with history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - name: Install Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: true
           cache-dependency-path: go.sum
-      - name: Breaking-change check against the PR base
+      - name: Check for breaking changes against the PR base
         if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: scripts/check-breaking.sh "$BASE_SHA"
-      - name: Breaking-change check against the previous commit
-        if: github.event_name == 'push'
-        env:
-          BEFORE_SHA: ${{ github.event.before }}
-        run: |
-          if [[ "$BEFORE_SHA" =~ ^0+$ ]] || ! git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null; then
-            echo "No previous commit to compare. Skipped."
-            exit 0
-          fi
-          scripts/check-breaking.sh "$BEFORE_SHA"
-      - name: Selftest (a renamed required field fails the gate)
+      - name: Prove that a renamed required field fails the gate
         run: scripts/selftest-breaking.sh
 
-  # Local: golangci-lint on the published module in go/ (the kit) and on the
-  # integration tests (build tag integration). The blueprint lints the root module only.
+  # golangci-lint on the published module in go/ (the kit) and on the integration tests
+  # (build tag integration). The lint stage lints the root module only.
   kit:
+    needs: changes
+    if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out the source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - name: Install Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: true
           cache-dependency-path: |
             go.sum
             go/go.sum
-      - name: golangci-lint (go/)
+      - name: Lint the kit module in go/
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.14.0
           working-directory: go
           args: --config=../.golangci.yml
-      - name: golangci-lint (tests with build tag integration)
+      - name: Lint the tests with build tag integration
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.14.0
           args: --build-tags=integration ./tests/...
 
-  # Local: outbox relay and example service against real Postgres and NATS JetStream
+  # Outbox relay and example service against real Postgres and NATS JetStream
   # (testcontainers-go, images pinned in tests/support/containers).
   integration:
+    needs: changes
+    if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out the source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - name: Install Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: true
           cache-dependency-path: |
             go.sum
             go/go.sum
-      - name: go test -tags integration
+      - name: Run the integration tests
         run: go test -tags integration -race -count=1 ./tests/integration/...
 
-  # Local: syntax check and shellcheck on every tracked shell script.
+  # Syntax check and shellcheck on every tracked shell script.
   shell:
+    needs: changes
+    if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out the source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: bash -n (syntax)
+      - name: Check the shell syntax with bash -n
         run: git ls-files -z '*.sh' | xargs -0 -r -n1 bash -n
-      - name: shellcheck (severity warning)
+      - name: Run shellcheck at severity warning
         run: git ls-files -z '*.sh' | xargs -0 -r shellcheck --severity=warning
 
-  # One check over the blueprint and the local jobs ("ci / required" covers the blueprint only).
-  gate:
+  conclusion:
+    needs: [changes, lint, unit, e2e, build, spec, codegen, breaking, kit, integration, shell]
     if: always()
-    needs: [ci, lint, codegen, breaking, kit, integration, shell]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
     steps:
-      - name: All jobs passed
+      - name: Fail when a job failed or a required stage was skipped
         env:
+          CODE: ${{ needs.changes.outputs.code }}
           RESULTS: ${{ join(needs.*.result, ' ') }}
+          LINT: ${{ needs.lint.result }}
+          UNIT: ${{ needs.unit.result }}
+          BUILD: ${{ needs.build.result }}
+          SPEC: ${{ needs.spec.result }}
+          CODEGEN: ${{ needs.codegen.result }}
+          BREAKING: ${{ needs.breaking.result }}
+          KIT: ${{ needs.kit.result }}
+          INTEGRATION: ${{ needs.integration.result }}
+          SHELL_LINT: ${{ needs.shell.result }}
         run: |
-          echo "Results: $RESULTS"
-          for result in $RESULTS; do
-            [[ "$result" == "success" ]] || exit 1
+          for r in $RESULTS; do
+            case "$r" in success|skipped) ;; *) echo "::error::a job ended as $r"; exit 1 ;; esac
           done
+          if [ "$CODE" = "true" ]; then
+            for r in "$LINT" "$UNIT" "$BUILD" "$SPEC" "$CODEGEN" "$BREAKING" "$KIT" "$INTEGRATION" "$SHELL_LINT"; do
+              [ "$r" = "success" ] || { echo "::error::a required stage did not run"; exit 1; }
+            done
+          fi
