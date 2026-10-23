@@ -2,6 +2,8 @@
 # jobs the fleet stages do not cover: spec lint, codegen, the breaking-change gate, the kit
 # lint, the integration tests and the shell lint (fleet.yml: WF-NAME-02 exception).
 # PRs and manual runs only (CI-COST-05, CI-COST-19). Required check context: conclusion.
+# Merge order: ruleset 25520293 still requires gate (the old aggregate job). Swap that
+# context for conclusion before this file lands on main, or merge with the admin bypass.
 name: ci
 
 on:
