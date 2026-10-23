@@ -49,11 +49,18 @@
       "format": "uri",
       "maxLength": 256
     },
-    "tenantid": {
-      "description": "Extension. Tenant (customer org) the fact belongs to. Absent for platform facts.",
+    "orgid": {
+      "description": "Extension. Org the fact belongs to (D-44: org, never tenant). Absent for platform facts.",
       "type": "string",
       "maxLength": 64,
       "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "tenantid": {
+      "description": "Deprecated: use orgid (D-44). Producers must not set it. Org (customer org) the fact belongs to. Absent for platform facts.",
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "deprecated": true
     },
     "traceparent": {
       "description": "Extension. W3C Trace Context of the request that caused the fact.",

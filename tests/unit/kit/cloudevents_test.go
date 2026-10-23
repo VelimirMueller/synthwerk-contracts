@@ -2,6 +2,7 @@ package kit_test
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -29,6 +30,27 @@ func TestCloudEvents(t *testing.T) {
 		}
 		if e.Time.Location().String() != "UTC" || e.SpecVersion != "1.0" || e.DataContentType != "application/json" {
 			t.Fatalf("event %+v", e)
+		}
+	})
+
+	t.Run("New - org set - orgid extension in JSON", func(t *testing.T) {
+		e, err := cloudevents.New(ctx, toolcallType, "/synthwerk/llm/dev", data, cloudevents.WithOrg("org_7d3e9a"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if e.OrgID != "org_7d3e9a" {
+			t.Fatalf("OrgID %q, want %q", e.OrgID, "org_7d3e9a")
+		}
+		raw, err := json.Marshal(e)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var m map[string]any
+		if err := json.Unmarshal(raw, &m); err != nil {
+			t.Fatal(err)
+		}
+		if m["orgid"] != "org_7d3e9a" || m["tenantid"] != nil {
+			t.Fatalf("extensions %v, want orgid only", m)
 		}
 	})
 
@@ -60,7 +82,10 @@ func TestCloudEvents(t *testing.T) {
 		{"New - actor is an email - error", toolcallType, "/synthwerk/llm/dev", data, []cloudevents.Option{cloudevents.WithActor("user:a@b.c")}},
 		{"New - data is an array - error", toolcallType, "/synthwerk/llm/dev", []int{1}, nil},
 		{"New - data is null - error", toolcallType, "/synthwerk/llm/dev", nil, nil},
-		{"New - tenant with a space - error", toolcallType, "/synthwerk/llm/dev", data, []cloudevents.Option{cloudevents.WithTenant("a b")}},
+		{"New - org with a space - error", toolcallType, "/synthwerk/llm/dev", data, []cloudevents.Option{cloudevents.WithOrg("a b")}},
+		{"New - org longer than 64 characters - error", toolcallType, "/synthwerk/llm/dev", data, []cloudevents.Option{cloudevents.WithOrg(strings.Repeat("a", 65))}},
+		// The deprecated tenantid path stays working (D-44).
+		{"New - deprecated tenantid with a space - error", toolcallType, "/synthwerk/llm/dev", data, []cloudevents.Option{cloudevents.WithTenant("a b")}}, //nolint:staticcheck // proves the deprecated option still validates
 	}
 	for _, tc := range invalid {
 		t.Run(tc.name, func(t *testing.T) {

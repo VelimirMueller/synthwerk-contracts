@@ -35,7 +35,7 @@
 <p>
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="assets/readme/what-v2-light.svg">
-  <img alt="Health API: GET /healthz and GET /readyz for every service. Pulse reads both. Event envelope: CloudEvents 1.0.2 plus tenantid, traceparent and actor. Event catalog: Per type: NATS subject, stream, producer, consumers, status, schema, example. Naming rule: dev.synthwerk.&lt;domain&gt;.&lt;entity&gt;.&lt;verb&gt;.v&lt;N&gt;, verb in the past tense" src="assets/readme/what-v2-dark.svg" width="100%">
+  <img alt="Health API: GET /healthz and GET /readyz for every service. Pulse reads both. Event envelope: CloudEvents 1.0.2 plus orgid, traceparent and actor. tenantid is deprecated (D-44). Event catalog: Per type: NATS subject, stream, producer, consumers, status, schema, example. Naming rule: dev.synthwerk.&lt;domain&gt;.&lt;entity&gt;.&lt;verb&gt;.v&lt;N&gt;, verb in the past tense" src="assets/readme/what-v2-dark.svg" width="100%">
 </picture>
 </p>
 
@@ -112,7 +112,7 @@ just breaking origin/main    # breaking-change check against main
 <p>
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="assets/readme/api-v2-light.svg">
-  <img alt="GET /healthz: The process runs. 200 with status ok. GET /readyz: One result per dependency. ok or degraded: 200. down: 503. pulse.target.status_changed.v1: Pulse saw a new readiness status of a target. llm.toolcall.executed.v1: Audit fact: the AI called one read-only MCP tool" src="assets/readme/api-v2-dark.svg" width="100%">
+  <img alt="GET /healthz: The process runs. 200 with status ok. GET /readyz: One result per dependency. ok or degraded: 200. down: 503. pulse.target.status_changed.v1: Pulse saw a new readiness status of a target. llm.toolcall.executed.v1: Audit fact: the AI called one read-only MCP tool. Deprecated (D-44): use v2. llm.toolcall.executed.v2: Same fact. Scope: org, user, operator" src="assets/readme/api-v2-dark.svg" width="100%">
 </picture>
 </p>
 

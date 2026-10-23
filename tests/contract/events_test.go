@@ -168,8 +168,8 @@ func TestSchemas_reject(t *testing.T) {
 			return e
 		}},
 		{"envelope - extension name in camelCase - rejected", envelope, func(e map[string]any) any {
-			e["tenantId"] = e["tenantid"]
-			delete(e, "tenantid")
+			e["orgId"] = e["orgid"]
+			delete(e, "orgid")
 			return e
 		}},
 		{"envelope - actor is an email - rejected", envelope, func(e map[string]any) any {

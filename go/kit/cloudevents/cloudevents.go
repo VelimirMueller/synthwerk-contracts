@@ -30,25 +30,29 @@ const typePrefix = "dev.synthwerk."
 var (
 	typeRe   = regexp.MustCompile(`^dev\.synthwerk\.[a-z][a-z0-9]*\.[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*\.v[1-9][0-9]*$`)
 	sourceRe = regexp.MustCompile(`^/synthwerk/[a-z][a-z0-9-]*/(local|dev|stg|prd)$`)
-	tenantRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+	extIDRe  = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 	actorRe  = regexp.MustCompile(`^(user:[A-Za-z0-9_-]{1,128}|service:[a-z][a-z0-9-]{0,62}|system)$`)
 	parentRe = regexp.MustCompile(`^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$`)
 )
 
 // Event is one CloudEvent in JSON format (events/envelope.schema.json).
 type Event struct {
-	SpecVersion     string          `json:"specversion"`
-	ID              string          `json:"id"`
-	Source          string          `json:"source"`
-	Type            string          `json:"type"`
-	Subject         string          `json:"subject,omitempty"`
-	Time            time.Time       `json:"time"`
-	DataContentType string          `json:"datacontenttype"`
-	DataSchema      string          `json:"dataschema,omitempty"`
-	TenantID        string          `json:"tenantid,omitempty"`
-	TraceParent     string          `json:"traceparent,omitempty"`
-	Actor           string          `json:"actor,omitempty"`
-	Data            json.RawMessage `json:"data"`
+	SpecVersion     string    `json:"specversion"`
+	ID              string    `json:"id"`
+	Source          string    `json:"source"`
+	Type            string    `json:"type"`
+	Subject         string    `json:"subject,omitempty"`
+	Time            time.Time `json:"time"`
+	DataContentType string    `json:"datacontenttype"`
+	DataSchema      string    `json:"dataschema,omitempty"`
+	OrgID           string    `json:"orgid,omitempty"`
+	// TenantID is the tenantid extension.
+	//
+	// Deprecated: use OrgID / WithOrg (D-44).
+	TenantID    string          `json:"tenantid,omitempty"`
+	TraceParent string          `json:"traceparent,omitempty"`
+	Actor       string          `json:"actor,omitempty"`
+	Data        json.RawMessage `json:"data"`
 }
 
 // Option sets an optional attribute on a new event.
@@ -57,7 +61,12 @@ type Option func(*Event)
 // WithSubject sets the CloudEvents subject: the id of the main entity.
 func WithSubject(subject string) Option { return func(e *Event) { e.Subject = subject } }
 
+// WithOrg sets the orgid extension: the org the fact belongs to (D-44).
+func WithOrg(orgID string) Option { return func(e *Event) { e.OrgID = orgID } }
+
 // WithTenant sets the tenantid extension.
+//
+// Deprecated: use OrgID / WithOrg (D-44).
 func WithTenant(tenantID string) Option { return func(e *Event) { e.TenantID = tenantID } }
 
 // WithActor sets the actor extension: user:<sub>, service:<name> or system.
@@ -117,7 +126,8 @@ func (e Event) Validate() error {
 	check(!e.Time.IsZero(), "time is missing")
 	check(e.DataContentType == ContentType, "datacontenttype %q is not %q", e.DataContentType, ContentType)
 	check(len(e.DataSchema) <= 256, "dataschema is longer than 256 characters")
-	check(e.TenantID == "" || tenantRe.MatchString(e.TenantID), "tenantid %q has characters outside [A-Za-z0-9_-] or is too long", e.TenantID)
+	check(e.OrgID == "" || extIDRe.MatchString(e.OrgID), "orgid %q has characters outside [A-Za-z0-9_-] or is too long", e.OrgID)
+	check(e.TenantID == "" || extIDRe.MatchString(e.TenantID), "tenantid %q has characters outside [A-Za-z0-9_-] or is too long", e.TenantID)
 	check(e.TraceParent == "" || parentRe.MatchString(e.TraceParent), "traceparent %q is not W3C version 00", e.TraceParent)
 	check(e.Actor == "" || actorRe.MatchString(e.Actor), "actor %q is not user:<sub>, service:<name> or system", e.Actor)
 	check(isObject(e.Data), "data is not a JSON object")

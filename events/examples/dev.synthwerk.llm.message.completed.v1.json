@@ -7,7 +7,7 @@
   "time": "2026-10-23T09:00:09Z",
   "datacontenttype": "application/json",
   "dataschema": "https://schemas.synthwerk.dev/events/llm/message.completed.v1.json",
-  "tenantid": "0199f3a0-5b6c-7d8e-9f0a-1b2c3d4e5f60",
+  "orgid": "0199f3a0-5b6c-7d8e-9f0a-1b2c3d4e5f60",
   "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
   "actor": "user:283746192837461928",
   "data": {

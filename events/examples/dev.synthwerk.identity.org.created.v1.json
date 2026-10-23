@@ -7,7 +7,7 @@
   "time": "2026-10-23T08:30:00Z",
   "datacontenttype": "application/json",
   "dataschema": "https://schemas.synthwerk.dev/events/identity/org.created.v1.json",
-  "tenantid": "0199f3a1-2c3d-7e4f-8a5b-6c7d8e9f0a1b",
+  "orgid": "0199f3a1-2c3d-7e4f-8a5b-6c7d8e9f0a1b",
   "traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
   "actor": "user:283746192837461928",
   "data": {

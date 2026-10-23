@@ -25,7 +25,7 @@ updated: 2026-10-23
 | `kit/health` | `GET /healthz` and `GET /readyz` in the shape of `openapi/_shared/health.yaml`. Uses the generated types of `go/health`. |
 | `kit/log` | `log/slog` JSON logger with the shared fields, trace ids and a filter for forbidden keys. HTTP middleware for the request line and `X-Request-ID`. |
 | `kit/otel` | Tracer, meter and logger providers. OTLP over gRPC only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. W3C `traceparent` propagation. |
-| `kit/cloudevents` | Builds and checks CloudEvents 1.0.2 events: UUIDv7 id, `source`, `traceparent`, NATS subject from the type. |
+| `kit/cloudevents` | Builds and checks CloudEvents 1.0.2 events: UUIDv7 id, `source`, `orgid`, `traceparent`, NATS subject from the type. |
 | `kit/outbox` | Outbox table, `Enqueue` in the caller's transaction, and the relay to JetStream with `Nats-Msg-Id` = event id. |
 | `kit/env` | Reads `SYNTHWERK_<SERVICE>_*` and `SYNTHWERK_PLATFORM_ENV` (D-40). |
 | `kit/auth` | Verifies Zitadel access tokens against the issuer JWKS (D-20, D-23). Maps claims to a `Principal` (subject, org, roles, scopes). HTTP middleware and `RequireRole`, `RequireOrg`, `RequireScope`, `RequireMFA`. |
@@ -46,6 +46,7 @@ updated: 2026-10-23
 - `RequireMFA` needs `amr` to contain `mfa` (passkey: `["user","mfa"]`; password only: `["pwd"]`). Zitadel enforces Force MFA only in its login UI, so admin and platform routes check `amr` themselves.
 - Zitadel v4.20.0 access tokens carry no `amr` claim. `RequireMFA` refuses every Zitadel token until a Zitadel Action (pre-access-token) copies `amr` into the access token; that is part of #28. Do not mount `RequireMFA` before then.
 - The Zitadel project role key for the platform role must be `operator` (D-44), not `platform_admin`.
+- `WithOrg`/`OrgID` set the `orgid` extension (D-44). `WithTenant`/`TenantID` are deprecated but keep working: they still set and check `tenantid` for consumers that read it.
 - Without an OTLP endpoint the service installs no exporter and logs one `WARN` line (`otel.exporter.disabled`). Spans still get ids for the logs.
 
 ## How to use
@@ -125,3 +126,4 @@ updated: 2026-10-23
 | 2026-10-21 | First version: health, log, otel, cloudevents, outbox, env, example service. |
 | 2026-10-23 | `kit/auth` and `kit/auth/authtest`: JWT verify with a JWKS cache, Zitadel claims mapper, HTTP middleware (SW-M2-0.1). |
 | 2026-10-23 | `kit/auth`: Zitadel v4.20.0 token shape (`client_id`, `aud`, org scope), `RequireMFA` (SW-M2-0.5). |
+| 2026-10-23 | D-44: `kit/cloudevents` adds `WithOrg`/`OrgID`; `WithTenant`/`TenantID` deprecated, still working. |

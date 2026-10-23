@@ -7,7 +7,7 @@
   "time": "2026-10-21T08:16:02Z",
   "datacontenttype": "application/json",
   "dataschema": "https://schemas.synthwerk.dev/events/llm/toolcall.executed.v1.json",
-  "tenantid": "org_7d3e9a",
+  "orgid": "org_7d3e9a",
   "traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
   "actor": "user:283746192837461928",
   "data": {

@@ -4,7 +4,7 @@ diff -ru a/events/llm/toolcall.executed.v1.schema.json b/events/llm/toolcall.exe
 --- a/events/llm/toolcall.executed.v1.schema.json
 +++ b/events/llm/toolcall.executed.v1.schema.json
 @@ -5,7 +5,7 @@
-   "description": "Audit fact (D-26, FR-54): the AI called one read-only MCP tool. CloudEvents subject: the conversation id. The actor extension names the user. No tool arguments and no tool results: they can hold personal data.",
+   "description": "Audit fact (D-26, FR-54): the AI called one read-only MCP tool. CloudEvents subject: the conversation id. The actor extension names the user. No tool arguments and no tool results: they can hold personal data. Deprecated (D-44): the scope values tenant and platform-admin are now org and operator. Use llm.toolcall.executed.v2. This version stays published and unchanged until every consumer has moved.",
    "type": "object",
    "additionalProperties": false,
 -  "required": ["tool", "scope", "conversation_id", "outcome", "duration_ms"],

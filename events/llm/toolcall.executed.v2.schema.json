@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.synthwerk.dev/events/llm/toolcall.executed.v2.json",
+  "title": "llm.toolcall.executed.v2",
+  "description": "Audit fact (D-26, FR-54): the AI called one read-only MCP tool. Replaces llm.toolcall.executed.v1 (deprecated, D-44): the scope values tenant and platform-admin are now org and operator. CloudEvents subject: the conversation id. The actor extension names the user. No tool arguments and no tool results: they can hold personal data.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tool", "scope", "conversation_id", "outcome", "duration_ms"],
+  "properties": {
+    "tool": {
+      "description": "MCP tool name, <service>_<verb>_<noun>.",
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[a-z]+_[a-z]+_[a-z_]+$"
+    },
+    "scope": {
+      "description": "Token scope of the call (D-14). org, never tenant; operator, never platform-admin (D-44).",
+      "enum": ["operator", "org", "user"]
+    },
+    "conversation_id": {
+      "type": "string",
+      "format": "uuid",
+      "maxLength": 36
+    },
+    "outcome": {
+      "description": "ok: the tool answered. denied: the scope did not allow the tool. error: the tool failed.",
+      "enum": ["ok", "denied", "error"]
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 600000
+    }
+  }
+}
