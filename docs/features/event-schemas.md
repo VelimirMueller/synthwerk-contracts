@@ -6,7 +6,7 @@ epic: E1
 owner: contracts
 paths: ["events/**"]
 api: []
-events: ["dev.synthwerk.pulse.target.status_changed.v1", "dev.synthwerk.llm.toolcall.executed.v1", "dev.synthwerk.llm.toolcall.executed.v2", "dev.synthwerk.llm.message.completed.v1", "dev.synthwerk.identity.org.created.v1"]
+events: ["dev.synthwerk.pulse.target.status_changed.v1", "dev.synthwerk.llm.toolcall.executed.v1", "dev.synthwerk.llm.toolcall.executed.v2", "dev.synthwerk.llm.message.completed.v1", "dev.synthwerk.identity.org.created.v1", "dev.synthwerk.identity.user.created.v1"]
 mcp: []
 updated: 2026-10-23
 ---
@@ -50,6 +50,7 @@ updated: 2026-10-23
 | `dev.synthwerk.llm.toolcall.executed.v2` | Same audit fact. Scope is `org`, `user`, `operator` (D-44). Replaces deprecated v1. |
 | `dev.synthwerk.llm.message.completed.v1` | An LLM answer ends: completed, failed or canceled. Metadata only. |
 | `dev.synthwerk.identity.org.created.v1` | Identity created an org and its first owner. |
+| `dev.synthwerk.identity.user.created.v1` | Zitadel created a human user (Action webhook). Zitadel ids only, no `orgid` until #29. |
 
 ## Errors
 
@@ -69,4 +70,5 @@ updated: 2026-10-23
 |---|---|
 | 2026-10-21 | First version: envelope, catalog, pulse status change, LLM tool-call audit fact. |
 | 2026-10-23 | Add `llm.message.completed.v1` and `identity.org.created.v1` (stream `EVT_IDENTITY`). |
+| 2026-10-23 | Add `identity.user.created.v1`: `user_sub` and `zitadel_org_id`, no email or name (synthwerk#28 task 4). |
 | 2026-10-23 | D-44: `orgid` extension added, `tenantid` deprecated; `toolcall.executed.v2` replaces v1 (scope `org`, `user`, `operator`). |

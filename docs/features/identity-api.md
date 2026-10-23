@@ -6,7 +6,7 @@ epic: E2
 owner: contracts
 paths: ["openapi/identity/**", "codegen/oapi-codegen.identity.yaml", "events/identity/**"]
 api: ["GET /v1/me", "GET /v1/orgs", "POST /v1/orgs", "GET /v1/orgs/{orgId}"]
-events: ["dev.synthwerk.identity.org.created.v1"]
+events: ["dev.synthwerk.identity.org.created.v1", "dev.synthwerk.identity.user.created.v1"]
 mcp: []
 updated: 2026-10-23
 ---
@@ -25,6 +25,7 @@ updated: 2026-10-23
 - `POST /v1/orgs` creates an org. The caller becomes its `owner`.
 - `GET /v1/orgs/{orgId}` returns one org.
 - Creating an org emits `dev.synthwerk.identity.org.created.v1`.
+- A new Zitadel user (Action webhook) emits `dev.synthwerk.identity.user.created.v1`, with Zitadel ids only.
 - Go: package `github.com/VelimirMueller/synthwerk-contracts/go/identity`. TS: `createIdentityClient` in `@synthwerk/contracts`.
 
 ## How to use
@@ -48,6 +49,7 @@ updated: 2026-10-23
 | Type | When |
 |---|---|
 | `dev.synthwerk.identity.org.created.v1` | Identity created an org and its first owner. |
+| `dev.synthwerk.identity.user.created.v1` | Zitadel created a human user; identity got the Action webhook. |
 
 ## Errors
 
@@ -71,3 +73,4 @@ updated: 2026-10-23
 |---|---|
 | 2026-10-23 | First version: stubs for the caller and orgs, `org.created` event. |
 | 2026-10-23 | `org.created` carries the org id in the `orgid` extension. `tenantid` is deprecated (D-44). |
+| 2026-10-23 | Add `user.created` event (synthwerk#28 task 4). |
