@@ -1,0 +1,16 @@
+{
+  "specversion": "1.0",
+  "id": "0199f3a1-2c3f-7e4f-8a5b-6c7d8e9f0a1d",
+  "source": "/synthwerk/identity/dev",
+  "type": "dev.synthwerk.identity.user.created.v1",
+  "subject": "396370217707541255",
+  "time": "2026-10-23T08:31:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "https://schemas.synthwerk.dev/events/identity/user.created.v1.json",
+  "traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203332-01",
+  "actor": "system",
+  "data": {
+    "user_sub": "396370217707541255",
+    "zitadel_org_id": "396370208765350663"
+  }
+}
