@@ -83,7 +83,7 @@ export interface paths {
         };
         /**
          * List members
-         * @description Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. Cursor paging, max 100 per page.
+         * @description Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. The stored membership must also be `owner` or `admin`, so a token issued before a demotion gets 403. Cursor paging, max 100 per page.
          */
         get: operations["identity.listMembers"];
         put?: never;

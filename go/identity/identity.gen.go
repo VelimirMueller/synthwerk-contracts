@@ -415,7 +415,7 @@ type ClientInterface interface {
 
 	// IdentityListMembers List members
 	//
-	// Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. Cursor paging, max 100 per page.
+	// Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. The stored membership must also be `owner` or `admin`, so a token issued before a demotion gets 403. Cursor paging, max 100 per page.
 	//
 	// Corresponds with GET /v1/orgs/{orgId}/members (the `IdentityListMembers` operationId).
 	IdentityListMembers(ctx context.Context, orgId OrgId, params *IdentityListMembersParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -540,7 +540,7 @@ func (c *Client) IdentityGetOrg(ctx context.Context, orgId OrgId, reqEditors ...
 
 // IdentityListMembers List members
 //
-// Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. Cursor paging, max 100 per page.
+// Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. The stored membership must also be `owner` or `admin`, so a token issued before a demotion gets 403. Cursor paging, max 100 per page.
 //
 // Corresponds with GET /v1/orgs/{orgId}/members (the `IdentityListMembers` operationId).
 func (c *Client) IdentityListMembers(ctx context.Context, orgId OrgId, params *IdentityListMembersParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -988,7 +988,7 @@ type ClientWithResponsesInterface interface {
 
 	// IdentityListMembersWithResponse List members
 	//
-	// Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. Cursor paging, max 100 per page.
+	// Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. The stored membership must also be `owner` or `admin`, so a token issued before a demotion gets 403. Cursor paging, max 100 per page.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -1529,7 +1529,7 @@ func (c *ClientWithResponses) IdentityGetOrgWithResponse(ctx context.Context, or
 
 // IdentityListMembersWithResponse List members
 //
-// Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. Cursor paging, max 100 per page.
+// Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. The stored membership must also be `owner` or `admin`, so a token issued before a demotion gets 403. Cursor paging, max 100 per page.
 //
 // Returns a wrapper object for the known response body format(s).
 //

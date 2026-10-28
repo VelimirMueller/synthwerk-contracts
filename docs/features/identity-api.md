@@ -50,6 +50,7 @@ updated: 2026-10-28
 | Last owner | Keeps the role: 409 `last_owner` |
 | Own role | Never changed by the caller: 409 `own_role` |
 | Operator | Read only on any org; a role change gets 403 |
+| Stale token | Writes and `listMembers` check the stored membership too; a demoted admin gets 403 with the old token |
 
 ## Events
 

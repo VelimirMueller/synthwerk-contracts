@@ -10,7 +10,7 @@ info:
     - An org the caller does not belong to answers 404, not 403. The API does not leak that it exists.
     - Errors are RFC 9457 `application/problem+json` with a stable `code`.
     - Org members and their roles: `/v1/orgs/{orgId}/members` (#29). Owner and admin change roles; a member gets 403.
-    - Roles are checked from the token first; for a write, the stored membership wins over a stale token.
+    - Roles are checked from the token first. Every write and every privileged read (`listMembers`) then checks the stored membership: it wins over a stale token, so a demoted admin loses access at once, not at token expiry.
   license:
     name: MIT
     identifier: MIT
@@ -168,7 +168,7 @@ paths:
     get:
       operationId: identity.listMembers
       summary: List members
-      description: Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. Cursor paging, max 100 per page.
+      description: Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. The stored membership must also be `owner` or `admin`, so a token issued before a demotion gets 403. Cursor paging, max 100 per page.
       tags: [members]
       security:
         - bearer: []
