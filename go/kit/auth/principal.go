@@ -31,9 +31,6 @@ type Principal struct {
 	// AMR are the authentication methods ("amr"), for example ["user", "mfa"] after a
 	// passkey or ["pwd"] after a password only. Set by Verify.
 	AMR []string
-	// MFAEnrolled is the claim synthwerk:mfa (ClaimMFA): the user has a second factor
-	// or a passkey. Set by Verify.
-	MFAEnrolled bool
 	// Raw holds every verified claim. Read other claims (synthwerk:origin) here.
 	Raw map[string]any
 }
@@ -44,10 +41,8 @@ func (p *Principal) HasRole(role string) bool { return slices.Contains(p.Roles, 
 // HasScope reports whether p has scope.
 func (p *Principal) HasScope(scope string) bool { return slices.Contains(p.Scopes, scope) }
 
-// HasMFA reports whether the token proves MFA: amr contains "mfa" (the sign-in used
-// more than one factor), or synthwerk:mfa is true (the user has a second factor or a
-// passkey, and Force MFA makes the login UI ask for it; see ClaimMFA).
-func (p *Principal) HasMFA() bool { return p.MFAEnrolled || slices.Contains(p.AMR, "mfa") }
+// HasMFA reports whether the sign-in used more than one factor (amr contains "mfa").
+func (p *Principal) HasMFA() bool { return slices.Contains(p.AMR, "mfa") }
 
 // IsOperator reports whether p has the platform role operator.
 func (p *Principal) IsOperator() bool { return p.HasRole(RoleOperator) }

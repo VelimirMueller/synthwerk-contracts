@@ -59,13 +59,19 @@ func RequireScope(scopes ...string) func(http.Handler) http.Handler {
 	})
 }
 
-// RequireMFA lets a request through when Principal.HasMFA: amr contains "mfa", or
-// the claim synthwerk:mfa is true. No Principal: 401. Else 403 mfa_required. Use it
-// on admin and platform routes: Zitadel enforces Force MFA only in its login UI.
+// RequireMFA lets a request through when the sign-in used MFA (amr contains "mfa").
+// No Principal: 401. Else 403 mfa_required. Use it on admin and platform routes:
+// Zitadel enforces Force MFA only in its login UI, so a token from a custom login
+// client can still be password only.
 //
-// Zitadel v4.20.0 access tokens carry no "amr" claim. synthwerk-identity adds
-// synthwerk:mfa with a pre-access-token Action (ClaimMFA). A user without a second
-// factor or a passkey never gets it, whatever client signed them in.
+// Only "amr" counts: it is evidence from the sign-in itself. A claim that says
+// what the user has enrolled (for example "synthwerk:mfa") never counts.
+//
+// Zitadel v4.20.0 access tokens carry no "amr" claim, and its pre-access-token
+// Action gets no session data (user, org, grants and metadata only), so no Action
+// can add a true "amr". RequireMFA therefore refuses every Zitadel access token
+// today. Do not mount it until Zitadel exposes the session factors (synthwerk#28,
+// D-47 limitation).
 func RequireMFA() func(http.Handler) http.Handler {
 	return requireCode(CodeMFARequired, "This request needs a sign-in with MFA.",
 		func(_ *http.Request, p *Principal) bool { return p.HasMFA() })

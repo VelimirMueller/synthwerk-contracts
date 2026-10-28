@@ -228,7 +228,6 @@ func (v *Verifier) Verify(ctx context.Context, raw string) (*Principal, error) {
 		return nil, refuse(fmt.Errorf("%w: %w", ErrClaims, err))
 	}
 	p.AMR = strs(all["amr"])
-	p.MFAEnrolled = all[ClaimMFA] == true
 	p.Raw = all
 	return p, nil
 }
