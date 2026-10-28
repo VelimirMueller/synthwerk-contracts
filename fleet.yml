@@ -22,3 +22,10 @@ exceptions:
   - rule: GOV-ENV-10
     value: no release environment
     reason: The Go module publishes by go/v* tag through the Go module proxy, which needs no publish identity.
+  # value is the CI-UNIT-03 value_schema object (fleet-standard rules/ci-contract.yml:
+  # type object, minProperties: 1, no required keys) — one axis is a valid value;
+  # branches and fail_under keep the rule defaults. A scalar would fail validation.
+  - rule: CI-UNIT-03
+    value:
+      lines: 45
+    reason: Go tests cover 45 % of the kit and the generated clients in ./go (coverpkg); the floor holds the measured value until the suite reaches 80 %.
