@@ -71,6 +71,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{orgId}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List members
+         * @description Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. The stored membership must also be `owner` or `admin`, so a token issued before a demotion gets 403. Cursor paging, max 100 per page.
+         */
+        get: operations["identity.listMembers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{orgId}/members/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+                /** @description Subject id (token `sub`) of the member. */
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change the role of a member
+         * @description Sets the org role of a member. Emits `dev.synthwerk.identity.member.role_changed.v1` when the role changes.
+         *     - `owner` and `admin` may set `admin` or `member` on a member that is not an owner.
+         *     - Only an `owner` grants `owner` or changes the role of an owner.
+         *     - A `member` gets 403. An `operator` gets 403: operator access is read only.
+         *     - The last owner keeps the role (409 `last_owner`). Nobody changes their own role (409 `own_role`).
+         *     - The same role again answers 200 and emits nothing.
+         */
+        patch: operations["identity.changeMemberRole"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -90,6 +143,26 @@ export interface components {
             slug: string;
             /** Format: date-time */
             created_at: string;
+        };
+        /**
+         * @description An org role. `operator` is never an org role.
+         * @enum {string}
+         */
+        OrgRole: "owner" | "admin" | "member";
+        Member: {
+            /** @description Subject id (token `sub`). Never an email. */
+            user_id: string;
+            role: components["schemas"]["OrgRole"];
+            /** Format: date-time */
+            updated_at: string;
+        };
+        MemberPage: {
+            items: components["schemas"]["Member"][];
+            /** @description Cursor of the next page. Absent on the last page. */
+            next_cursor?: string;
+        };
+        ChangeMemberRoleRequest: {
+            role: components["schemas"]["OrgRole"];
         };
         OrgPage: {
             items: components["schemas"]["Org"][];
@@ -116,8 +189,11 @@ export interface components {
          *     | `invalid_request` | 400 | Body or parameter not valid. |
          *     | `unauthenticated` | 401 | Token missing or not valid. |
          *     | `forbidden` | 403 | Role does not allow the call. |
-         *     | `not_found` | 404 | Unknown org or no membership. |
+         *     | `not_found` | 404 | Unknown org or member, or no membership. |
          *     | `slug_taken` | 409 | Another org has the slug. |
+         *     | `last_owner` | 409 | The org would lose its last owner. |
+         *     | `own_role` | 409 | The caller tried to change their own role. |
+         *     | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
          */
         Problem: {
             /**
@@ -193,7 +269,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Unknown org, or an org the caller does not belong to. Same body in both cases. Code `not_found`. */
+        /** @description Unknown org or member, or an org the caller does not belong to. Same body in every case. Code `not_found`. */
         NotFound: {
             headers: {
                 [name: string]: unknown;
@@ -227,10 +303,50 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /**
+         * @description The role change breaks an org rule.
+         *     - `last_owner`: the org would lose its last owner.
+         *     - `own_role`: the caller tried to change their own role.
+         */
+        RoleConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://schemas.synthwerk.dev/problems/last_owner",
+                 *       "title": "Last owner",
+                 *       "status": 409,
+                 *       "code": "last_owner"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Zitadel did not take the change. Nothing changed. Code `upstream_unavailable`. Retry later. */
+        UpstreamUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://schemas.synthwerk.dev/problems/upstream_unavailable",
+                 *       "title": "Upstream unavailable",
+                 *       "status": 502,
+                 *       "code": "upstream_unavailable"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
     };
     parameters: {
         /** @description Org id. */
         OrgId: string;
+        /** @description Subject id (token `sub`) of the member. */
+        UserId: string;
     };
     requestBodies: never;
     headers: never;
@@ -388,6 +504,101 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    "identity.listMembers": {
+        parameters: {
+            query?: {
+                /** @description Page size. */
+                limit?: number;
+                /** @description The `next_cursor` of the previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of members. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "user_id": "283746192837461928",
+                     *           "role": "owner",
+                     *           "updated_at": "2026-10-23T08:30:00Z"
+                     *         },
+                     *         {
+                     *           "user_id": "396370217707541255",
+                     *           "role": "member",
+                     *           "updated_at": "2026-10-28T09:00:00Z"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["MemberPage"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "identity.changeMemberRole": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+                /** @description Subject id (token `sub`) of the member. */
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "role": "admin"
+                 *     }
+                 */
+                "application/json": components["schemas"]["ChangeMemberRoleRequest"];
+            };
+        };
+        responses: {
+            /** @description The member with the new role. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "user_id": "396370217707541255",
+                     *       "role": "admin",
+                     *       "updated_at": "2026-10-28T09:15:00Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Member"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["RoleConflict"];
+            502: components["responses"]["UpstreamUnavailable"];
         };
     };
 }
