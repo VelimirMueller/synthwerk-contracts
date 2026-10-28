@@ -64,9 +64,14 @@ func RequireScope(scopes ...string) func(http.Handler) http.Handler {
 // Zitadel enforces Force MFA only in its login UI, so a token from a custom login
 // client can still be password only.
 //
-// Zitadel v4.20.0 access tokens carry no "amr" claim. RequireMFA refuses every
-// Zitadel token until a Zitadel Action (pre-access-token) copies "amr" into the
-// access token; that is part of #28. Do not mount RequireMFA before then.
+// Only "amr" counts: it is evidence from the sign-in itself. A claim that says
+// what the user has enrolled (for example "synthwerk:mfa") never counts.
+//
+// Zitadel v4.20.0 access tokens carry no "amr" claim, and its pre-access-token
+// Action gets no session data (user, org, grants and metadata only), so no Action
+// can add a true "amr". RequireMFA therefore refuses every Zitadel access token
+// today. Do not mount it until Zitadel exposes the session factors (synthwerk#28,
+// D-47 limitation).
 func RequireMFA() func(http.Handler) http.Handler {
 	return requireCode(CodeMFARequired, "This request needs a sign-in with MFA.",
 		func(_ *http.Request, p *Principal) bool { return p.HasMFA() })

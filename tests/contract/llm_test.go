@@ -32,8 +32,9 @@ type specOp struct {
 // specDoc is the part of a spec the tests read: operation and component response examples.
 type specDoc struct {
 	Paths map[string]struct {
-		Get  specOp `yaml:"get"`
-		Post specOp `yaml:"post"`
+		Get   specOp `yaml:"get"`
+		Post  specOp `yaml:"post"`
+		Patch specOp `yaml:"patch"`
 	} `yaml:"paths"`
 	Components struct {
 		Responses map[string]struct {

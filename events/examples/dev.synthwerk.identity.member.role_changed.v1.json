@@ -1,0 +1,19 @@
+{
+  "specversion": "1.0",
+  "id": "0199f3a1-2c40-7e4f-8a5b-6c7d8e9f0a1e",
+  "source": "/synthwerk/identity/dev",
+  "type": "dev.synthwerk.identity.member.role_changed.v1",
+  "subject": "396370217707541255",
+  "time": "2026-10-28T09:15:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "https://schemas.synthwerk.dev/events/identity/member.role_changed.v1.json",
+  "orgid": "0199f3a1-2c3d-7e4f-8a5b-6c7d8e9f0a1b",
+  "traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203333-01",
+  "actor": "user:283746192837461928",
+  "data": {
+    "org_id": "0199f3a1-2c3d-7e4f-8a5b-6c7d8e9f0a1b",
+    "user_sub": "396370217707541255",
+    "old_role": "member",
+    "new_role": "admin"
+  }
+}
