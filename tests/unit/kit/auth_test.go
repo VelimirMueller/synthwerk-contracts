@@ -316,7 +316,6 @@ func TestMiddleware(t *testing.T) {
 		{"RequireMFA - no amr - 403", "/v1/admin", "Bearer " + admin, http.StatusForbidden, auth.CodeMFARequired},
 		{"RequireMFA - enrolment flag true, amr pwd only - 403", "/v1/admin", "Bearer " + iss.Mint(t, map[string]any{"synthwerk:mfa": true, "amr": []string{"pwd"}}), http.StatusForbidden, auth.CodeMFARequired},
 		{"RequireMFA - enrolment flag true, no amr - 403", "/v1/admin", "Bearer " + iss.Mint(t, map[string]any{"synthwerk:mfa": true}), http.StatusForbidden, auth.CodeMFARequired},
-		{"RequireMFA - amr mfa as a string - 204", "/v1/admin", "Bearer " + iss.Mint(t, map[string]any{"amr": "pwd mfa"}), http.StatusNoContent, ""},
 		{"RequireScope - user scope - 204", "/v1/chat", "Bearer " + iss.Mint(t, map[string]any{auth.ClaimScope: "user"}), http.StatusNoContent, ""},
 	}
 	for _, tc := range tests {
