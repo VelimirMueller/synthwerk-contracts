@@ -24,7 +24,7 @@
       "enum": ["owner", "admin", "member"]
     },
     "new_role": {
-      "description": "Org role after the change. Never equal to old_role.",
+      "description": "Org role after the change. The producer never emits a change to the same role (the schema cannot express old_role != new_role).",
       "enum": ["owner", "admin", "member"]
     }
   }
