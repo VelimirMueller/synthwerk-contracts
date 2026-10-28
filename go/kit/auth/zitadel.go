@@ -25,6 +25,13 @@ const (
 	ClaimScope = "synthwerk:scope"
 	// ClaimOrigin binds a widget token to one origin (#30). Not verified.
 	ClaimOrigin = "synthwerk:origin"
+	// ClaimMFA is true when the user has a second factor or a passkey (D-47).
+	// synthwerk-identity adds it to every Zitadel access token with a
+	// pre-access-token Action. Zitadel gives the Action no session data, so the claim
+	// says what the user has enrolled, not what this sign-in used. With Force MFA on,
+	// the Zitadel login UI asks for that factor at every sign-in. Only the boolean
+	// true counts.
+	ClaimMFA = "synthwerk:mfa"
 )
 
 // ZitadelMapper maps Zitadel access token claims. A token without "sub" or org id is
