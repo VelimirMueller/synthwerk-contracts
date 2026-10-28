@@ -17,8 +17,8 @@ exceptions:
     value: no develop branch
     reason: The repo is trunk-only on main until the control repo creates develop (fleet-standard#7).
   - rule: GOV-RS-04
-    value: "default-branch ruleset 'main: checks required' (25520293) with context gate"
-    reason: The main ruleset predates the standard and still requires gate, which this CI no longer reports, so the owner swaps that context for conclusion at merge until the control repo replaces the ruleset (fleet-standard#7).
+    value: "default-branch ruleset 'main: checks required' (25520293) with context conclusion"
+    reason: The main ruleset predates the standard; its required context moved from gate to conclusion on 2026-10-28, and the control repo replaces the whole ruleset (fleet-standard#7).
   - rule: GOV-ENV-10
     value: no release environment
     reason: The Go module publishes by go/v* tag through the Go module proxy, which needs no publish identity.
