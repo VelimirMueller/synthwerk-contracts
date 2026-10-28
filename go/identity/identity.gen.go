@@ -18,6 +18,27 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for OrgRole.
+const (
+	OrgRoleAdmin  OrgRole = "admin"
+	OrgRoleMember OrgRole = "member"
+	OrgRoleOwner  OrgRole = "owner"
+)
+
+// Valid indicates whether the value is a known member of the OrgRole enum.
+func (e OrgRole) Valid() bool {
+	switch e {
+	case OrgRoleAdmin:
+		return true
+	case OrgRoleMember:
+		return true
+	case OrgRoleOwner:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for Role.
 const (
 	RoleAdmin    Role = "admin"
@@ -42,6 +63,12 @@ func (e Role) Valid() bool {
 	}
 }
 
+// ChangeMemberRoleRequest defines model for ChangeMemberRoleRequest.
+type ChangeMemberRoleRequest struct {
+	// Role An org role. `operator` is never an org role.
+	Role OrgRole `json:"role"`
+}
+
 // CreateOrgRequest defines model for CreateOrgRequest.
 type CreateOrgRequest struct {
 	Name string `json:"name"`
@@ -57,6 +84,24 @@ type Me struct {
 
 	// Subject Token `sub`. Never an email.
 	Subject string `json:"subject"`
+}
+
+// Member defines model for Member.
+type Member struct {
+	// Role An org role. `operator` is never an org role.
+	Role      OrgRole   `json:"role"`
+	UpdatedAt time.Time `json:"updated_at"`
+
+	// UserId Subject id (token `sub`). Never an email.
+	UserId string `json:"user_id"`
+}
+
+// MemberPage defines model for MemberPage.
+type MemberPage struct {
+	Items []Member `json:"items"`
+
+	// NextCursor Cursor of the next page. Absent on the last page.
+	NextCursor *string `json:"next_cursor,omitempty"`
 }
 
 // Org defines model for Org.
@@ -79,6 +124,9 @@ type OrgPage struct {
 	NextCursor *string `json:"next_cursor,omitempty"`
 }
 
+// OrgRole An org role. `operator` is never an org role.
+type OrgRole string
+
 // Problem RFC 9457 problem details with the stable Synthwerk `code`.
 // Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
 //
@@ -87,8 +135,11 @@ type OrgPage struct {
 // | `invalid_request` | 400 | Body or parameter not valid. |
 // | `unauthenticated` | 401 | Token missing or not valid. |
 // | `forbidden` | 403 | Role does not allow the call. |
-// | `not_found` | 404 | Unknown org or no membership. |
+// | `not_found` | 404 | Unknown org or member, or no membership. |
 // | `slug_taken` | 409 | Another org has the slug. |
+// | `last_owner` | 409 | The org would lose its last owner. |
+// | `own_role` | 409 | The caller tried to change their own role. |
+// | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type Problem struct {
 	// Code Stable machine code, for example `not_found`.
 	Code string `json:"code"`
@@ -117,6 +168,9 @@ type Role string
 // OrgId defines model for OrgId.
 type OrgId = openapi_types.UUID
 
+// UserId defines model for UserId.
+type UserId = string
+
 // Conflict RFC 9457 problem details with the stable Synthwerk `code`.
 // Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
 //
@@ -125,8 +179,11 @@ type OrgId = openapi_types.UUID
 // | `invalid_request` | 400 | Body or parameter not valid. |
 // | `unauthenticated` | 401 | Token missing or not valid. |
 // | `forbidden` | 403 | Role does not allow the call. |
-// | `not_found` | 404 | Unknown org or no membership. |
+// | `not_found` | 404 | Unknown org or member, or no membership. |
 // | `slug_taken` | 409 | Another org has the slug. |
+// | `last_owner` | 409 | The org would lose its last owner. |
+// | `own_role` | 409 | The caller tried to change their own role. |
+// | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type Conflict = Problem
 
 // Forbidden RFC 9457 problem details with the stable Synthwerk `code`.
@@ -137,8 +194,11 @@ type Conflict = Problem
 // | `invalid_request` | 400 | Body or parameter not valid. |
 // | `unauthenticated` | 401 | Token missing or not valid. |
 // | `forbidden` | 403 | Role does not allow the call. |
-// | `not_found` | 404 | Unknown org or no membership. |
+// | `not_found` | 404 | Unknown org or member, or no membership. |
 // | `slug_taken` | 409 | Another org has the slug. |
+// | `last_owner` | 409 | The org would lose its last owner. |
+// | `own_role` | 409 | The caller tried to change their own role. |
+// | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type Forbidden = Problem
 
 // InvalidRequest RFC 9457 problem details with the stable Synthwerk `code`.
@@ -149,8 +209,11 @@ type Forbidden = Problem
 // | `invalid_request` | 400 | Body or parameter not valid. |
 // | `unauthenticated` | 401 | Token missing or not valid. |
 // | `forbidden` | 403 | Role does not allow the call. |
-// | `not_found` | 404 | Unknown org or no membership. |
+// | `not_found` | 404 | Unknown org or member, or no membership. |
 // | `slug_taken` | 409 | Another org has the slug. |
+// | `last_owner` | 409 | The org would lose its last owner. |
+// | `own_role` | 409 | The caller tried to change their own role. |
+// | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type InvalidRequest = Problem
 
 // NotFound RFC 9457 problem details with the stable Synthwerk `code`.
@@ -161,9 +224,27 @@ type InvalidRequest = Problem
 // | `invalid_request` | 400 | Body or parameter not valid. |
 // | `unauthenticated` | 401 | Token missing or not valid. |
 // | `forbidden` | 403 | Role does not allow the call. |
-// | `not_found` | 404 | Unknown org or no membership. |
+// | `not_found` | 404 | Unknown org or member, or no membership. |
 // | `slug_taken` | 409 | Another org has the slug. |
+// | `last_owner` | 409 | The org would lose its last owner. |
+// | `own_role` | 409 | The caller tried to change their own role. |
+// | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type NotFound = Problem
+
+// RoleConflict RFC 9457 problem details with the stable Synthwerk `code`.
+// Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
+//
+// | Code | Status | Cause |
+// |---|---|---|
+// | `invalid_request` | 400 | Body or parameter not valid. |
+// | `unauthenticated` | 401 | Token missing or not valid. |
+// | `forbidden` | 403 | Role does not allow the call. |
+// | `not_found` | 404 | Unknown org or member, or no membership. |
+// | `slug_taken` | 409 | Another org has the slug. |
+// | `last_owner` | 409 | The org would lose its last owner. |
+// | `own_role` | 409 | The caller tried to change their own role. |
+// | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+type RoleConflict = Problem
 
 // Unauthenticated RFC 9457 problem details with the stable Synthwerk `code`.
 // Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
@@ -173,9 +254,27 @@ type NotFound = Problem
 // | `invalid_request` | 400 | Body or parameter not valid. |
 // | `unauthenticated` | 401 | Token missing or not valid. |
 // | `forbidden` | 403 | Role does not allow the call. |
-// | `not_found` | 404 | Unknown org or no membership. |
+// | `not_found` | 404 | Unknown org or member, or no membership. |
 // | `slug_taken` | 409 | Another org has the slug. |
+// | `last_owner` | 409 | The org would lose its last owner. |
+// | `own_role` | 409 | The caller tried to change their own role. |
+// | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type Unauthenticated = Problem
+
+// UpstreamUnavailable RFC 9457 problem details with the stable Synthwerk `code`.
+// Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
+//
+// | Code | Status | Cause |
+// |---|---|---|
+// | `invalid_request` | 400 | Body or parameter not valid. |
+// | `unauthenticated` | 401 | Token missing or not valid. |
+// | `forbidden` | 403 | Role does not allow the call. |
+// | `not_found` | 404 | Unknown org or member, or no membership. |
+// | `slug_taken` | 409 | Another org has the slug. |
+// | `last_owner` | 409 | The org would lose its last owner. |
+// | `own_role` | 409 | The caller tried to change their own role. |
+// | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+type UpstreamUnavailable = Problem
 
 // IdentityListOrgsParams defines parameters for IdentityListOrgs.
 type IdentityListOrgsParams struct {
@@ -186,8 +285,20 @@ type IdentityListOrgsParams struct {
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// IdentityListMembersParams defines parameters for IdentityListMembers.
+type IdentityListMembersParams struct {
+	// Limit Page size.
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor The `next_cursor` of the previous page.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // IdentityCreateOrgJSONRequestBody defines body for IdentityCreateOrg for application/json ContentType.
 type IdentityCreateOrgJSONRequestBody = CreateOrgRequest
+
+// IdentityChangeMemberRoleJSONRequestBody defines body for IdentityChangeMemberRole for application/json ContentType.
+type IdentityChangeMemberRoleJSONRequestBody = ChangeMemberRoleRequest
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -301,6 +412,41 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{orgId} (the `IdentityGetOrg` operationId).
 	IdentityGetOrg(ctx context.Context, orgId OrgId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IdentityListMembers List members
+	//
+	// Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. Cursor paging, max 100 per page.
+	//
+	// Corresponds with GET /v1/orgs/{orgId}/members (the `IdentityListMembers` operationId).
+	IdentityListMembers(ctx context.Context, orgId OrgId, params *IdentityListMembersParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IdentityChangeMemberRoleWithBody Change the role of a member
+	//
+	// Sets the org role of a member. Emits `dev.synthwerk.identity.member.role_changed.v1` when the role changes.
+	// - `owner` and `admin` may set `admin` or `member` on a member that is not an owner.
+	// - Only an `owner` grants `owner` or changes the role of an owner.
+	// - A `member` gets 403. An `operator` gets 403: operator access is read only.
+	// - The last owner keeps the role (409 `last_owner`). Nobody changes their own role (409 `own_role`).
+	// - The same role again answers 200 and emits nothing.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /v1/orgs/{orgId}/members/{userId} (the `IdentityChangeMemberRole` operationId).
+	IdentityChangeMemberRoleWithBody(ctx context.Context, orgId OrgId, userId UserId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IdentityChangeMemberRole Change the role of a member
+	//
+	// Sets the org role of a member. Emits `dev.synthwerk.identity.member.role_changed.v1` when the role changes.
+	// - `owner` and `admin` may set `admin` or `member` on a member that is not an owner.
+	// - Only an `owner` grants `owner` or changes the role of an owner.
+	// - A `member` gets 403. An `operator` gets 403: operator access is read only.
+	// - The last owner keeps the role (409 `last_owner`). Nobody changes their own role (409 `own_role`).
+	// - The same role again answers 200 and emits nothing.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /v1/orgs/{orgId}/members/{userId} (the `IdentityChangeMemberRole` operationId).
+	IdentityChangeMemberRole(ctx context.Context, orgId OrgId, userId UserId, body IdentityChangeMemberRoleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 // IdentityGetMe Get the caller
@@ -382,6 +528,71 @@ func (c *Client) IdentityCreateOrg(ctx context.Context, body IdentityCreateOrgJS
 // Corresponds with GET /v1/orgs/{orgId} (the `IdentityGetOrg` operationId).
 func (c *Client) IdentityGetOrg(ctx context.Context, orgId OrgId, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewIdentityGetOrgRequest(c.Server, orgId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// IdentityListMembers List members
+//
+// Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. Cursor paging, max 100 per page.
+//
+// Corresponds with GET /v1/orgs/{orgId}/members (the `IdentityListMembers` operationId).
+func (c *Client) IdentityListMembers(ctx context.Context, orgId OrgId, params *IdentityListMembersParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIdentityListMembersRequest(c.Server, orgId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// IdentityChangeMemberRoleWithBody Change the role of a member
+//
+// Sets the org role of a member. Emits `dev.synthwerk.identity.member.role_changed.v1` when the role changes.
+// - `owner` and `admin` may set `admin` or `member` on a member that is not an owner.
+// - Only an `owner` grants `owner` or changes the role of an owner.
+// - A `member` gets 403. An `operator` gets 403: operator access is read only.
+// - The last owner keeps the role (409 `last_owner`). Nobody changes their own role (409 `own_role`).
+// - The same role again answers 200 and emits nothing.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /v1/orgs/{orgId}/members/{userId} (the `IdentityChangeMemberRole` operationId).
+func (c *Client) IdentityChangeMemberRoleWithBody(ctx context.Context, orgId OrgId, userId UserId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIdentityChangeMemberRoleRequestWithBody(c.Server, orgId, userId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// IdentityChangeMemberRole Change the role of a member
+//
+// Sets the org role of a member. Emits `dev.synthwerk.identity.member.role_changed.v1` when the role changes.
+// - `owner` and `admin` may set `admin` or `member` on a member that is not an owner.
+// - Only an `owner` grants `owner` or changes the role of an owner.
+// - A `member` gets 403. An `operator` gets 403: operator access is read only.
+// - The last owner keeps the role (409 `last_owner`). Nobody changes their own role (409 `own_role`).
+// - The same role again answers 200 and emits nothing.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /v1/orgs/{orgId}/members/{userId} (the `IdentityChangeMemberRole` operationId).
+func (c *Client) IdentityChangeMemberRole(ctx context.Context, orgId OrgId, userId UserId, body IdentityChangeMemberRoleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIdentityChangeMemberRoleRequest(c.Server, orgId, userId, body)
 	if err != nil {
 		return nil, err
 	}
@@ -559,6 +770,133 @@ func NewIdentityGetOrgRequest(server string, orgId OrgId) (*http.Request, error)
 	return req, nil
 }
 
+// NewIdentityListMembersRequest constructs an http.Request for the IdentityListMembers method
+func NewIdentityListMembersRequest(server string, orgId OrgId, params *IdentityListMembersParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "orgId", orgId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/members", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewIdentityChangeMemberRoleRequest calls the generic IdentityChangeMemberRole builder with application/json body
+func NewIdentityChangeMemberRoleRequest(server string, orgId OrgId, userId UserId, body IdentityChangeMemberRoleJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewIdentityChangeMemberRoleRequestWithBody(server, orgId, userId, "application/json", bodyReader)
+}
+
+// NewIdentityChangeMemberRoleRequestWithBody constructs an http.Request for the IdentityChangeMemberRole method, with any body, and a specified content type
+func NewIdentityChangeMemberRoleRequestWithBody(server string, orgId OrgId, userId UserId, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "orgId", orgId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "userId", userId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/members/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -647,6 +985,43 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{orgId} (the `IdentityGetOrg` operationId).
 	IdentityGetOrgWithResponse(ctx context.Context, orgId OrgId, reqEditors ...RequestEditorFn) (*IdentityGetOrgResponse, error)
+
+	// IdentityListMembersWithResponse List members
+	//
+	// Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. Cursor paging, max 100 per page.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{orgId}/members (the `IdentityListMembers` operationId).
+	IdentityListMembersWithResponse(ctx context.Context, orgId OrgId, params *IdentityListMembersParams, reqEditors ...RequestEditorFn) (*IdentityListMembersResponse, error)
+
+	// IdentityChangeMemberRoleWithBodyWithResponse Change the role of a member
+	//
+	// Sets the org role of a member. Emits `dev.synthwerk.identity.member.role_changed.v1` when the role changes.
+	// - `owner` and `admin` may set `admin` or `member` on a member that is not an owner.
+	// - Only an `owner` grants `owner` or changes the role of an owner.
+	// - A `member` gets 403. An `operator` gets 403: operator access is read only.
+	// - The last owner keeps the role (409 `last_owner`). Nobody changes their own role (409 `own_role`).
+	// - The same role again answers 200 and emits nothing.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /v1/orgs/{orgId}/members/{userId} (the `IdentityChangeMemberRole` operationId).
+	IdentityChangeMemberRoleWithBodyWithResponse(ctx context.Context, orgId OrgId, userId UserId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*IdentityChangeMemberRoleResponse, error)
+
+	// IdentityChangeMemberRoleWithResponse Change the role of a member
+	//
+	// Sets the org role of a member. Emits `dev.synthwerk.identity.member.role_changed.v1` when the role changes.
+	// - `owner` and `admin` may set `admin` or `member` on a member that is not an owner.
+	// - Only an `owner` grants `owner` or changes the role of an owner.
+	// - A `member` gets 403. An `operator` gets 403: operator access is read only.
+	// - The last owner keeps the role (409 `last_owner`). Nobody changes their own role (409 `own_role`).
+	// - The same role again answers 200 and emits nothing.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /v1/orgs/{orgId}/members/{userId} (the `IdentityChangeMemberRole` operationId).
+	IdentityChangeMemberRoleWithResponse(ctx context.Context, orgId OrgId, userId UserId, body IdentityChangeMemberRoleJSONRequestBody, reqEditors ...RequestEditorFn) (*IdentityChangeMemberRoleResponse, error)
 }
 
 // IdentityGetMeResponse401Headers the declared response headers of an HTTP 401 response for IdentityGetMe
@@ -911,6 +1286,172 @@ func (r IdentityGetOrgResponse) ContentType() string {
 	return ""
 }
 
+// IdentityListMembersResponse401Headers the declared response headers of an HTTP 401 response for IdentityListMembers
+type IdentityListMembersResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type IdentityListMembersResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *MemberPage
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *InvalidRequest
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Unauthenticated
+	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
+	ApplicationproblemJSON403 *Forbidden
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *NotFound
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *IdentityListMembersResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r IdentityListMembersResponse) GetJSON200() *MemberPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r IdentityListMembersResponse) GetApplicationproblemJSON400() *InvalidRequest {
+	return r.ApplicationproblemJSON400
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r IdentityListMembersResponse) GetApplicationproblemJSON401() *Unauthenticated {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
+func (r IdentityListMembersResponse) GetApplicationproblemJSON403() *Forbidden {
+	return r.ApplicationproblemJSON403
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r IdentityListMembersResponse) GetApplicationproblemJSON404() *NotFound {
+	return r.ApplicationproblemJSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r IdentityListMembersResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r IdentityListMembersResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IdentityListMembersResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IdentityListMembersResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// IdentityChangeMemberRoleResponse401Headers the declared response headers of an HTTP 401 response for IdentityChangeMemberRole
+type IdentityChangeMemberRoleResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type IdentityChangeMemberRoleResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Member
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *InvalidRequest
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Unauthenticated
+	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
+	ApplicationproblemJSON403 *Forbidden
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *NotFound
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *RoleConflict
+	// ApplicationproblemJSON502 the response for an HTTP 502 `application/problem+json` response
+	ApplicationproblemJSON502 *UpstreamUnavailable
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *IdentityChangeMemberRoleResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r IdentityChangeMemberRoleResponse) GetJSON200() *Member {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r IdentityChangeMemberRoleResponse) GetApplicationproblemJSON400() *InvalidRequest {
+	return r.ApplicationproblemJSON400
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r IdentityChangeMemberRoleResponse) GetApplicationproblemJSON401() *Unauthenticated {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
+func (r IdentityChangeMemberRoleResponse) GetApplicationproblemJSON403() *Forbidden {
+	return r.ApplicationproblemJSON403
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r IdentityChangeMemberRoleResponse) GetApplicationproblemJSON404() *NotFound {
+	return r.ApplicationproblemJSON404
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r IdentityChangeMemberRoleResponse) GetApplicationproblemJSON409() *RoleConflict {
+	return r.ApplicationproblemJSON409
+}
+
+// GetApplicationproblemJSON502 returns the response for an HTTP 502 `application/problem+json` response
+func (r IdentityChangeMemberRoleResponse) GetApplicationproblemJSON502() *UpstreamUnavailable {
+	return r.ApplicationproblemJSON502
+}
+
+// GetBody returns the raw response body bytes
+func (r IdentityChangeMemberRoleResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r IdentityChangeMemberRoleResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IdentityChangeMemberRoleResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IdentityChangeMemberRoleResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // IdentityGetMeWithResponse Get the caller
 //
 // The subject, the org and the roles of the token.
@@ -984,6 +1525,61 @@ func (c *ClientWithResponses) IdentityGetOrgWithResponse(ctx context.Context, or
 		return nil, err
 	}
 	return ParseIdentityGetOrgResponse(rsp)
+}
+
+// IdentityListMembersWithResponse List members
+//
+// Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. Cursor paging, max 100 per page.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{orgId}/members (the `IdentityListMembers` operationId).
+func (c *ClientWithResponses) IdentityListMembersWithResponse(ctx context.Context, orgId OrgId, params *IdentityListMembersParams, reqEditors ...RequestEditorFn) (*IdentityListMembersResponse, error) {
+	rsp, err := c.IdentityListMembers(ctx, orgId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIdentityListMembersResponse(rsp)
+}
+
+// IdentityChangeMemberRoleWithBodyWithResponse Change the role of a member
+//
+// Sets the org role of a member. Emits `dev.synthwerk.identity.member.role_changed.v1` when the role changes.
+// - `owner` and `admin` may set `admin` or `member` on a member that is not an owner.
+// - Only an `owner` grants `owner` or changes the role of an owner.
+// - A `member` gets 403. An `operator` gets 403: operator access is read only.
+// - The last owner keeps the role (409 `last_owner`). Nobody changes their own role (409 `own_role`).
+// - The same role again answers 200 and emits nothing.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /v1/orgs/{orgId}/members/{userId} (the `IdentityChangeMemberRole` operationId).
+func (c *ClientWithResponses) IdentityChangeMemberRoleWithBodyWithResponse(ctx context.Context, orgId OrgId, userId UserId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*IdentityChangeMemberRoleResponse, error) {
+	rsp, err := c.IdentityChangeMemberRoleWithBody(ctx, orgId, userId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIdentityChangeMemberRoleResponse(rsp)
+}
+
+// IdentityChangeMemberRoleWithResponse Change the role of a member
+//
+// Sets the org role of a member. Emits `dev.synthwerk.identity.member.role_changed.v1` when the role changes.
+// - `owner` and `admin` may set `admin` or `member` on a member that is not an owner.
+// - Only an `owner` grants `owner` or changes the role of an owner.
+// - A `member` gets 403. An `operator` gets 403: operator access is read only.
+// - The last owner keeps the role (409 `last_owner`). Nobody changes their own role (409 `own_role`).
+// - The same role again answers 200 and emits nothing.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /v1/orgs/{orgId}/members/{userId} (the `IdentityChangeMemberRole` operationId).
+func (c *ClientWithResponses) IdentityChangeMemberRoleWithResponse(ctx context.Context, orgId OrgId, userId UserId, body IdentityChangeMemberRoleJSONRequestBody, reqEditors ...RequestEditorFn) (*IdentityChangeMemberRoleResponse, error) {
+	rsp, err := c.IdentityChangeMemberRole(ctx, orgId, userId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIdentityChangeMemberRoleResponse(rsp)
 }
 
 // ParseIdentityGetMeResponse parses an HTTP response from a IdentityGetMeWithResponse call
@@ -1202,6 +1798,154 @@ func ParseIdentityGetOrgResponse(rsp *http.Response) (*IdentityGetOrgResponse, e
 	switch {
 	case rsp.StatusCode == 401:
 		var headers IdentityGetOrgResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseIdentityListMembersResponse parses an HTTP response from a IdentityListMembersWithResponse call
+func ParseIdentityListMembersResponse(rsp *http.Response) (*IdentityListMembersResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IdentityListMembersResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest MemberPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest InvalidRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthenticated
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers IdentityListMembersResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseIdentityChangeMemberRoleResponse parses an HTTP response from a IdentityChangeMemberRoleWithResponse call
+func ParseIdentityChangeMemberRoleResponse(rsp *http.Response) (*IdentityChangeMemberRoleResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IdentityChangeMemberRoleResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Member
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest InvalidRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthenticated
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest RoleConflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
+		var dest UpstreamUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON502 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers IdentityChangeMemberRoleResponse401Headers
 		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {

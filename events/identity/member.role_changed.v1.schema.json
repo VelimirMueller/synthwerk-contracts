@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.synthwerk.dev/events/identity/member.role_changed.v1.json",
+  "title": "identity.member.role_changed.v1",
+  "description": "The org role of a member changed (M2 spec #29). Identity writes it in the same transaction as the membership change. CloudEvents subject: the user sub. The orgid extension holds org_id. actor is user:<sub> for an API call, or system when the change came from Zitadel. No email, no personal name. Operator is a platform role and never appears here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["org_id", "user_sub", "old_role", "new_role"],
+  "properties": {
+    "org_id": {
+      "type": "string",
+      "format": "uuid",
+      "maxLength": 36
+    },
+    "user_sub": {
+      "description": "Subject id (token sub) of the member. Never an email.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "old_role": {
+      "description": "Org role before the change.",
+      "enum": ["owner", "admin", "member"]
+    },
+    "new_role": {
+      "description": "Org role after the change. Never equal to old_role.",
+      "enum": ["owner", "admin", "member"]
+    }
+  }
+}
