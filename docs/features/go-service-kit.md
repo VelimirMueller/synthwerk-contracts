@@ -44,7 +44,8 @@ updated: 2026-10-23
 - The org id claim exists only with the scope `urn:zitadel:iam:user:resourceowner`. Without it the token is refused (401).
 - Zitadel access tokens have `client_id`, no `azp` and no `scope` claim. `Principal.ClientID` reads `client_id`, else `azp`. `Principal.Scopes` stays empty until an Action sets `synthwerk:scope`.
 - `RequireMFA` needs `amr` to contain `mfa` (passkey: `["user","mfa"]`; password only: `["pwd"]`). Zitadel enforces Force MFA only in its login UI, so admin and platform routes check `amr` themselves.
-- Zitadel v4.20.0 access tokens carry no `amr` claim. `RequireMFA` refuses every Zitadel token until a Zitadel Action adds `amr`. The Action (pre-access-token) is part of #28. Do not mount `RequireMFA` before then.
+- `RequireMFA` reads only `amr`, which is evidence from the sign-in. It never accepts an enrolment flag such as `synthwerk:mfa` (a user who has a second factor can still sign in with a password only through the Session API).
+- Zitadel v4.20.0 access tokens carry no `amr` claim. The pre-access-token Action gets no session data (`ContextInfo` in Zitadel `internal/api/oidc/userinfo.go`: user, org, grants, metadata), so no Action can add a true `amr`. `RequireMFA` refuses every Zitadel token (fail closed). Do not mount it until Zitadel exposes the session factors (synthwerk#28, D-47 limitation).
 - The Zitadel project role key for the platform role must be `operator` (D-44), not `platform_admin`.
 - `WithOrg`/`OrgID` set the `orgid` extension (D-44). `WithTenant`/`TenantID` are deprecated but keep working: they still set and check `tenantid` for consumers that read it.
 - Without an OTLP endpoint the service installs no exporter and logs one `WARN` line (`otel.exporter.disabled`). Spans still get ids for the logs.
@@ -114,6 +115,7 @@ updated: 2026-10-23
 - `tests/unit/kit/auth_test.go` — `Verify - key rotated after the first fetch - refreshes once, then accepts`
 - `tests/unit/kit/auth_test.go` — `RequireRole - member on an admin route - 403`
 - `tests/unit/kit/auth_test.go` — `RequireMFA - amr pwd only - 403`
+- `tests/unit/kit/auth_test.go` — `RequireMFA - enrolment flag true, amr pwd only - 403`
 - `tests/unit/kit/auth_test.go` — `Map - Zitadel v4.20.0 access token - org roles and client id`
 - `tests/unit/kit/health_test.go` — `readyz - check hangs - answers within the budget with timeout`
 - `tests/unit/kit/log_test.go` — `log line - forbidden keys anywhere - keys dropped`
@@ -125,5 +127,6 @@ updated: 2026-10-23
 |---|---|
 | 2026-10-21 | First version: health, log, otel, cloudevents, outbox, env, example service. |
 | 2026-10-23 | `kit/auth` and `kit/auth/authtest`: JWT verify with a JWKS cache, Zitadel claims mapper, HTTP middleware (SW-M2-0.1). |
+| 2026-10-28 | `kit/auth`: `RequireMFA` stays fail closed; an enrolment flag never counts as MFA (#28, D-47 limitation). |
 | 2026-10-23 | `kit/auth`: Zitadel v4.20.0 token shape (`client_id`, `aud`, org scope), `RequireMFA` (SW-M2-0.5). |
 | 2026-10-23 | D-44: `kit/cloudevents` adds `WithOrg`/`OrgID`; `WithTenant`/`TenantID` deprecated, still working. |
