@@ -97,6 +97,7 @@ updated: 2026-10-29
 - `tests/contract/identity_test.go` — `UpdateApp - spec example - app with the new allow-list`
 - `tests/contract/identity_test.go` — `CreateWidgetToken - spec example - bearer token, 15 minutes or less`
 - `tests/contract/identity_test.go` — `CreateWidgetToken - origin not listed - 403 problem with code origin_not_allowed`
+- `tests/contract/identity_client_test.go` — `Client <operation> - 404 problem - method and path match the spec` (every operation)
 - `tests/contract/events_test.go` — `Catalog - each entry - names, schema $id and example match`
 
 ## Changes
