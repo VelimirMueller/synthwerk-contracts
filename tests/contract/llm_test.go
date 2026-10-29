@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strings"
 	"testing"
 
 	"go.yaml.in/yaml/v3"
@@ -39,7 +38,10 @@ type specDoc struct {
 	Components struct {
 		Responses map[string]struct {
 			Content map[string]struct {
-				Example any `yaml:"example"`
+				Example  any `yaml:"example"`
+				Examples map[string]struct {
+					Value any `yaml:"value"`
+				} `yaml:"examples"`
 			} `yaml:"content"`
 		} `yaml:"responses"`
 	} `yaml:"components"`
@@ -140,23 +142,55 @@ func TestLLMContract(t *testing.T) {
 		}
 	})
 
-	t.Run("Problem - quota_exhausted - reserved in the 429 response", func(t *testing.T) {
-		raw, err := os.ReadFile("../../openapi/llm/openapi.yaml")
+	t.Run("Problem - each 429 example - decodes strictly to a Problem with its code", func(t *testing.T) {
+		examples := spec.Components.Responses["TooManyRequests"].Content["application/problem+json"].Examples
+		for _, code := range []string{"too_many_streams", "quota_exhausted"} {
+			ex, ok := examples[code]
+			if !ok {
+				t.Fatalf("429 example %q missing", code)
+			}
+			var p llm.Problem
+			strict(t, toJSON(t, ex.Value), &p)
+			if p.Code != code || p.Status != http.StatusTooManyRequests {
+				t.Fatalf("example %q: got code %q status %d", code, p.Code, p.Status)
+			}
+		}
+	})
+
+	t.Run("Problem - quota_exhausted - names scope, unit, limit and reset", func(t *testing.T) {
+		ex := spec.Components.Responses["TooManyRequests"].Content["application/problem+json"].Examples["quota_exhausted"]
+		body := toJSON(t, ex.Value)
+		var p llm.Problem
+		strict(t, body, &p)
+		q := p.Quota
+		if q == nil {
+			t.Fatal("quota_exhausted example has no quota member")
+		}
+		if !q.Scope.Valid() || !q.Unit.Valid() || q.Limit < 1 || q.ResetsAt.IsZero() {
+			t.Fatalf("quota: got %+v", *q)
+		}
+
+		// The generated client hands the typed body to a caller that branches on code.
+		client, err := llm.NewClientWithResponses(serveAs(t, http.StatusTooManyRequests, "application/problem+json", body))
 		if err != nil {
 			t.Fatal(err)
 		}
-		var doc struct {
-			Components struct {
-				Responses map[string]struct {
-					Description string `yaml:"description"`
-				} `yaml:"responses"`
-			} `yaml:"components"`
-		}
-		if err := yaml.Unmarshal(raw, &doc); err != nil {
+		res, err := client.LlmSendMessageWithResponse(ctx, [16]byte{}, llm.SendMessageRequest{Content: "hi"})
+		if err != nil {
 			t.Fatal(err)
 		}
-		if d := doc.Components.Responses["TooManyRequests"].Description; !strings.Contains(d, "quota_exhausted") {
-			t.Fatalf("429 response does not reserve quota_exhausted: %q", d)
+		got := res.ApplicationproblemJSON429
+		if got == nil || got.Code != "quota_exhausted" || got.Quota == nil || got.Quota.Scope != llm.QuotaExceededScopeUser {
+			t.Fatalf("got %+v", got)
+		}
+	})
+
+	t.Run("Problem - quota member - only in the problem schema, optional", func(t *testing.T) {
+		// Older clients decode a problem without quota; the member must stay optional.
+		var p llm.Problem
+		strict(t, []byte(`{"type":"https://schemas.synthwerk.dev/problems/too_many_streams","title":"Too many streams","status":429,"code":"too_many_streams"}`), &p)
+		if p.Quota != nil {
+			t.Fatalf("quota: got %+v, want nil", p.Quota)
 		}
 	})
 }

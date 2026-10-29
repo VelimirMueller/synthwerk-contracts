@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Synthwerk LLM gateway
-  version: 0.1.0
+  version: 0.2.0
   summary: Conversations and streamed answers. The M2 chat slice of synthwerk-llm.
   description: |
     The chat contract of synthwerk-llm (M2 spec #32, D-44).
@@ -286,7 +286,9 @@ components:
     TooManyRequests:
       description: |
         - `too_many_streams`: the owner already has the max number of open streams (default 2).
-        - `quota_exhausted`: reserved (D-46). M2 has no quotas and never sends it. Clients must handle it already.
+        - `quota_exhausted`: the user or the org used up its token quota of the window (D-46, #33). The model sees no call.
+          The body holds `quota`: the scope that ran out, its limit and when the window resets.
+          `Retry-After` is the number of seconds until that reset.
       headers:
         Retry-After:
           description: Seconds to wait before a retry.
@@ -298,11 +300,26 @@ components:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/Problem"
-          example:
-            type: https://schemas.synthwerk.dev/problems/too_many_streams
-            title: Too many streams
-            status: 429
-            code: too_many_streams
+          examples:
+            too_many_streams:
+              summary: The owner has the max number of open streams.
+              value:
+                type: https://schemas.synthwerk.dev/problems/too_many_streams
+                title: Too many streams
+                status: 429
+                code: too_many_streams
+            quota_exhausted:
+              summary: The user used up the token quota of the day.
+              value:
+                type: https://schemas.synthwerk.dev/problems/quota_exhausted
+                title: Quota exhausted
+                status: 429
+                code: quota_exhausted
+                quota:
+                  scope: user
+                  unit: tokens
+                  limit: 50000
+                  resets_at: "2026-10-24T00:00:00Z"
     ModelUnavailable:
       description: The model cannot answer now (provider down or busy). Code `model_unavailable`.
       headers:
@@ -510,7 +527,7 @@ components:
         | `not_found` | 404 | Unknown id or another owner's id. |
         | `input_too_large` | 413 | Message above the input limit. |
         | `too_many_streams` | 429 | Owner has the max number of open streams. |
-        | `quota_exhausted` | 429 | Reserved (D-46). Not sent in M2. |
+        | `quota_exhausted` | 429 | User or org quota used up. `quota` names the scope and the reset. |
         | `model_unavailable` | 503 | Provider down or busy. Also as an `error` event mid-stream. |
       properties:
         type:
@@ -545,3 +562,34 @@ components:
           maxLength: 32
           pattern: "^[0-9a-f]{32}$"
           description: W3C trace id of the request, for support.
+        quota:
+          $ref: "#/components/schemas/QuotaExceeded"
+    QuotaExceeded:
+      type: object
+      additionalProperties: false
+      required: [scope, unit, limit, resets_at]
+      description: |
+        The quota that ran out. Only in a `quota_exhausted` problem.
+        No usage numbers of other users: a member sees the org limit, never the use of a peer.
+      properties:
+        scope:
+          type: string
+          enum: [user, org]
+          description: |
+            - `user`: the caller used up the own quota in this org.
+            - `org`: the org used up the shared quota of all its users.
+        unit:
+          type: string
+          enum: [tokens]
+          description: What the quota counts. Input plus output tokens of every answer.
+        limit:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 1000000000000
+          description: Tokens per window for this scope.
+        resets_at:
+          type: string
+          format: date-time
+          maxLength: 40
+          description: Start of the next window (UTC). The quota is full again from then.
