@@ -39,6 +39,13 @@ type Config struct {
 	BatchSize int
 	// PublishTimeout limits one publish and its ack. Default 5 s.
 	PublishTimeout time.Duration
+	// Retention is how long a published row stays in the table before the relay
+	// deletes it. Default DefaultRetention (7 days). A negative value turns the
+	// clean-up off. Unpublished rows are never deleted.
+	Retention time.Duration
+	// CleanupInterval is the wait between two clean-ups. Default 1 h. The first
+	// clean-up runs when Run starts.
+	CleanupInterval time.Duration
 	// BeforeMark runs after a publish and before the row is marked as published.
 	// An error aborts the batch and rolls the marks back, like a crash at that point.
 	// Tests use it to inject a crash. Leave it nil in services.
@@ -68,6 +75,12 @@ func NewRelay(db Beginner, js Publisher, logger *slog.Logger, cfg Config) (*Rela
 	if cfg.PublishTimeout <= 0 {
 		cfg.PublishTimeout = 5 * time.Second
 	}
+	if cfg.Retention == 0 {
+		cfg.Retention = DefaultRetention
+	}
+	if cfg.CleanupInterval <= 0 {
+		cfg.CleanupInterval = time.Hour
+	}
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
@@ -88,7 +101,12 @@ func NewRelay(db Beginner, js Publisher, logger *slog.Logger, cfg Config) (*Rela
 // Run publishes until ctx ends. It returns nil when ctx ends. A failed batch is
 // logged and tried again after Interval.
 func (r *Relay) Run(ctx context.Context) error {
+	var nextCleanup time.Time
 	for ctx.Err() == nil {
+		if r.cfg.Retention > 0 && !time.Now().Before(nextCleanup) {
+			r.cleanup(ctx)
+			nextCleanup = time.Now().Add(r.cfg.CleanupInterval)
+		}
 		n, err := r.RunOnce(ctx)
 		switch {
 		case ctx.Err() != nil:
@@ -106,6 +124,38 @@ func (r *Relay) Run(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// cleanup runs Cleanup in its own transaction. An error is logged, the next
+// clean-up tries again.
+func (r *Relay) cleanup(ctx context.Context) {
+	deleted, err := r.cleanupTx(ctx)
+	switch {
+	case ctx.Err() != nil:
+	case err != nil:
+		r.log.WarnContext(ctx, "outbox cleanup failed",
+			slog.String("event.name", "outbox.cleanup.failed"),
+			slog.String("exception.message", truncate(err.Error())))
+	case deleted > 0:
+		r.log.InfoContext(ctx, "outbox cleanup deleted published rows",
+			slog.String("event.name", "outbox.cleanup"), slog.Int64("synthwerk.outbox.count", deleted))
+	}
+}
+
+func (r *Relay) cleanupTx(ctx context.Context) (int64, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("outbox: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	deleted, err := Cleanup(ctx, tx, r.cfg.Retention)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("outbox: commit: %w", err)
+	}
+	return deleted, nil
 }
 
 type row struct {
