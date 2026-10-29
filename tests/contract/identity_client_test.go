@@ -67,6 +67,9 @@ func TestIdentityClientRoutes(t *testing.T) {
 		{"deleteApp", "DELETE /v1/orgs/" + org.String() + "/apps/" + app.String(), func() (result, error) {
 			return c.IdentityDeleteAppWithResponse(ctx, org, app)
 		}},
+		{"getWidgetSettings", "GET /v1/apps/" + app.String() + "/widget-settings", func() (result, error) {
+			return c.IdentityGetWidgetSettingsWithResponse(ctx, app, &identity.IdentityGetWidgetSettingsParams{Origin: "https://shop.example"})
+		}},
 		{"createWidgetToken", "POST /v1/apps/" + app.String() + "/widget-tokens", func() (result, error) {
 			return c.IdentityCreateWidgetTokenWithResponse(ctx, app, &identity.IdentityCreateWidgetTokenParams{Origin: "https://shop.example"})
 		}},
