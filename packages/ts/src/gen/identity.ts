@@ -124,6 +124,104 @@ export interface paths {
         patch: operations["identity.changeMemberRole"];
         trace?: never;
     };
+    "/v1/orgs/{orgId}/apps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List apps
+         * @description Apps of the org, oldest first. Needs a membership in the org, or the role `operator`. Cursor paging, max 100 per page.
+         */
+        get: operations["identity.listApps"];
+        put?: never;
+        /**
+         * Create an app
+         * @description Creates an app with its origin allow-list. Emits `dev.synthwerk.identity.app.created.v1`.
+         *     - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
+         *     - Each origin is `scheme://host[:port]`, nothing more. The rules are in `AppOrigin`.
+         */
+        post: operations["identity.createApp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{orgId}/apps/{appId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+                /** @description App id. */
+                appId: components["parameters"]["AppId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Get an app
+         * @description One app with its origin allow-list. Needs a membership in the org, or the role `operator`.
+         */
+        get: operations["identity.getApp"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete an app
+         * @description Deletes the app. Its widgets get no new token.
+         *     - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+         *     - A widget token issued before the delete stays valid until it expires (15 minutes or less).
+         *     - Emits no event yet.
+         */
+        delete: operations["identity.deleteApp"];
+        options?: never;
+        head?: never;
+        /**
+         * Update an app
+         * @description Sets the name or the origin allow-list of an app. A new list replaces the old list.
+         *     - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+         *     - A widget token issued before the change stays valid until it expires (15 minutes or less).
+         *     - Emits no event yet.
+         */
+        patch: operations["identity.updateApp"];
+        trace?: never;
+    };
+    "/v1/apps/{appId}/widget-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description App id. */
+                appId: components["parameters"]["AppId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue a widget token
+         * @description Issues a short-lived widget token for the signed-in caller, bound to the app and to the request origin.
+         *     - The Bearer token is the Zitadel access token of the signed-in user. A widget token never gets a new widget token.
+         *     - The caller must be a member of the app's org (token and stored membership). Else 404, same as an unknown app.
+         *     - The `Origin` header must equal one entry of the allow-list: same scheme, host and port. No prefix, suffix or wildcard match. Else 403 `origin_not_allowed`.
+         *     - The token is a JWT (`typ` `at+jwt`, `alg` `ES256`), signed by identity. It lives 15 minutes or less (`expires_in`).
+         *     - Claims: `iss` (identity), `aud`, `sub` (the user), `urn:zitadel:iam:user:resourceowner:id` (the Zitadel org), `client_id` (the app id), `synthwerk:origin` (the canonical origin), `iat`, `nbf`, `exp`, `jti`. No roles: a widget token is never an admin token.
+         *     - Verify it with the key set at `/.well-known/jwks.json` of identity (RFC 7517). A service that accepts it must also compare `synthwerk:origin` with the `Origin` header.
+         *     - Browsers send a CORS preflight first. Identity answers it with the CORS headers only for an allowed origin.
+         */
+        post: operations["identity.createWidgetToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -181,6 +279,58 @@ export interface components {
             roles: components["schemas"]["Role"][];
         };
         /**
+         * @description A web origin: `scheme://host[:port]`. Identity stores and returns the canonical form.
+         *     - Scheme `https`. Scheme `http` only for `localhost`, `127.0.0.1` and `[::1]`.
+         *     - Host: a DNS name (ASCII; use punycode for other characters), an IPv4 address or a bracketed IPv6 address. Identity stores it in lower case.
+         *     - Port: optional, 1 to 65535. The default port (443 for https, 80 for http) is removed.
+         *     - No path (not even `/`), no query, no fragment, no user info, no wildcard. `null` is not an origin.
+         *     - Match is exact on the canonical form: `https://shop.example` does not match `https://shop.example.evil.test`, `https://a.shop.example` or `http://shop.example`.
+         */
+        AppOrigin: string;
+        App: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            org_id: string;
+            /** @description Display name. */
+            name: string;
+            /** @description Origins that may get a widget token for this app. Canonical form. */
+            allowed_origins: components["schemas"]["AppOrigin"][];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        AppPage: {
+            items: components["schemas"]["App"][];
+            /** @description Cursor of the next page. Absent on the last page. */
+            next_cursor?: string;
+        };
+        CreateAppRequest: {
+            name: string;
+            /** @description Two entries with the same canonical form are refused (400). */
+            allowed_origins: components["schemas"]["AppOrigin"][];
+        };
+        /** @description At least one field. A field that is absent keeps its value. */
+        UpdateAppRequest: {
+            name?: string;
+            /** @description Replaces the whole list. Two entries with the same canonical form are refused (400). */
+            allowed_origins?: components["schemas"]["AppOrigin"][];
+        };
+        WidgetToken: {
+            /** @description The widget token (JWT). Send it in the header `Authorization` as `Bearer <token>`, from the same origin. Never log it. */
+            access_token: string;
+            /** @enum {string} */
+            token_type: "Bearer";
+            /** @description Seconds until the token expires. Never more than 900 (15 minutes). */
+            expires_in: number;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: uuid */
+            app_id: string;
+            origin: components["schemas"]["AppOrigin"];
+        };
+        /**
          * @description RFC 9457 problem details with the stable Synthwerk `code`.
          *     Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
          *
@@ -193,6 +343,7 @@ export interface components {
          *     | `slug_taken` | 409 | Another org has the slug. |
          *     | `last_owner` | 409 | The org would lose its last owner. |
          *     | `own_role` | 409 | The caller tried to change their own role. |
+         *     | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
          *     | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
          */
         Problem: {
@@ -324,6 +475,23 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /** @description The `Origin` header is missing, not valid, or not in the allow-list of the app. Code `origin_not_allowed`. The body never lists the allowed origins. */
+        OriginNotAllowed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://schemas.synthwerk.dev/problems/origin_not_allowed",
+                 *       "title": "Origin not allowed",
+                 *       "status": 403,
+                 *       "code": "origin_not_allowed"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description Zitadel did not take the change. Nothing changed. Code `upstream_unavailable`. Retry later. */
         UpstreamUnavailable: {
             headers: {
@@ -347,6 +515,8 @@ export interface components {
         OrgId: string;
         /** @description Subject id (token `sub`) of the member. */
         UserId: string;
+        /** @description App id. */
+        AppId: string;
     };
     requestBodies: never;
     headers: never;
@@ -599,6 +769,270 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["RoleConflict"];
             502: components["responses"]["UpstreamUnavailable"];
+        };
+    };
+    "identity.listApps": {
+        parameters: {
+            query?: {
+                /** @description Page size. */
+                limit?: number;
+                /** @description The `next_cursor` of the previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of apps. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": "019a3b10-7c2d-7e4f-8a5b-6c7d8e9f0a1b",
+                     *           "org_id": "0199f3a0-5b6c-7d8e-9f0a-1b2c3d4e5f60",
+                     *           "name": "Shop website",
+                     *           "allowed_origins": [
+                     *             "https://shop.example",
+                     *             "http://localhost:3000"
+                     *           ],
+                     *           "created_at": "2026-10-29T10:00:00Z",
+                     *           "updated_at": "2026-10-29T10:00:00Z"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AppPage"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "identity.createApp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "name": "Shop website",
+                 *       "allowed_origins": [
+                 *         "https://shop.example",
+                 *         "http://localhost:3000"
+                 *       ]
+                 *     }
+                 */
+                "application/json": components["schemas"]["CreateAppRequest"];
+            };
+        };
+        responses: {
+            /** @description App created. */
+            201: {
+                headers: {
+                    /** @description Path of the new app. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "019a3b10-7c2d-7e4f-8a5b-6c7d8e9f0a1b",
+                     *       "org_id": "0199f3a0-5b6c-7d8e-9f0a-1b2c3d4e5f60",
+                     *       "name": "Shop website",
+                     *       "allowed_origins": [
+                     *         "https://shop.example",
+                     *         "http://localhost:3000"
+                     *       ],
+                     *       "created_at": "2026-10-29T10:00:00Z",
+                     *       "updated_at": "2026-10-29T10:00:00Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["App"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "identity.getApp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+                /** @description App id. */
+                appId: components["parameters"]["AppId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The app. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "019a3b10-7c2d-7e4f-8a5b-6c7d8e9f0a1b",
+                     *       "org_id": "0199f3a0-5b6c-7d8e-9f0a-1b2c3d4e5f60",
+                     *       "name": "Shop website",
+                     *       "allowed_origins": [
+                     *         "https://shop.example",
+                     *         "http://localhost:3000"
+                     *       ],
+                     *       "created_at": "2026-10-29T10:00:00Z",
+                     *       "updated_at": "2026-10-29T10:00:00Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["App"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "identity.deleteApp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+                /** @description App id. */
+                appId: components["parameters"]["AppId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description App deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "identity.updateApp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+                /** @description App id. */
+                appId: components["parameters"]["AppId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "allowed_origins": [
+                 *         "https://shop.example",
+                 *         "https://www.shop.example"
+                 *       ]
+                 *     }
+                 */
+                "application/json": components["schemas"]["UpdateAppRequest"];
+            };
+        };
+        responses: {
+            /** @description The app after the change. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "019a3b10-7c2d-7e4f-8a5b-6c7d8e9f0a1b",
+                     *       "org_id": "0199f3a0-5b6c-7d8e-9f0a-1b2c3d4e5f60",
+                     *       "name": "Shop website",
+                     *       "allowed_origins": [
+                     *         "https://shop.example",
+                     *         "https://www.shop.example"
+                     *       ],
+                     *       "created_at": "2026-10-29T10:00:00Z",
+                     *       "updated_at": "2026-10-29T11:00:00Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["App"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "identity.createWidgetToken": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The page origin. Browsers set it. Compared exactly with the allow-list after the default port is removed. */
+                Origin: string;
+            };
+            path: {
+                /** @description App id. */
+                appId: components["parameters"]["AppId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Widget token issued. */
+            201: {
+                headers: {
+                    /** @description Always `no-store`. */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "access_token": "eyJhbGciOiJFUzI1NiIsImtpZCI6IjNxV2lxIiwidHlwIjoiYXQrand0In0.e30.c2lnbmF0dXJl",
+                     *       "token_type": "Bearer",
+                     *       "expires_in": 600,
+                     *       "expires_at": "2026-10-29T10:10:00Z",
+                     *       "app_id": "019a3b10-7c2d-7e4f-8a5b-6c7d8e9f0a1b",
+                     *       "origin": "https://shop.example"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["WidgetToken"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["OriginNotAllowed"];
+            404: components["responses"]["NotFound"];
         };
     };
 }

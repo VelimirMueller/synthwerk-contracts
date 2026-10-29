@@ -63,10 +63,61 @@ func (e Role) Valid() bool {
 	}
 }
 
+// Defines values for WidgetTokenTokenType.
+const (
+	WidgetTokenTokenTypeBearer WidgetTokenTokenType = "Bearer"
+)
+
+// Valid indicates whether the value is a known member of the WidgetTokenTokenType enum.
+func (e WidgetTokenTokenType) Valid() bool {
+	switch e {
+	case WidgetTokenTokenTypeBearer:
+		return true
+	default:
+		return false
+	}
+}
+
+// App defines model for App.
+type App struct {
+	// AllowedOrigins Origins that may get a widget token for this app. Canonical form.
+	AllowedOrigins []AppOrigin        `json:"allowed_origins"`
+	CreatedAt      time.Time          `json:"created_at"`
+	Id             openapi_types.UUID `json:"id"`
+
+	// Name Display name.
+	Name      string             `json:"name"`
+	OrgId     openapi_types.UUID `json:"org_id"`
+	UpdatedAt time.Time          `json:"updated_at"`
+}
+
+// AppOrigin A web origin: `scheme://host[:port]`. Identity stores and returns the canonical form.
+// - Scheme `https`. Scheme `http` only for `localhost`, `127.0.0.1` and `[::1]`.
+// - Host: a DNS name (ASCII; use punycode for other characters), an IPv4 address or a bracketed IPv6 address. Identity stores it in lower case.
+// - Port: optional, 1 to 65535. The default port (443 for https, 80 for http) is removed.
+// - No path (not even `/`), no query, no fragment, no user info, no wildcard. `null` is not an origin.
+// - Match is exact on the canonical form: `https://shop.example` does not match `https://shop.example.evil.test`, `https://a.shop.example` or `http://shop.example`.
+type AppOrigin = string
+
+// AppPage defines model for AppPage.
+type AppPage struct {
+	Items []App `json:"items"`
+
+	// NextCursor Cursor of the next page. Absent on the last page.
+	NextCursor *string `json:"next_cursor,omitempty"`
+}
+
 // ChangeMemberRoleRequest defines model for ChangeMemberRoleRequest.
 type ChangeMemberRoleRequest struct {
 	// Role An org role. `operator` is never an org role.
 	Role OrgRole `json:"role"`
+}
+
+// CreateAppRequest defines model for CreateAppRequest.
+type CreateAppRequest struct {
+	// AllowedOrigins Two entries with the same canonical form are refused (400).
+	AllowedOrigins []AppOrigin `json:"allowed_origins"`
+	Name           string      `json:"name"`
 }
 
 // CreateOrgRequest defines model for CreateOrgRequest.
@@ -139,6 +190,7 @@ type OrgRole string
 // | `slug_taken` | 409 | Another org has the slug. |
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
+// | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type Problem struct {
 	// Code Stable machine code, for example `not_found`.
@@ -165,6 +217,39 @@ type Problem struct {
 // - `operator`: platform role. It is never an org membership.
 type Role string
 
+// UpdateAppRequest At least one field. A field that is absent keeps its value.
+type UpdateAppRequest struct {
+	// AllowedOrigins Replaces the whole list. Two entries with the same canonical form are refused (400).
+	AllowedOrigins *[]AppOrigin `json:"allowed_origins,omitempty"`
+	Name           *string      `json:"name,omitempty"`
+}
+
+// WidgetToken defines model for WidgetToken.
+type WidgetToken struct {
+	// AccessToken The widget token (JWT). Send it in the header `Authorization` as `Bearer <token>`, from the same origin. Never log it.
+	AccessToken string             `json:"access_token"`
+	AppId       openapi_types.UUID `json:"app_id"`
+	ExpiresAt   time.Time          `json:"expires_at"`
+
+	// ExpiresIn Seconds until the token expires. Never more than 900 (15 minutes).
+	ExpiresIn int `json:"expires_in"`
+
+	// Origin A web origin: `scheme://host[:port]`. Identity stores and returns the canonical form.
+	// - Scheme `https`. Scheme `http` only for `localhost`, `127.0.0.1` and `[::1]`.
+	// - Host: a DNS name (ASCII; use punycode for other characters), an IPv4 address or a bracketed IPv6 address. Identity stores it in lower case.
+	// - Port: optional, 1 to 65535. The default port (443 for https, 80 for http) is removed.
+	// - No path (not even `/`), no query, no fragment, no user info, no wildcard. `null` is not an origin.
+	// - Match is exact on the canonical form: `https://shop.example` does not match `https://shop.example.evil.test`, `https://a.shop.example` or `http://shop.example`.
+	Origin    AppOrigin            `json:"origin"`
+	TokenType WidgetTokenTokenType `json:"token_type"`
+}
+
+// WidgetTokenTokenType defines model for WidgetToken.TokenType.
+type WidgetTokenTokenType string
+
+// AppId defines model for AppId.
+type AppId = openapi_types.UUID
+
 // OrgId defines model for OrgId.
 type OrgId = openapi_types.UUID
 
@@ -183,6 +268,7 @@ type UserId = string
 // | `slug_taken` | 409 | Another org has the slug. |
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
+// | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type Conflict = Problem
 
@@ -198,6 +284,7 @@ type Conflict = Problem
 // | `slug_taken` | 409 | Another org has the slug. |
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
+// | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type Forbidden = Problem
 
@@ -213,6 +300,7 @@ type Forbidden = Problem
 // | `slug_taken` | 409 | Another org has the slug. |
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
+// | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type InvalidRequest = Problem
 
@@ -228,8 +316,25 @@ type InvalidRequest = Problem
 // | `slug_taken` | 409 | Another org has the slug. |
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
+// | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type NotFound = Problem
+
+// OriginNotAllowed RFC 9457 problem details with the stable Synthwerk `code`.
+// Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
+//
+// | Code | Status | Cause |
+// |---|---|---|
+// | `invalid_request` | 400 | Body or parameter not valid. |
+// | `unauthenticated` | 401 | Token missing or not valid. |
+// | `forbidden` | 403 | Role does not allow the call. |
+// | `not_found` | 404 | Unknown org or member, or no membership. |
+// | `slug_taken` | 409 | Another org has the slug. |
+// | `last_owner` | 409 | The org would lose its last owner. |
+// | `own_role` | 409 | The caller tried to change their own role. |
+// | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
+// | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+type OriginNotAllowed = Problem
 
 // RoleConflict RFC 9457 problem details with the stable Synthwerk `code`.
 // Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
@@ -243,6 +348,7 @@ type NotFound = Problem
 // | `slug_taken` | 409 | Another org has the slug. |
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
+// | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type RoleConflict = Problem
 
@@ -258,6 +364,7 @@ type RoleConflict = Problem
 // | `slug_taken` | 409 | Another org has the slug. |
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
+// | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type Unauthenticated = Problem
 
@@ -273,11 +380,27 @@ type Unauthenticated = Problem
 // | `slug_taken` | 409 | Another org has the slug. |
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
+// | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type UpstreamUnavailable = Problem
 
+// IdentityCreateWidgetTokenParams defines parameters for IdentityCreateWidgetToken.
+type IdentityCreateWidgetTokenParams struct {
+	// Origin The page origin. Browsers set it. Compared exactly with the allow-list after the default port is removed.
+	Origin string `json:"Origin"`
+}
+
 // IdentityListOrgsParams defines parameters for IdentityListOrgs.
 type IdentityListOrgsParams struct {
+	// Limit Page size.
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor The `next_cursor` of the previous page.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// IdentityListAppsParams defines parameters for IdentityListApps.
+type IdentityListAppsParams struct {
 	// Limit Page size.
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 
@@ -296,6 +419,12 @@ type IdentityListMembersParams struct {
 
 // IdentityCreateOrgJSONRequestBody defines body for IdentityCreateOrg for application/json ContentType.
 type IdentityCreateOrgJSONRequestBody = CreateOrgRequest
+
+// IdentityCreateAppJSONRequestBody defines body for IdentityCreateApp for application/json ContentType.
+type IdentityCreateAppJSONRequestBody = CreateAppRequest
+
+// IdentityUpdateAppJSONRequestBody defines body for IdentityUpdateApp for application/json ContentType.
+type IdentityUpdateAppJSONRequestBody = UpdateAppRequest
 
 // IdentityChangeMemberRoleJSONRequestBody defines body for IdentityChangeMemberRole for application/json ContentType.
 type IdentityChangeMemberRoleJSONRequestBody = ChangeMemberRoleRequest
@@ -374,6 +503,20 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 // The interface specification for the client above.
 type ClientInterface interface {
 
+	// IdentityCreateWidgetToken Issue a widget token
+	//
+	// Issues a short-lived widget token for the signed-in caller, bound to the app and to the request origin.
+	// - The Bearer token is the Zitadel access token of the signed-in user. A widget token never gets a new widget token.
+	// - The caller must be a member of the app's org (token and stored membership). Else 404, same as an unknown app.
+	// - The `Origin` header must equal one entry of the allow-list: same scheme, host and port. No prefix, suffix or wildcard match. Else 403 `origin_not_allowed`.
+	// - The token is a JWT (`typ` `at+jwt`, `alg` `ES256`), signed by identity. It lives 15 minutes or less (`expires_in`).
+	// - Claims: `iss` (identity), `aud`, `sub` (the user), `urn:zitadel:iam:user:resourceowner:id` (the Zitadel org), `client_id` (the app id), `synthwerk:origin` (the canonical origin), `iat`, `nbf`, `exp`, `jti`. No roles: a widget token is never an admin token.
+	// - Verify it with the key set at `/.well-known/jwks.json` of identity (RFC 7517). A service that accepts it must also compare `synthwerk:origin` with the `Origin` header.
+	// - Browsers send a CORS preflight first. Identity answers it with the CORS headers only for an allowed origin.
+	//
+	// Corresponds with POST /v1/apps/{appId}/widget-tokens (the `IdentityCreateWidgetToken` operationId).
+	IdentityCreateWidgetToken(ctx context.Context, appId AppId, params *IdentityCreateWidgetTokenParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// IdentityGetMe Get the caller
 	//
 	// The subject, the org and the roles of the token.
@@ -413,6 +556,76 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/orgs/{orgId} (the `IdentityGetOrg` operationId).
 	IdentityGetOrg(ctx context.Context, orgId OrgId, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// IdentityListApps List apps
+	//
+	// Apps of the org, oldest first. Needs a membership in the org, or the role `operator`. Cursor paging, max 100 per page.
+	//
+	// Corresponds with GET /v1/orgs/{orgId}/apps (the `IdentityListApps` operationId).
+	IdentityListApps(ctx context.Context, orgId OrgId, params *IdentityListAppsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IdentityCreateAppWithBody Create an app
+	//
+	// Creates an app with its origin allow-list. Emits `dev.synthwerk.identity.app.created.v1`.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
+	// - Each origin is `scheme://host[:port]`, nothing more. The rules are in `AppOrigin`.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{orgId}/apps (the `IdentityCreateApp` operationId).
+	IdentityCreateAppWithBody(ctx context.Context, orgId OrgId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IdentityCreateApp Create an app
+	//
+	// Creates an app with its origin allow-list. Emits `dev.synthwerk.identity.app.created.v1`.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
+	// - Each origin is `scheme://host[:port]`, nothing more. The rules are in `AppOrigin`.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{orgId}/apps (the `IdentityCreateApp` operationId).
+	IdentityCreateApp(ctx context.Context, orgId OrgId, body IdentityCreateAppJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IdentityDeleteApp Delete an app
+	//
+	// Deletes the app. Its widgets get no new token.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+	// - A widget token issued before the delete stays valid until it expires (15 minutes or less).
+	// - Emits no event yet.
+	//
+	// Corresponds with DELETE /v1/orgs/{orgId}/apps/{appId} (the `IdentityDeleteApp` operationId).
+	IdentityDeleteApp(ctx context.Context, orgId OrgId, appId AppId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IdentityGetApp Get an app
+	//
+	// One app with its origin allow-list. Needs a membership in the org, or the role `operator`.
+	//
+	// Corresponds with GET /v1/orgs/{orgId}/apps/{appId} (the `IdentityGetApp` operationId).
+	IdentityGetApp(ctx context.Context, orgId OrgId, appId AppId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IdentityUpdateAppWithBody Update an app
+	//
+	// Sets the name or the origin allow-list of an app. A new list replaces the old list.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+	// - A widget token issued before the change stays valid until it expires (15 minutes or less).
+	// - Emits no event yet.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /v1/orgs/{orgId}/apps/{appId} (the `IdentityUpdateApp` operationId).
+	IdentityUpdateAppWithBody(ctx context.Context, orgId OrgId, appId AppId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IdentityUpdateApp Update an app
+	//
+	// Sets the name or the origin allow-list of an app. A new list replaces the old list.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+	// - A widget token issued before the change stays valid until it expires (15 minutes or less).
+	// - Emits no event yet.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /v1/orgs/{orgId}/apps/{appId} (the `IdentityUpdateApp` operationId).
+	IdentityUpdateApp(ctx context.Context, orgId OrgId, appId AppId, body IdentityUpdateAppJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// IdentityListMembers List members
 	//
 	// Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. The stored membership must also be `owner` or `admin`, so a token issued before a demotion gets 403. Cursor paging, max 100 per page.
@@ -447,6 +660,30 @@ type ClientInterface interface {
 	//
 	// Corresponds with PATCH /v1/orgs/{orgId}/members/{userId} (the `IdentityChangeMemberRole` operationId).
 	IdentityChangeMemberRole(ctx context.Context, orgId OrgId, userId UserId, body IdentityChangeMemberRoleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+// IdentityCreateWidgetToken Issue a widget token
+//
+// Issues a short-lived widget token for the signed-in caller, bound to the app and to the request origin.
+// - The Bearer token is the Zitadel access token of the signed-in user. A widget token never gets a new widget token.
+// - The caller must be a member of the app's org (token and stored membership). Else 404, same as an unknown app.
+// - The `Origin` header must equal one entry of the allow-list: same scheme, host and port. No prefix, suffix or wildcard match. Else 403 `origin_not_allowed`.
+// - The token is a JWT (`typ` `at+jwt`, `alg` `ES256`), signed by identity. It lives 15 minutes or less (`expires_in`).
+// - Claims: `iss` (identity), `aud`, `sub` (the user), `urn:zitadel:iam:user:resourceowner:id` (the Zitadel org), `client_id` (the app id), `synthwerk:origin` (the canonical origin), `iat`, `nbf`, `exp`, `jti`. No roles: a widget token is never an admin token.
+// - Verify it with the key set at `/.well-known/jwks.json` of identity (RFC 7517). A service that accepts it must also compare `synthwerk:origin` with the `Origin` header.
+// - Browsers send a CORS preflight first. Identity answers it with the CORS headers only for an allowed origin.
+//
+// Corresponds with POST /v1/apps/{appId}/widget-tokens (the `IdentityCreateWidgetToken` operationId).
+func (c *Client) IdentityCreateWidgetToken(ctx context.Context, appId AppId, params *IdentityCreateWidgetTokenParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIdentityCreateWidgetTokenRequest(c.Server, appId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 // IdentityGetMe Get the caller
@@ -538,6 +775,146 @@ func (c *Client) IdentityGetOrg(ctx context.Context, orgId OrgId, reqEditors ...
 	return c.Client.Do(req)
 }
 
+// IdentityListApps List apps
+//
+// Apps of the org, oldest first. Needs a membership in the org, or the role `operator`. Cursor paging, max 100 per page.
+//
+// Corresponds with GET /v1/orgs/{orgId}/apps (the `IdentityListApps` operationId).
+func (c *Client) IdentityListApps(ctx context.Context, orgId OrgId, params *IdentityListAppsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIdentityListAppsRequest(c.Server, orgId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// IdentityCreateAppWithBody Create an app
+//
+// Creates an app with its origin allow-list. Emits `dev.synthwerk.identity.app.created.v1`.
+// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
+// - Each origin is `scheme://host[:port]`, nothing more. The rules are in `AppOrigin`.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{orgId}/apps (the `IdentityCreateApp` operationId).
+func (c *Client) IdentityCreateAppWithBody(ctx context.Context, orgId OrgId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIdentityCreateAppRequestWithBody(c.Server, orgId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// IdentityCreateApp Create an app
+//
+// Creates an app with its origin allow-list. Emits `dev.synthwerk.identity.app.created.v1`.
+// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
+// - Each origin is `scheme://host[:port]`, nothing more. The rules are in `AppOrigin`.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{orgId}/apps (the `IdentityCreateApp` operationId).
+func (c *Client) IdentityCreateApp(ctx context.Context, orgId OrgId, body IdentityCreateAppJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIdentityCreateAppRequest(c.Server, orgId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// IdentityDeleteApp Delete an app
+//
+// Deletes the app. Its widgets get no new token.
+// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+// - A widget token issued before the delete stays valid until it expires (15 minutes or less).
+// - Emits no event yet.
+//
+// Corresponds with DELETE /v1/orgs/{orgId}/apps/{appId} (the `IdentityDeleteApp` operationId).
+func (c *Client) IdentityDeleteApp(ctx context.Context, orgId OrgId, appId AppId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIdentityDeleteAppRequest(c.Server, orgId, appId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// IdentityGetApp Get an app
+//
+// One app with its origin allow-list. Needs a membership in the org, or the role `operator`.
+//
+// Corresponds with GET /v1/orgs/{orgId}/apps/{appId} (the `IdentityGetApp` operationId).
+func (c *Client) IdentityGetApp(ctx context.Context, orgId OrgId, appId AppId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIdentityGetAppRequest(c.Server, orgId, appId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// IdentityUpdateAppWithBody Update an app
+//
+// Sets the name or the origin allow-list of an app. A new list replaces the old list.
+// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+// - A widget token issued before the change stays valid until it expires (15 minutes or less).
+// - Emits no event yet.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /v1/orgs/{orgId}/apps/{appId} (the `IdentityUpdateApp` operationId).
+func (c *Client) IdentityUpdateAppWithBody(ctx context.Context, orgId OrgId, appId AppId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIdentityUpdateAppRequestWithBody(c.Server, orgId, appId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// IdentityUpdateApp Update an app
+//
+// Sets the name or the origin allow-list of an app. A new list replaces the old list.
+// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+// - A widget token issued before the change stays valid until it expires (15 minutes or less).
+// - Emits no event yet.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /v1/orgs/{orgId}/apps/{appId} (the `IdentityUpdateApp` operationId).
+func (c *Client) IdentityUpdateApp(ctx context.Context, orgId OrgId, appId AppId, body IdentityUpdateAppJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIdentityUpdateAppRequest(c.Server, orgId, appId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // IdentityListMembers List members
 //
 // Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. The stored membership must also be `owner` or `admin`, so a token issued before a demotion gets 403. Cursor paging, max 100 per page.
@@ -601,6 +978,53 @@ func (c *Client) IdentityChangeMemberRole(ctx context.Context, orgId OrgId, user
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewIdentityCreateWidgetTokenRequest constructs an http.Request for the IdentityCreateWidgetToken method
+func NewIdentityCreateWidgetTokenRequest(server string, appId AppId, params *IdentityCreateWidgetTokenParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "appId", appId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/apps/%s/widget-tokens", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Origin", params.Origin, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Origin", headerParam0)
+
+	}
+
+	return req, nil
 }
 
 // NewIdentityGetMeRequest constructs an http.Request for the IdentityGetMe method
@@ -766,6 +1190,262 @@ func NewIdentityGetOrgRequest(server string, orgId OrgId) (*http.Request, error)
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewIdentityListAppsRequest constructs an http.Request for the IdentityListApps method
+func NewIdentityListAppsRequest(server string, orgId OrgId, params *IdentityListAppsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "orgId", orgId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/apps", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewIdentityCreateAppRequest calls the generic IdentityCreateApp builder with application/json body
+func NewIdentityCreateAppRequest(server string, orgId OrgId, body IdentityCreateAppJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewIdentityCreateAppRequestWithBody(server, orgId, "application/json", bodyReader)
+}
+
+// NewIdentityCreateAppRequestWithBody constructs an http.Request for the IdentityCreateApp method, with any body, and a specified content type
+func NewIdentityCreateAppRequestWithBody(server string, orgId OrgId, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "orgId", orgId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/apps", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewIdentityDeleteAppRequest constructs an http.Request for the IdentityDeleteApp method
+func NewIdentityDeleteAppRequest(server string, orgId OrgId, appId AppId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "orgId", orgId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "appId", appId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/apps/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewIdentityGetAppRequest constructs an http.Request for the IdentityGetApp method
+func NewIdentityGetAppRequest(server string, orgId OrgId, appId AppId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "orgId", orgId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "appId", appId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/apps/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewIdentityUpdateAppRequest calls the generic IdentityUpdateApp builder with application/json body
+func NewIdentityUpdateAppRequest(server string, orgId OrgId, appId AppId, body IdentityUpdateAppJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewIdentityUpdateAppRequestWithBody(server, orgId, appId, "application/json", bodyReader)
+}
+
+// NewIdentityUpdateAppRequestWithBody constructs an http.Request for the IdentityUpdateApp method, with any body, and a specified content type
+func NewIdentityUpdateAppRequestWithBody(server string, orgId OrgId, appId AppId, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "orgId", orgId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "appId", appId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/apps/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -941,6 +1621,22 @@ func WithBaseURL(baseURL string) ClientOption {
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
 
+	// IdentityCreateWidgetTokenWithResponse Issue a widget token
+	//
+	// Issues a short-lived widget token for the signed-in caller, bound to the app and to the request origin.
+	// - The Bearer token is the Zitadel access token of the signed-in user. A widget token never gets a new widget token.
+	// - The caller must be a member of the app's org (token and stored membership). Else 404, same as an unknown app.
+	// - The `Origin` header must equal one entry of the allow-list: same scheme, host and port. No prefix, suffix or wildcard match. Else 403 `origin_not_allowed`.
+	// - The token is a JWT (`typ` `at+jwt`, `alg` `ES256`), signed by identity. It lives 15 minutes or less (`expires_in`).
+	// - Claims: `iss` (identity), `aud`, `sub` (the user), `urn:zitadel:iam:user:resourceowner:id` (the Zitadel org), `client_id` (the app id), `synthwerk:origin` (the canonical origin), `iat`, `nbf`, `exp`, `jti`. No roles: a widget token is never an admin token.
+	// - Verify it with the key set at `/.well-known/jwks.json` of identity (RFC 7517). A service that accepts it must also compare `synthwerk:origin` with the `Origin` header.
+	// - Browsers send a CORS preflight first. Identity answers it with the CORS headers only for an allowed origin.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/apps/{appId}/widget-tokens (the `IdentityCreateWidgetToken` operationId).
+	IdentityCreateWidgetTokenWithResponse(ctx context.Context, appId AppId, params *IdentityCreateWidgetTokenParams, reqEditors ...RequestEditorFn) (*IdentityCreateWidgetTokenResponse, error)
+
 	// IdentityGetMeWithResponse Get the caller
 	//
 	// The subject, the org and the roles of the token.
@@ -986,6 +1682,82 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{orgId} (the `IdentityGetOrg` operationId).
 	IdentityGetOrgWithResponse(ctx context.Context, orgId OrgId, reqEditors ...RequestEditorFn) (*IdentityGetOrgResponse, error)
 
+	// IdentityListAppsWithResponse List apps
+	//
+	// Apps of the org, oldest first. Needs a membership in the org, or the role `operator`. Cursor paging, max 100 per page.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{orgId}/apps (the `IdentityListApps` operationId).
+	IdentityListAppsWithResponse(ctx context.Context, orgId OrgId, params *IdentityListAppsParams, reqEditors ...RequestEditorFn) (*IdentityListAppsResponse, error)
+
+	// IdentityCreateAppWithBodyWithResponse Create an app
+	//
+	// Creates an app with its origin allow-list. Emits `dev.synthwerk.identity.app.created.v1`.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
+	// - Each origin is `scheme://host[:port]`, nothing more. The rules are in `AppOrigin`.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{orgId}/apps (the `IdentityCreateApp` operationId).
+	IdentityCreateAppWithBodyWithResponse(ctx context.Context, orgId OrgId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*IdentityCreateAppResponse, error)
+
+	// IdentityCreateAppWithResponse Create an app
+	//
+	// Creates an app with its origin allow-list. Emits `dev.synthwerk.identity.app.created.v1`.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
+	// - Each origin is `scheme://host[:port]`, nothing more. The rules are in `AppOrigin`.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{orgId}/apps (the `IdentityCreateApp` operationId).
+	IdentityCreateAppWithResponse(ctx context.Context, orgId OrgId, body IdentityCreateAppJSONRequestBody, reqEditors ...RequestEditorFn) (*IdentityCreateAppResponse, error)
+
+	// IdentityDeleteAppWithResponse Delete an app
+	//
+	// Deletes the app. Its widgets get no new token.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+	// - A widget token issued before the delete stays valid until it expires (15 minutes or less).
+	// - Emits no event yet.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{orgId}/apps/{appId} (the `IdentityDeleteApp` operationId).
+	IdentityDeleteAppWithResponse(ctx context.Context, orgId OrgId, appId AppId, reqEditors ...RequestEditorFn) (*IdentityDeleteAppResponse, error)
+
+	// IdentityGetAppWithResponse Get an app
+	//
+	// One app with its origin allow-list. Needs a membership in the org, or the role `operator`.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{orgId}/apps/{appId} (the `IdentityGetApp` operationId).
+	IdentityGetAppWithResponse(ctx context.Context, orgId OrgId, appId AppId, reqEditors ...RequestEditorFn) (*IdentityGetAppResponse, error)
+
+	// IdentityUpdateAppWithBodyWithResponse Update an app
+	//
+	// Sets the name or the origin allow-list of an app. A new list replaces the old list.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+	// - A widget token issued before the change stays valid until it expires (15 minutes or less).
+	// - Emits no event yet.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /v1/orgs/{orgId}/apps/{appId} (the `IdentityUpdateApp` operationId).
+	IdentityUpdateAppWithBodyWithResponse(ctx context.Context, orgId OrgId, appId AppId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*IdentityUpdateAppResponse, error)
+
+	// IdentityUpdateAppWithResponse Update an app
+	//
+	// Sets the name or the origin allow-list of an app. A new list replaces the old list.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+	// - A widget token issued before the change stays valid until it expires (15 minutes or less).
+	// - Emits no event yet.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /v1/orgs/{orgId}/apps/{appId} (the `IdentityUpdateApp` operationId).
+	IdentityUpdateAppWithResponse(ctx context.Context, orgId OrgId, appId AppId, body IdentityUpdateAppJSONRequestBody, reqEditors ...RequestEditorFn) (*IdentityUpdateAppResponse, error)
+
 	// IdentityListMembersWithResponse List members
 	//
 	// Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. The stored membership must also be `owner` or `admin`, so a token issued before a demotion gets 403. Cursor paging, max 100 per page.
@@ -1022,6 +1794,82 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PATCH /v1/orgs/{orgId}/members/{userId} (the `IdentityChangeMemberRole` operationId).
 	IdentityChangeMemberRoleWithResponse(ctx context.Context, orgId OrgId, userId UserId, body IdentityChangeMemberRoleJSONRequestBody, reqEditors ...RequestEditorFn) (*IdentityChangeMemberRoleResponse, error)
+}
+
+// IdentityCreateWidgetTokenResponse201Headers the declared response headers of an HTTP 201 response for IdentityCreateWidgetToken
+type IdentityCreateWidgetTokenResponse201Headers struct {
+	CacheControl *string
+}
+
+// IdentityCreateWidgetTokenResponse401Headers the declared response headers of an HTTP 401 response for IdentityCreateWidgetToken
+type IdentityCreateWidgetTokenResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type IdentityCreateWidgetTokenResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *WidgetToken
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Unauthenticated
+	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
+	ApplicationproblemJSON403 *OriginNotAllowed
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *NotFound
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *IdentityCreateWidgetTokenResponse201Headers
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *IdentityCreateWidgetTokenResponse401Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r IdentityCreateWidgetTokenResponse) GetJSON201() *WidgetToken {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r IdentityCreateWidgetTokenResponse) GetApplicationproblemJSON401() *Unauthenticated {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
+func (r IdentityCreateWidgetTokenResponse) GetApplicationproblemJSON403() *OriginNotAllowed {
+	return r.ApplicationproblemJSON403
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r IdentityCreateWidgetTokenResponse) GetApplicationproblemJSON404() *NotFound {
+	return r.ApplicationproblemJSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r IdentityCreateWidgetTokenResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r IdentityCreateWidgetTokenResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IdentityCreateWidgetTokenResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IdentityCreateWidgetTokenResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
 }
 
 // IdentityGetMeResponse401Headers the declared response headers of an HTTP 401 response for IdentityGetMe
@@ -1286,6 +2134,358 @@ func (r IdentityGetOrgResponse) ContentType() string {
 	return ""
 }
 
+// IdentityListAppsResponse401Headers the declared response headers of an HTTP 401 response for IdentityListApps
+type IdentityListAppsResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type IdentityListAppsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AppPage
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *InvalidRequest
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Unauthenticated
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *NotFound
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *IdentityListAppsResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r IdentityListAppsResponse) GetJSON200() *AppPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r IdentityListAppsResponse) GetApplicationproblemJSON400() *InvalidRequest {
+	return r.ApplicationproblemJSON400
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r IdentityListAppsResponse) GetApplicationproblemJSON401() *Unauthenticated {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r IdentityListAppsResponse) GetApplicationproblemJSON404() *NotFound {
+	return r.ApplicationproblemJSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r IdentityListAppsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r IdentityListAppsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IdentityListAppsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IdentityListAppsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// IdentityCreateAppResponse201Headers the declared response headers of an HTTP 201 response for IdentityCreateApp
+type IdentityCreateAppResponse201Headers struct {
+	Location *string
+}
+
+// IdentityCreateAppResponse401Headers the declared response headers of an HTTP 401 response for IdentityCreateApp
+type IdentityCreateAppResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type IdentityCreateAppResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *App
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *InvalidRequest
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Unauthenticated
+	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
+	ApplicationproblemJSON403 *Forbidden
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *NotFound
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *IdentityCreateAppResponse201Headers
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *IdentityCreateAppResponse401Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r IdentityCreateAppResponse) GetJSON201() *App {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r IdentityCreateAppResponse) GetApplicationproblemJSON400() *InvalidRequest {
+	return r.ApplicationproblemJSON400
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r IdentityCreateAppResponse) GetApplicationproblemJSON401() *Unauthenticated {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
+func (r IdentityCreateAppResponse) GetApplicationproblemJSON403() *Forbidden {
+	return r.ApplicationproblemJSON403
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r IdentityCreateAppResponse) GetApplicationproblemJSON404() *NotFound {
+	return r.ApplicationproblemJSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r IdentityCreateAppResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r IdentityCreateAppResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IdentityCreateAppResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IdentityCreateAppResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// IdentityDeleteAppResponse401Headers the declared response headers of an HTTP 401 response for IdentityDeleteApp
+type IdentityDeleteAppResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type IdentityDeleteAppResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Unauthenticated
+	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
+	ApplicationproblemJSON403 *Forbidden
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *NotFound
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *IdentityDeleteAppResponse401Headers
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r IdentityDeleteAppResponse) GetApplicationproblemJSON401() *Unauthenticated {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
+func (r IdentityDeleteAppResponse) GetApplicationproblemJSON403() *Forbidden {
+	return r.ApplicationproblemJSON403
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r IdentityDeleteAppResponse) GetApplicationproblemJSON404() *NotFound {
+	return r.ApplicationproblemJSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r IdentityDeleteAppResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r IdentityDeleteAppResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IdentityDeleteAppResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IdentityDeleteAppResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// IdentityGetAppResponse401Headers the declared response headers of an HTTP 401 response for IdentityGetApp
+type IdentityGetAppResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type IdentityGetAppResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *App
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Unauthenticated
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *NotFound
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *IdentityGetAppResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r IdentityGetAppResponse) GetJSON200() *App {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r IdentityGetAppResponse) GetApplicationproblemJSON401() *Unauthenticated {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r IdentityGetAppResponse) GetApplicationproblemJSON404() *NotFound {
+	return r.ApplicationproblemJSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r IdentityGetAppResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r IdentityGetAppResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IdentityGetAppResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IdentityGetAppResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// IdentityUpdateAppResponse401Headers the declared response headers of an HTTP 401 response for IdentityUpdateApp
+type IdentityUpdateAppResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type IdentityUpdateAppResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *App
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *InvalidRequest
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Unauthenticated
+	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
+	ApplicationproblemJSON403 *Forbidden
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *NotFound
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *IdentityUpdateAppResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r IdentityUpdateAppResponse) GetJSON200() *App {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r IdentityUpdateAppResponse) GetApplicationproblemJSON400() *InvalidRequest {
+	return r.ApplicationproblemJSON400
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r IdentityUpdateAppResponse) GetApplicationproblemJSON401() *Unauthenticated {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
+func (r IdentityUpdateAppResponse) GetApplicationproblemJSON403() *Forbidden {
+	return r.ApplicationproblemJSON403
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r IdentityUpdateAppResponse) GetApplicationproblemJSON404() *NotFound {
+	return r.ApplicationproblemJSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r IdentityUpdateAppResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r IdentityUpdateAppResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IdentityUpdateAppResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IdentityUpdateAppResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // IdentityListMembersResponse401Headers the declared response headers of an HTTP 401 response for IdentityListMembers
 type IdentityListMembersResponse401Headers struct {
 	WWWAuthenticate *string
@@ -1452,6 +2652,28 @@ func (r IdentityChangeMemberRoleResponse) ContentType() string {
 	return ""
 }
 
+// IdentityCreateWidgetTokenWithResponse Issue a widget token
+//
+// Issues a short-lived widget token for the signed-in caller, bound to the app and to the request origin.
+// - The Bearer token is the Zitadel access token of the signed-in user. A widget token never gets a new widget token.
+// - The caller must be a member of the app's org (token and stored membership). Else 404, same as an unknown app.
+// - The `Origin` header must equal one entry of the allow-list: same scheme, host and port. No prefix, suffix or wildcard match. Else 403 `origin_not_allowed`.
+// - The token is a JWT (`typ` `at+jwt`, `alg` `ES256`), signed by identity. It lives 15 minutes or less (`expires_in`).
+// - Claims: `iss` (identity), `aud`, `sub` (the user), `urn:zitadel:iam:user:resourceowner:id` (the Zitadel org), `client_id` (the app id), `synthwerk:origin` (the canonical origin), `iat`, `nbf`, `exp`, `jti`. No roles: a widget token is never an admin token.
+// - Verify it with the key set at `/.well-known/jwks.json` of identity (RFC 7517). A service that accepts it must also compare `synthwerk:origin` with the `Origin` header.
+// - Browsers send a CORS preflight first. Identity answers it with the CORS headers only for an allowed origin.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/apps/{appId}/widget-tokens (the `IdentityCreateWidgetToken` operationId).
+func (c *ClientWithResponses) IdentityCreateWidgetTokenWithResponse(ctx context.Context, appId AppId, params *IdentityCreateWidgetTokenParams, reqEditors ...RequestEditorFn) (*IdentityCreateWidgetTokenResponse, error) {
+	rsp, err := c.IdentityCreateWidgetToken(ctx, appId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIdentityCreateWidgetTokenResponse(rsp)
+}
+
 // IdentityGetMeWithResponse Get the caller
 //
 // The subject, the org and the roles of the token.
@@ -1527,6 +2749,124 @@ func (c *ClientWithResponses) IdentityGetOrgWithResponse(ctx context.Context, or
 	return ParseIdentityGetOrgResponse(rsp)
 }
 
+// IdentityListAppsWithResponse List apps
+//
+// Apps of the org, oldest first. Needs a membership in the org, or the role `operator`. Cursor paging, max 100 per page.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{orgId}/apps (the `IdentityListApps` operationId).
+func (c *ClientWithResponses) IdentityListAppsWithResponse(ctx context.Context, orgId OrgId, params *IdentityListAppsParams, reqEditors ...RequestEditorFn) (*IdentityListAppsResponse, error) {
+	rsp, err := c.IdentityListApps(ctx, orgId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIdentityListAppsResponse(rsp)
+}
+
+// IdentityCreateAppWithBodyWithResponse Create an app
+//
+// Creates an app with its origin allow-list. Emits `dev.synthwerk.identity.app.created.v1`.
+// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
+// - Each origin is `scheme://host[:port]`, nothing more. The rules are in `AppOrigin`.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{orgId}/apps (the `IdentityCreateApp` operationId).
+func (c *ClientWithResponses) IdentityCreateAppWithBodyWithResponse(ctx context.Context, orgId OrgId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*IdentityCreateAppResponse, error) {
+	rsp, err := c.IdentityCreateAppWithBody(ctx, orgId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIdentityCreateAppResponse(rsp)
+}
+
+// IdentityCreateAppWithResponse Create an app
+//
+// Creates an app with its origin allow-list. Emits `dev.synthwerk.identity.app.created.v1`.
+// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
+// - Each origin is `scheme://host[:port]`, nothing more. The rules are in `AppOrigin`.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{orgId}/apps (the `IdentityCreateApp` operationId).
+func (c *ClientWithResponses) IdentityCreateAppWithResponse(ctx context.Context, orgId OrgId, body IdentityCreateAppJSONRequestBody, reqEditors ...RequestEditorFn) (*IdentityCreateAppResponse, error) {
+	rsp, err := c.IdentityCreateApp(ctx, orgId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIdentityCreateAppResponse(rsp)
+}
+
+// IdentityDeleteAppWithResponse Delete an app
+//
+// Deletes the app. Its widgets get no new token.
+// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+// - A widget token issued before the delete stays valid until it expires (15 minutes or less).
+// - Emits no event yet.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{orgId}/apps/{appId} (the `IdentityDeleteApp` operationId).
+func (c *ClientWithResponses) IdentityDeleteAppWithResponse(ctx context.Context, orgId OrgId, appId AppId, reqEditors ...RequestEditorFn) (*IdentityDeleteAppResponse, error) {
+	rsp, err := c.IdentityDeleteApp(ctx, orgId, appId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIdentityDeleteAppResponse(rsp)
+}
+
+// IdentityGetAppWithResponse Get an app
+//
+// One app with its origin allow-list. Needs a membership in the org, or the role `operator`.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{orgId}/apps/{appId} (the `IdentityGetApp` operationId).
+func (c *ClientWithResponses) IdentityGetAppWithResponse(ctx context.Context, orgId OrgId, appId AppId, reqEditors ...RequestEditorFn) (*IdentityGetAppResponse, error) {
+	rsp, err := c.IdentityGetApp(ctx, orgId, appId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIdentityGetAppResponse(rsp)
+}
+
+// IdentityUpdateAppWithBodyWithResponse Update an app
+//
+// Sets the name or the origin allow-list of an app. A new list replaces the old list.
+// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+// - A widget token issued before the change stays valid until it expires (15 minutes or less).
+// - Emits no event yet.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /v1/orgs/{orgId}/apps/{appId} (the `IdentityUpdateApp` operationId).
+func (c *ClientWithResponses) IdentityUpdateAppWithBodyWithResponse(ctx context.Context, orgId OrgId, appId AppId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*IdentityUpdateAppResponse, error) {
+	rsp, err := c.IdentityUpdateAppWithBody(ctx, orgId, appId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIdentityUpdateAppResponse(rsp)
+}
+
+// IdentityUpdateAppWithResponse Update an app
+//
+// Sets the name or the origin allow-list of an app. A new list replaces the old list.
+// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+// - A widget token issued before the change stays valid until it expires (15 minutes or less).
+// - Emits no event yet.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /v1/orgs/{orgId}/apps/{appId} (the `IdentityUpdateApp` operationId).
+func (c *ClientWithResponses) IdentityUpdateAppWithResponse(ctx context.Context, orgId OrgId, appId AppId, body IdentityUpdateAppJSONRequestBody, reqEditors ...RequestEditorFn) (*IdentityUpdateAppResponse, error) {
+	rsp, err := c.IdentityUpdateApp(ctx, orgId, appId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIdentityUpdateAppResponse(rsp)
+}
+
 // IdentityListMembersWithResponse List members
 //
 // Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. The stored membership must also be `owner` or `admin`, so a token issued before a demotion gets 403. Cursor paging, max 100 per page.
@@ -1580,6 +2920,76 @@ func (c *ClientWithResponses) IdentityChangeMemberRoleWithResponse(ctx context.C
 		return nil, err
 	}
 	return ParseIdentityChangeMemberRoleResponse(rsp)
+}
+
+// ParseIdentityCreateWidgetTokenResponse parses an HTTP response from a IdentityCreateWidgetTokenWithResponse call
+func ParseIdentityCreateWidgetTokenResponse(rsp *http.Response) (*IdentityCreateWidgetTokenResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IdentityCreateWidgetTokenResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest WidgetToken
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthenticated
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest OriginNotAllowed
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers IdentityCreateWidgetTokenResponse201Headers
+		if values := rsp.Header.Values("Cache-Control"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Cache-Control", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.CacheControl = &value
+		}
+		response.Headers201 = &headers
+	case rsp.StatusCode == 401:
+		var headers IdentityCreateWidgetTokenResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
 }
 
 // ParseIdentityGetMeResponse parses an HTTP response from a IdentityGetMeWithResponse call
@@ -1798,6 +3208,319 @@ func ParseIdentityGetOrgResponse(rsp *http.Response) (*IdentityGetOrgResponse, e
 	switch {
 	case rsp.StatusCode == 401:
 		var headers IdentityGetOrgResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseIdentityListAppsResponse parses an HTTP response from a IdentityListAppsWithResponse call
+func ParseIdentityListAppsResponse(rsp *http.Response) (*IdentityListAppsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IdentityListAppsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AppPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest InvalidRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthenticated
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers IdentityListAppsResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseIdentityCreateAppResponse parses an HTTP response from a IdentityCreateAppWithResponse call
+func ParseIdentityCreateAppResponse(rsp *http.Response) (*IdentityCreateAppResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IdentityCreateAppResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest App
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest InvalidRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthenticated
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers IdentityCreateAppResponse201Headers
+		if values := rsp.Header.Values("Location"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Location", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.Location = &value
+		}
+		response.Headers201 = &headers
+	case rsp.StatusCode == 401:
+		var headers IdentityCreateAppResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseIdentityDeleteAppResponse parses an HTTP response from a IdentityDeleteAppWithResponse call
+func ParseIdentityDeleteAppResponse(rsp *http.Response) (*IdentityDeleteAppResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IdentityDeleteAppResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthenticated
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers IdentityDeleteAppResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseIdentityGetAppResponse parses an HTTP response from a IdentityGetAppWithResponse call
+func ParseIdentityGetAppResponse(rsp *http.Response) (*IdentityGetAppResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IdentityGetAppResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest App
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthenticated
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers IdentityGetAppResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseIdentityUpdateAppResponse parses an HTTP response from a IdentityUpdateAppWithResponse call
+func ParseIdentityUpdateAppResponse(rsp *http.Response) (*IdentityUpdateAppResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IdentityUpdateAppResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest App
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest InvalidRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthenticated
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers IdentityUpdateAppResponse401Headers
 		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.synthwerk.dev/events/identity/app.created.v1.json",
+  "title": "identity.app.created.v1",
+  "description": "An org created an app with an origin allow-list (synthwerk#30). CloudEvents subject: the app id. The orgid extension holds the org id. actor: user:<sub> of the owner or admin. Ids and the display name only: no origins, no email.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["app_id", "org_id", "name"],
+  "properties": {
+    "app_id": {
+      "type": "string",
+      "format": "uuid",
+      "maxLength": 36
+    },
+    "org_id": {
+      "type": "string",
+      "format": "uuid",
+      "maxLength": 36
+    },
+    "name": {
+      "description": "Display name of the app.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    }
+  }
+}

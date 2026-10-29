@@ -6,6 +6,7 @@ package contract_test
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
@@ -86,6 +87,74 @@ func TestIdentityContract(t *testing.T) {
 		var p identity.Problem
 		strict(t, body, &p)
 		if p.Code != "last_owner" || p.Status != http.StatusConflict {
+			t.Fatalf("got %+v", p)
+		}
+	})
+
+	t.Run("ListApps - spec example - one page of apps with origins", func(t *testing.T) {
+		body := toJSON(t, spec.Paths["/v1/orgs/{orgId}/apps"].Get.Responses["200"].Content["application/json"].Example)
+		strict(t, body, &identity.AppPage{})
+	})
+
+	t.Run("CreateApp - spec example - app with the canonical allow-list", func(t *testing.T) {
+		body := toJSON(t, spec.Paths["/v1/orgs/{orgId}/apps"].Post.Responses["201"].Content["application/json"].Example)
+		strict(t, body, &identity.App{})
+
+		client, err := identity.NewClientWithResponses(serveAs(t, http.StatusCreated, "application/json", body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := client.IdentityCreateAppWithResponse(ctx, uuid.MustParse("0199f3a0-5b6c-7d8e-9f0a-1b2c3d4e5f60"),
+			identity.CreateAppRequest{Name: "Shop website", AllowedOrigins: []identity.AppOrigin{"https://shop.example"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		app := res.JSON201
+		if app == nil || app.Name != "Shop website" || len(app.AllowedOrigins) != 2 || app.AllowedOrigins[0] != "https://shop.example" {
+			t.Fatalf("got %+v", app)
+		}
+	})
+
+	t.Run("UpdateApp - spec example - app with the new allow-list", func(t *testing.T) {
+		body := toJSON(t, spec.Paths["/v1/orgs/{orgId}/apps/{appId}"].Patch.Responses["200"].Content["application/json"].Example)
+		strict(t, body, &identity.App{})
+	})
+
+	t.Run("CreateWidgetToken - spec example - bearer token, 15 minutes or less", func(t *testing.T) {
+		body := toJSON(t, spec.Paths["/v1/apps/{appId}/widget-tokens"].Post.Responses["201"].Content["application/json"].Example)
+		strict(t, body, &identity.WidgetToken{})
+
+		var gotOrigin string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotOrigin = r.Header.Get("Origin")
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write(body)
+		}))
+		t.Cleanup(srv.Close)
+		client, err := identity.NewClientWithResponses(srv.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := client.IdentityCreateWidgetTokenWithResponse(ctx, uuid.MustParse("019a3b10-7c2d-7e4f-8a5b-6c7d8e9f0a1b"),
+			&identity.IdentityCreateWidgetTokenParams{Origin: "https://shop.example"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		tok := res.JSON201
+		if gotOrigin != "https://shop.example" {
+			t.Fatalf("Origin header = %q", gotOrigin)
+		}
+		if tok == nil || tok.TokenType != identity.WidgetTokenTokenTypeBearer || tok.ExpiresIn < 1 || tok.ExpiresIn > 900 || tok.Origin != "https://shop.example" {
+			t.Fatalf("got %+v", tok)
+		}
+	})
+
+	t.Run("CreateWidgetToken - origin not listed - 403 problem with code origin_not_allowed", func(t *testing.T) {
+		body := toJSON(t, spec.Components.Responses["OriginNotAllowed"].Content["application/problem+json"].Example)
+		var p identity.Problem
+		strict(t, body, &p)
+		if p.Code != "origin_not_allowed" || p.Status != http.StatusForbidden {
 			t.Fatalf("got %+v", p)
 		}
 	})

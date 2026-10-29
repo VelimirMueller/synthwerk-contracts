@@ -41,8 +41,13 @@ export type Me = IdentityComponents["schemas"]["Me"];
 export type Org = IdentityComponents["schemas"]["Org"];
 export type OrgPage = IdentityComponents["schemas"]["OrgPage"];
 export type Role = IdentityComponents["schemas"]["Role"];
+export type App = IdentityComponents["schemas"]["App"];
+export type AppPage = IdentityComponents["schemas"]["AppPage"];
+export type AppOrigin = IdentityComponents["schemas"]["AppOrigin"];
+/** Short-lived token for a widget on an allowed origin. Never log `access_token`. */
+export type WidgetToken = IdentityComponents["schemas"]["WidgetToken"];
 
-/** Client for the identity API (the caller, orgs and roles). */
+/** Client for the identity API (the caller, orgs, roles, apps and widget tokens). */
 export function createIdentityClient(options: ClientOptions) {
   return createClient<IdentityPaths>(options);
 }

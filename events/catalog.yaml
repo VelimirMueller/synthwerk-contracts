@@ -65,3 +65,12 @@ events:
     status: draft
     schema: identity/member.role_changed.v1.schema.json
     example: examples/dev.synthwerk.identity.member.role_changed.v1.json
+
+  - type: dev.synthwerk.identity.app.created.v1
+    nats_subject: evt.identity.app.created.v1
+    stream: EVT_IDENTITY
+    producer: identity
+    consumers: [pulse]
+    status: draft
+    schema: identity/app.created.v1.schema.json
+    example: examples/dev.synthwerk.identity.app.created.v1.json
