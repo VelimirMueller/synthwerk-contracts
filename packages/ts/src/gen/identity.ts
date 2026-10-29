@@ -24,6 +24,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/entitlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the entitlements of the caller's org
+         * @description The plan and the limits of the org the token acts in. Any org role may read it.
+         *     - A service that acts for a user (for example llm for quotas) forwards the caller's token. It needs no org id of its own.
+         *     - An unknown org, or a token without an org role, answers 404.
+         */
+        get: operations["identity.getMyEntitlements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs": {
         parameters: {
             query?: never;
@@ -63,6 +85,29 @@ export interface paths {
          * @description Org detail. Needs a membership in the org, or the role `operator`.
          */
         get: operations["identity.getOrg"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{orgId}/entitlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Get the entitlements of an org
+         * @description The plan and the limits of the org. Needs an org role in the org (any role), or the role `operator`.
+         */
+        get: operations["identity.getOrgEntitlements"];
         put?: never;
         post?: never;
         delete?: never;
@@ -241,6 +286,45 @@ export interface components {
             slug: string;
             /** Format: date-time */
             created_at: string;
+        };
+        /** @description The plan of an org and the limits it gives. Identity owns them. */
+        Entitlements: {
+            /** Format: uuid */
+            org_id: string;
+            /**
+             * @description Plan name. `free` today; paid plans come in M5.
+             *     Clients must accept plan names they do not know and read `limits`, never the name.
+             */
+            plan: string;
+            limits: components["schemas"]["EntitlementLimits"];
+            /**
+             * Format: int64
+             * @description Goes up by one on every change. A consumer drops an event with a version lower than the one it holds.
+             */
+            version: number;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /**
+         * @description Limits of the plan. `0` means no limit. A day is a UTC day.
+         *     The schema is closed. A new limit comes with a new spec minor version and regenerated clients.
+         */
+        EntitlementLimits: {
+            /**
+             * Format: int64
+             * @description LLM tokens one user may use in this org per UTC day.
+             */
+            llm_tokens_per_user_per_day: number;
+            /**
+             * Format: int64
+             * @description LLM tokens all users of the org may use together per UTC day.
+             */
+            llm_tokens_per_org_per_day: number;
+            /**
+             * Format: int32
+             * @description Apps the org may have.
+             */
+            apps_per_org: number;
         };
         /**
          * @description An org role. `operator` is never an org role.
@@ -560,6 +644,41 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
         };
     };
+    "identity.getMyEntitlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The entitlements of the caller's org. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "org_id": "0199f3a0-5b6c-7d8e-9f0a-1b2c3d4e5f60",
+                     *       "plan": "free",
+                     *       "limits": {
+                     *         "llm_tokens_per_user_per_day": 50000,
+                     *         "llm_tokens_per_org_per_day": 500000,
+                     *         "apps_per_org": 3
+                     *       },
+                     *       "version": 1,
+                     *       "updated_at": "2026-10-29T08:00:00Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Entitlements"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     "identity.listOrgs": {
         parameters: {
             query?: {
@@ -670,6 +789,44 @@ export interface operations {
                      *     }
                      */
                     "application/json": components["schemas"]["Org"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "identity.getOrgEntitlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The entitlements of the org. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "org_id": "0199f3a0-5b6c-7d8e-9f0a-1b2c3d4e5f60",
+                     *       "plan": "free",
+                     *       "limits": {
+                     *         "llm_tokens_per_user_per_day": 50000,
+                     *         "llm_tokens_per_org_per_day": 500000,
+                     *         "apps_per_org": 3
+                     *       },
+                     *       "version": 1,
+                     *       "updated_at": "2026-10-29T08:00:00Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Entitlements"];
                 };
             };
             401: components["responses"]["Unauthenticated"];

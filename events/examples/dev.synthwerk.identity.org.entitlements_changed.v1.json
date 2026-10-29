@@ -1,0 +1,24 @@
+{
+  "specversion": "1.0",
+  "id": "0199f3a1-2c3f-7e4f-8a5b-6c7d8e9f0a1d",
+  "source": "/synthwerk/identity/dev",
+  "type": "dev.synthwerk.identity.org.entitlements_changed.v1",
+  "subject": "0199f3a1-2c3d-7e4f-8a5b-6c7d8e9f0a1b",
+  "time": "2026-10-23T08:30:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "https://schemas.synthwerk.dev/events/identity/org.entitlements_changed.v1.json",
+  "orgid": "0199f3a1-2c3d-7e4f-8a5b-6c7d8e9f0a1b",
+  "traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+  "actor": "system",
+  "data": {
+    "org_id": "0199f3a1-2c3d-7e4f-8a5b-6c7d8e9f0a1b",
+    "plan": "free",
+    "limits": {
+      "llm_tokens_per_user_per_day": 50000,
+      "llm_tokens_per_org_per_day": 500000,
+      "apps_per_org": 3
+    },
+    "version": 1,
+    "reason": "plan_assigned"
+  }
+}

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Synthwerk identity
-  version: 0.1.0
+  version: 0.2.0
   summary: The caller, orgs and roles. The M2 stubs of synthwerk-identity.
   description: |
     The org contract of synthwerk-identity (M2 spec #29, D-44).
@@ -12,6 +12,7 @@ info:
     - Org members and their roles: `/v1/orgs/{orgId}/members` (#29). Owner and admin change roles; a member gets 403.
     - Roles are checked from the token first. Every write and every privileged read (`listMembers`) then checks the stored membership: it wins over a stale token, so a demoted admin loses access at once, not at token expiry.
     - Apps of an org and their origin allow-list: `/v1/orgs/{orgId}/apps` (#30). A widget on an allowed origin gets a short-lived widget token: `POST /v1/apps/{appId}/widget-tokens`.
+    - Entitlements: the plan of an org and its limits (#31). A new org gets the plan `free`. Other services read them over HTTP and get `dev.synthwerk.identity.org.entitlements_changed.v1` on every change.
   license:
     name: MIT
     identifier: MIT
@@ -29,6 +30,8 @@ tags:
     description: Apps of an org. Each app has an origin allow-list.
   - name: widget-tokens
     description: Short-lived tokens for a widget on an allowed origin.
+  - name: entitlements
+    description: The plan of an org and its limits.
 security:
   - bearer: []
 paths:
@@ -57,6 +60,37 @@ paths:
                 roles: [owner, operator]
         "401":
           $ref: "#/components/responses/Unauthenticated"
+  /v1/me/entitlements:
+    get:
+      operationId: identity.getMyEntitlements
+      summary: Get the entitlements of the caller's org
+      description: |
+        The plan and the limits of the org the token acts in. Any org role may read it.
+        - A service that acts for a user (for example llm for quotas) forwards the caller's token. It needs no org id of its own.
+        - An unknown org, or a token without an org role, answers 404.
+      tags: [entitlements]
+      security:
+        - bearer: []
+      responses:
+        "200":
+          description: The entitlements of the caller's org.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entitlements"
+              example:
+                org_id: 0199f3a0-5b6c-7d8e-9f0a-1b2c3d4e5f60
+                plan: free
+                limits:
+                  llm_tokens_per_user_per_day: 50000
+                  llm_tokens_per_org_per_day: 500000
+                  apps_per_org: 3
+                version: 1
+                updated_at: "2026-10-29T08:00:00Z"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /v1/orgs:
     get:
       operationId: identity.listOrgs
@@ -163,6 +197,36 @@ paths:
                 name: Synthwerk
                 slug: synthwerk
                 created_at: "2026-10-23T08:00:00Z"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /v1/orgs/{orgId}/entitlements:
+    parameters:
+      - $ref: "#/components/parameters/OrgId"
+    get:
+      operationId: identity.getOrgEntitlements
+      summary: Get the entitlements of an org
+      description: The plan and the limits of the org. Needs an org role in the org (any role), or the role `operator`.
+      tags: [entitlements]
+      security:
+        - bearer: []
+      responses:
+        "200":
+          description: The entitlements of the org.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entitlements"
+              example:
+                org_id: 0199f3a0-5b6c-7d8e-9f0a-1b2c3d4e5f60
+                plan: free
+                limits:
+                  llm_tokens_per_user_per_day: 50000
+                  llm_tokens_per_org_per_day: 500000
+                  apps_per_org: 3
+                version: 1
+                updated_at: "2026-10-29T08:00:00Z"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "404":
@@ -668,6 +732,59 @@ components:
           type: string
           format: date-time
           maxLength: 40
+    Entitlements:
+      type: object
+      additionalProperties: false
+      required: [org_id, plan, limits, version, updated_at]
+      description: The plan of an org and the limits it gives. Identity owns them.
+      properties:
+        org_id:
+          type: string
+          format: uuid
+          maxLength: 36
+        plan:
+          type: string
+          minLength: 1
+          maxLength: 32
+          pattern: "^[a-z][a-z0-9_]*$"
+          description: |
+            Plan name. `free` today; paid plans come in M5.
+            Clients must accept plan names they do not know and read `limits`, never the name.
+        limits:
+          $ref: "#/components/schemas/EntitlementLimits"
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Goes up by one on every change. A consumer drops an event with a version lower than the one it holds.
+        updated_at:
+          type: string
+          format: date-time
+          maxLength: 40
+    EntitlementLimits:
+      type: object
+      additionalProperties: false
+      required: [llm_tokens_per_user_per_day, llm_tokens_per_org_per_day, apps_per_org]
+      description: |
+        Limits of the plan. `0` means no limit. A day is a UTC day.
+        The schema is closed. A new limit comes with a new spec minor version and regenerated clients.
+      properties:
+        llm_tokens_per_user_per_day:
+          type: integer
+          format: int64
+          minimum: 0
+          description: LLM tokens one user may use in this org per UTC day.
+        llm_tokens_per_org_per_day:
+          type: integer
+          format: int64
+          minimum: 0
+          description: LLM tokens all users of the org may use together per UTC day.
+        apps_per_org:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 10000
+          description: Apps the org may have.
     OrgRole:
       type: string
       enum: [owner, admin, member]
