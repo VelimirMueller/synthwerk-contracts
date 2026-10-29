@@ -724,6 +724,7 @@ type ClientInterface interface {
 	// - Only an allowed origin gets `Access-Control-Allow-Origin`.
 	// - The answer holds the settings only: no origins, no org, no name.
 	// - `Cache-Control: no-cache`: a change in the studio shows on the next page load.
+	// - Every answer of this route, the CORS preflight included, sends `Vary: Origin`: a shared cache never serves the answer of one origin to another. A refusal sends `Cache-Control: no-store`.
 	//
 	// Corresponds with GET /v1/apps/{appId}/widget-settings (the `IdentityGetWidgetSettings` operationId).
 	IdentityGetWidgetSettings(ctx context.Context, appId AppId, params *IdentityGetWidgetSettingsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -738,6 +739,7 @@ type ClientInterface interface {
 	// - Claims: `iss` (identity), `aud`, `sub` (the user), `urn:zitadel:iam:user:resourceowner:id` (the Zitadel org), `client_id` (the app id), `synthwerk:origin` (the canonical origin), `iat`, `nbf`, `exp`, `jti`. No roles: a widget token is never an admin token.
 	// - Verify it with the key set at `/.well-known/jwks.json` of identity (RFC 7517). A service that accepts it must also compare `synthwerk:origin` with the `Origin` header.
 	// - Browsers send a CORS preflight first. Identity answers it with the CORS headers only for an allowed origin.
+	// - Every answer of this route, the CORS preflight included, sends `Vary: Origin` and `Cache-Control: no-store`.
 	//
 	// Corresponds with POST /v1/apps/{appId}/widget-tokens (the `IdentityCreateWidgetToken` operationId).
 	IdentityCreateWidgetToken(ctx context.Context, appId AppId, params *IdentityCreateWidgetTokenParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -914,6 +916,7 @@ type ClientInterface interface {
 // - Only an allowed origin gets `Access-Control-Allow-Origin`.
 // - The answer holds the settings only: no origins, no org, no name.
 // - `Cache-Control: no-cache`: a change in the studio shows on the next page load.
+// - Every answer of this route, the CORS preflight included, sends `Vary: Origin`: a shared cache never serves the answer of one origin to another. A refusal sends `Cache-Control: no-store`.
 //
 // Corresponds with GET /v1/apps/{appId}/widget-settings (the `IdentityGetWidgetSettings` operationId).
 func (c *Client) IdentityGetWidgetSettings(ctx context.Context, appId AppId, params *IdentityGetWidgetSettingsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -938,6 +941,7 @@ func (c *Client) IdentityGetWidgetSettings(ctx context.Context, appId AppId, par
 // - Claims: `iss` (identity), `aud`, `sub` (the user), `urn:zitadel:iam:user:resourceowner:id` (the Zitadel org), `client_id` (the app id), `synthwerk:origin` (the canonical origin), `iat`, `nbf`, `exp`, `jti`. No roles: a widget token is never an admin token.
 // - Verify it with the key set at `/.well-known/jwks.json` of identity (RFC 7517). A service that accepts it must also compare `synthwerk:origin` with the `Origin` header.
 // - Browsers send a CORS preflight first. Identity answers it with the CORS headers only for an allowed origin.
+// - Every answer of this route, the CORS preflight included, sends `Vary: Origin` and `Cache-Control: no-store`.
 //
 // Corresponds with POST /v1/apps/{appId}/widget-tokens (the `IdentityCreateWidgetToken` operationId).
 func (c *Client) IdentityCreateWidgetToken(ctx context.Context, appId AppId, params *IdentityCreateWidgetTokenParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -2042,6 +2046,7 @@ type ClientWithResponsesInterface interface {
 	// - Only an allowed origin gets `Access-Control-Allow-Origin`.
 	// - The answer holds the settings only: no origins, no org, no name.
 	// - `Cache-Control: no-cache`: a change in the studio shows on the next page load.
+	// - Every answer of this route, the CORS preflight included, sends `Vary: Origin`: a shared cache never serves the answer of one origin to another. A refusal sends `Cache-Control: no-store`.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -2058,6 +2063,7 @@ type ClientWithResponsesInterface interface {
 	// - Claims: `iss` (identity), `aud`, `sub` (the user), `urn:zitadel:iam:user:resourceowner:id` (the Zitadel org), `client_id` (the app id), `synthwerk:origin` (the canonical origin), `iat`, `nbf`, `exp`, `jti`. No roles: a widget token is never an admin token.
 	// - Verify it with the key set at `/.well-known/jwks.json` of identity (RFC 7517). A service that accepts it must also compare `synthwerk:origin` with the `Origin` header.
 	// - Browsers send a CORS preflight first. Identity answers it with the CORS headers only for an allowed origin.
+	// - Every answer of this route, the CORS preflight included, sends `Vary: Origin` and `Cache-Control: no-store`.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -2250,6 +2256,13 @@ type ClientWithResponsesInterface interface {
 // IdentityGetWidgetSettingsResponse200Headers the declared response headers of an HTTP 200 response for IdentityGetWidgetSettings
 type IdentityGetWidgetSettingsResponse200Headers struct {
 	CacheControl *string
+	Vary         *string
+}
+
+// IdentityGetWidgetSettingsResponse403Headers the declared response headers of an HTTP 403 response for IdentityGetWidgetSettings
+type IdentityGetWidgetSettingsResponse403Headers struct {
+	CacheControl *string
+	Vary         *string
 }
 
 type IdentityGetWidgetSettingsResponse struct {
@@ -2263,6 +2276,8 @@ type IdentityGetWidgetSettingsResponse struct {
 	ApplicationproblemJSON404 *NotFound
 	// Headers200 the parsed response headers for an HTTP 200 response
 	Headers200 *IdentityGetWidgetSettingsResponse200Headers
+	// Headers403 the parsed response headers for an HTTP 403 response
+	Headers403 *IdentityGetWidgetSettingsResponse403Headers
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
@@ -2312,11 +2327,18 @@ func (r IdentityGetWidgetSettingsResponse) ContentType() string {
 // IdentityCreateWidgetTokenResponse201Headers the declared response headers of an HTTP 201 response for IdentityCreateWidgetToken
 type IdentityCreateWidgetTokenResponse201Headers struct {
 	CacheControl *string
+	Vary         *string
 }
 
 // IdentityCreateWidgetTokenResponse401Headers the declared response headers of an HTTP 401 response for IdentityCreateWidgetToken
 type IdentityCreateWidgetTokenResponse401Headers struct {
 	WWWAuthenticate *string
+}
+
+// IdentityCreateWidgetTokenResponse403Headers the declared response headers of an HTTP 403 response for IdentityCreateWidgetToken
+type IdentityCreateWidgetTokenResponse403Headers struct {
+	CacheControl *string
+	Vary         *string
 }
 
 type IdentityCreateWidgetTokenResponse struct {
@@ -2334,6 +2356,8 @@ type IdentityCreateWidgetTokenResponse struct {
 	Headers201 *IdentityCreateWidgetTokenResponse201Headers
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *IdentityCreateWidgetTokenResponse401Headers
+	// Headers403 the parsed response headers for an HTTP 403 response
+	Headers403 *IdentityCreateWidgetTokenResponse403Headers
 }
 
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
@@ -3296,6 +3320,7 @@ func (r IdentityChangeMemberRoleResponse) ContentType() string {
 // - Only an allowed origin gets `Access-Control-Allow-Origin`.
 // - The answer holds the settings only: no origins, no org, no name.
 // - `Cache-Control: no-cache`: a change in the studio shows on the next page load.
+// - Every answer of this route, the CORS preflight included, sends `Vary: Origin`: a shared cache never serves the answer of one origin to another. A refusal sends `Cache-Control: no-store`.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -3318,6 +3343,7 @@ func (c *ClientWithResponses) IdentityGetWidgetSettingsWithResponse(ctx context.
 // - Claims: `iss` (identity), `aud`, `sub` (the user), `urn:zitadel:iam:user:resourceowner:id` (the Zitadel org), `client_id` (the app id), `synthwerk:origin` (the canonical origin), `iat`, `nbf`, `exp`, `jti`. No roles: a widget token is never an admin token.
 // - Verify it with the key set at `/.well-known/jwks.json` of identity (RFC 7517). A service that accepts it must also compare `synthwerk:origin` with the `Origin` header.
 // - Browsers send a CORS preflight first. Identity answers it with the CORS headers only for an allowed origin.
+// - Every answer of this route, the CORS preflight included, sends `Vary: Origin` and `Cache-Control: no-store`.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -3661,7 +3687,31 @@ func ParseIdentityGetWidgetSettingsResponse(rsp *http.Response) (*IdentityGetWid
 			}
 			headers.CacheControl = &value
 		}
+		if values := rsp.Header.Values("Vary"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Vary", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.Vary = &value
+		}
 		response.Headers200 = &headers
+	case rsp.StatusCode == 403:
+		var headers IdentityGetWidgetSettingsResponse403Headers
+		if values := rsp.Header.Values("Cache-Control"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Cache-Control", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.CacheControl = &value
+		}
+		if values := rsp.Header.Values("Vary"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Vary", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.Vary = &value
+		}
+		response.Headers403 = &headers
 	}
 
 	return response, nil
@@ -3721,6 +3771,13 @@ func ParseIdentityCreateWidgetTokenResponse(rsp *http.Response) (*IdentityCreate
 			}
 			headers.CacheControl = &value
 		}
+		if values := rsp.Header.Values("Vary"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Vary", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.Vary = &value
+		}
 		response.Headers201 = &headers
 	case rsp.StatusCode == 401:
 		var headers IdentityCreateWidgetTokenResponse401Headers
@@ -3732,6 +3789,23 @@ func ParseIdentityCreateWidgetTokenResponse(rsp *http.Response) (*IdentityCreate
 			headers.WWWAuthenticate = &value
 		}
 		response.Headers401 = &headers
+	case rsp.StatusCode == 403:
+		var headers IdentityCreateWidgetTokenResponse403Headers
+		if values := rsp.Header.Values("Cache-Control"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Cache-Control", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.CacheControl = &value
+		}
+		if values := rsp.Header.Values("Vary"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Vary", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.Vary = &value
+		}
+		response.Headers403 = &headers
 	}
 
 	return response, nil

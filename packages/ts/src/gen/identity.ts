@@ -256,6 +256,7 @@ export interface paths {
          *     - Only an allowed origin gets `Access-Control-Allow-Origin`.
          *     - The answer holds the settings only: no origins, no org, no name.
          *     - `Cache-Control: no-cache`: a change in the studio shows on the next page load.
+         *     - Every answer of this route, the CORS preflight included, sends `Vary: Origin`: a shared cache never serves the answer of one origin to another. A refusal sends `Cache-Control: no-store`.
          */
         get: operations["identity.getWidgetSettings"];
         put?: never;
@@ -288,6 +289,7 @@ export interface paths {
          *     - Claims: `iss` (identity), `aud`, `sub` (the user), `urn:zitadel:iam:user:resourceowner:id` (the Zitadel org), `client_id` (the app id), `synthwerk:origin` (the canonical origin), `iat`, `nbf`, `exp`, `jti`. No roles: a widget token is never an admin token.
          *     - Verify it with the key set at `/.well-known/jwks.json` of identity (RFC 7517). A service that accepts it must also compare `synthwerk:origin` with the `Origin` header.
          *     - Browsers send a CORS preflight first. Identity answers it with the CORS headers only for an allowed origin.
+         *     - Every answer of this route, the CORS preflight included, sends `Vary: Origin` and `Cache-Control: no-store`.
          */
         post: operations["identity.createWidgetToken"];
         delete?: never;
@@ -651,6 +653,10 @@ export interface components {
         /** @description The `Origin` header is missing, not valid, or not in the allow-list of the app. Code `origin_not_allowed`. The body never lists the allowed origins. */
         OriginNotAllowed: {
             headers: {
+                /** @description Always `no-store`. */
+                "Cache-Control"?: string;
+                /** @description Always `Origin`. */
+                Vary?: string;
                 [name: string]: unknown;
             };
             content: {
@@ -1290,8 +1296,10 @@ export interface operations {
             /** @description The widget settings. */
             200: {
                 headers: {
-                    /** @description Always `no-cache`. */
+                    /** @description Always `no-cache`. A cache must check again before it reuses the answer. */
                     "Cache-Control"?: string;
+                    /** @description Always `Origin`. The CORS headers depend on the request origin. */
+                    Vary?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -1332,6 +1340,8 @@ export interface operations {
                 headers: {
                     /** @description Always `no-store`. */
                     "Cache-Control"?: string;
+                    /** @description Always `Origin`. The CORS headers depend on the request origin. */
+                    Vary?: string;
                     [name: string]: unknown;
                 };
                 content: {

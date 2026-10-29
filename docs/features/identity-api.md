@@ -70,7 +70,8 @@ updated: 2026-10-30
 | Widget token | JWT, `typ` `at+jwt`, `ES256`, signed by identity; `expires_in` 900 s or less; claim `synthwerk:origin` = the canonical origin; no roles |
 | App limit | `apps_per_org` of the entitlements; `0` means no limit; one more gets 403 `app_limit_reached` |
 | Widget settings | `position` `bottom-right`/`bottom-left`, `theme` `default`/`contrast`, `mode` `system`/`light`/`dark`, `lang` `auto`/`de`/`en`, `accent` `flagship`/`lab`/`ops`/`venture`, `greeting` 0 to 280 characters, plain text |
-| Widget settings read | No token. `Origin` must be in the allow-list. `Cache-Control: no-cache`. Settings only: no origins, org or name |
+| Widget settings read | No token. `Origin` must be in the allow-list. `Cache-Control: no-cache`, refusals `no-store`. Settings only: no origins, org or name |
+| CORS caching | Widget settings and widget token routes send `Vary: Origin` on every answer, preflight included. Token answers and refusals send `Cache-Control: no-store` |
 | Widget token keys | Public keys at `/.well-known/jwks.json` of identity (outside the OpenAPI, no token) |
 
 ## Events
@@ -109,6 +110,7 @@ updated: 2026-10-30
 - `tests/contract/identity_test.go` — `UpdateApp - widget settings - the client sends them, the answer carries them`
 - `tests/contract/identity_test.go` — `GetWidgetSettings - spec example - settings only, Origin sent, no token`
 - `tests/contract/identity_test.go` — `WidgetSettings - enums - only token themes and accent groups`
+- `tests/contract/identity_cors_test.go` — `CORS answer <route> - Vary and Cache-Control documented`
 - `tests/contract/identity_test.go` — `OrgRole - enum - operator is never an org role`
 - `tests/contract/identity_test.go` — `ListApps - spec example - one page of apps with origins`
 - `tests/contract/identity_test.go` — `CreateApp - spec example - app with the canonical allow-list`
