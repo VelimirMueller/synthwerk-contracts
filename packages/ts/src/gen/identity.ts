@@ -307,7 +307,7 @@ export interface components {
         };
         /**
          * @description Limits of the plan. `0` means no limit. A day is a UTC day.
-         *     New limits arrive as new optional properties: a client ignores what it does not know.
+         *     The schema is closed. A new limit comes with a new spec minor version and regenerated clients.
          */
         EntitlementLimits: {
             /**

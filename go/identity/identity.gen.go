@@ -127,7 +127,7 @@ type CreateOrgRequest struct {
 }
 
 // EntitlementLimits Limits of the plan. `0` means no limit. A day is a UTC day.
-// New limits arrive as new optional properties: a client ignores what it does not know.
+// The schema is closed. A new limit comes with a new spec minor version and regenerated clients.
 type EntitlementLimits struct {
 	// AppsPerOrg Apps the org may have.
 	AppsPerOrg int32 `json:"apps_per_org"`
@@ -142,7 +142,7 @@ type EntitlementLimits struct {
 // Entitlements The plan of an org and the limits it gives. Identity owns them.
 type Entitlements struct {
 	// Limits Limits of the plan. `0` means no limit. A day is a UTC day.
-	// New limits arrive as new optional properties: a client ignores what it does not know.
+	// The schema is closed. A new limit comes with a new spec minor version and regenerated clients.
 	Limits EntitlementLimits  `json:"limits"`
 	OrgId  openapi_types.UUID `json:"org_id"`
 
