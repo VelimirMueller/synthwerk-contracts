@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.synthwerk.dev/events/identity/org.entitlements_changed.v1.json",
+  "title": "identity.org.entitlements_changed.v1",
+  "description": "The plan or the limits of an org changed (synthwerk#31). It carries the full new state, so a consumer needs no call back. CloudEvents subject and orgid extension: the org id. A consumer keeps the highest version per org and drops older events.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["org_id", "plan", "limits", "version", "reason"],
+  "properties": {
+    "org_id": {
+      "type": "string",
+      "format": "uuid",
+      "maxLength": 36
+    },
+    "plan": {
+      "description": "Plan name. `free` today; paid plans come in M5. A consumer reads limits, never the name.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32,
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "limits": {
+      "description": "Limits of the plan. 0 means no limit. A day is a UTC day.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["llm_tokens_per_user_per_day", "llm_tokens_per_org_per_day", "apps_per_org"],
+      "properties": {
+        "llm_tokens_per_user_per_day": {
+          "description": "LLM tokens one user may use in this org per UTC day.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "llm_tokens_per_org_per_day": {
+          "description": "LLM tokens all users of the org may use together per UTC day.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "apps_per_org": {
+          "description": "Apps the org may have.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        }
+      }
+    },
+    "version": {
+      "description": "Goes up by one on every change of this org. Same value as the HTTP API.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "reason": {
+      "description": "plan_assigned: the org got its first plan (new org, or an org from before #31). plan_defaults_changed: the limits of its plan changed.",
+      "type": "string",
+      "enum": ["plan_assigned", "plan_defaults_changed"]
+    }
+  }
+}

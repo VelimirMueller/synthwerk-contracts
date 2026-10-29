@@ -5,8 +5,8 @@ status: planned
 epic: E2
 owner: contracts
 paths: ["openapi/identity/**", "codegen/oapi-codegen.identity.yaml", "events/identity/**"]
-api: ["GET /v1/me", "GET /v1/orgs", "POST /v1/orgs", "GET /v1/orgs/{orgId}", "GET /v1/orgs/{orgId}/members", "PATCH /v1/orgs/{orgId}/members/{userId}", "GET /v1/orgs/{orgId}/apps", "POST /v1/orgs/{orgId}/apps", "GET /v1/orgs/{orgId}/apps/{appId}", "PATCH /v1/orgs/{orgId}/apps/{appId}", "DELETE /v1/orgs/{orgId}/apps/{appId}", "POST /v1/apps/{appId}/widget-tokens"]
-events: ["dev.synthwerk.identity.org.created.v1", "dev.synthwerk.identity.user.created.v1", "dev.synthwerk.identity.member.role_changed.v1", "dev.synthwerk.identity.app.created.v1"]
+api: ["GET /v1/me", "GET /v1/orgs", "POST /v1/orgs", "GET /v1/orgs/{orgId}", "GET /v1/orgs/{orgId}/members", "PATCH /v1/orgs/{orgId}/members/{userId}", "GET /v1/orgs/{orgId}/apps", "POST /v1/orgs/{orgId}/apps", "GET /v1/orgs/{orgId}/apps/{appId}", "PATCH /v1/orgs/{orgId}/apps/{appId}", "DELETE /v1/orgs/{orgId}/apps/{appId}", "POST /v1/apps/{appId}/widget-tokens", "GET /v1/me/entitlements", "GET /v1/orgs/{orgId}/entitlements"]
+events: ["dev.synthwerk.identity.org.created.v1", "dev.synthwerk.identity.user.created.v1", "dev.synthwerk.identity.member.role_changed.v1", "dev.synthwerk.identity.app.created.v1", "dev.synthwerk.identity.org.entitlements_changed.v1"]
 mcp: []
 updated: 2026-10-29
 ---
@@ -31,6 +31,9 @@ updated: 2026-10-29
 - `GET|POST /v1/orgs/{orgId}/apps` and `GET|PATCH|DELETE /v1/orgs/{orgId}/apps/{appId}` manage the apps of an org. Read: any member or operator. Write: owner or admin.
 - Creating an app emits `dev.synthwerk.identity.app.created.v1`. Update and delete emit no event yet.
 - `POST /v1/apps/{appId}/widget-tokens` issues a widget token to a signed-in member of the app's org, only when the `Origin` header is in the allow-list.
+- `GET /v1/me/entitlements` returns the plan and the limits of the token's org. A service that acts for a user forwards the caller's token (llm quotas).
+- `GET /v1/orgs/{orgId}/entitlements` returns the plan and the limits of one org (any org role, or operator).
+- A new org gets the plan `free`. Every change of a plan or its limits emits `dev.synthwerk.identity.org.entitlements_changed.v1` with the full new state (#31).
 - Creating an org emits `dev.synthwerk.identity.org.created.v1`.
 - A new Zitadel user (Action webhook) emits `dev.synthwerk.identity.user.created.v1`, with Zitadel ids only.
 - Go: package `github.com/VelimirMueller/synthwerk-contracts/go/identity`. TS: `createIdentityClient` in `@synthwerk/contracts`.
@@ -54,6 +57,8 @@ updated: 2026-10-29
 | Last owner | Keeps the role: 409 `last_owner` |
 | Own role | Never changed by the caller: 409 `own_role` |
 | Operator | Read only on any org; a role change gets 403 |
+| Entitlement limits | `0` means no limit. A day is a UTC day. `version` goes up by one on every change |
+| Plan name | `free` today. Clients read `limits`, never the plan name, and accept unknown plans |
 | Stale token | Writes and `listMembers` check the stored membership too; a demoted admin gets 403 with the old token |
 | App origin | `scheme://host[:port]`; `https`, or `http` for `localhost`, `127.0.0.1`, `[::1]`; no path, query, fragment, user info or wildcard |
 | Origin match | Exact on the canonical form (lower-case host, default port removed). No prefix, suffix or subdomain match |
@@ -69,6 +74,7 @@ updated: 2026-10-29
 | `dev.synthwerk.identity.user.created.v1` | Zitadel created a human user; identity got the Action webhook. |
 | `dev.synthwerk.identity.member.role_changed.v1` | The org role of a member changed. `old_role` and `new_role`, no email. |
 | `dev.synthwerk.identity.app.created.v1` | An owner or admin created an app. `app_id`, `org_id`, `name`; no origins. |
+| `dev.synthwerk.identity.org.entitlements_changed.v1` | The plan or the limits of an org changed. Full new state, `version`, `reason`. |
 
 ## Errors
 
@@ -98,6 +104,8 @@ updated: 2026-10-29
 - `tests/contract/identity_test.go` — `CreateWidgetToken - spec example - bearer token, 15 minutes or less`
 - `tests/contract/identity_test.go` — `CreateWidgetToken - origin not listed - 403 problem with code origin_not_allowed`
 - `tests/contract/identity_client_test.go` — `Client <operation> - 404 problem - method and path match the spec` (every operation)
+- `tests/contract/identity_entitlements_test.go` — `GetMyEntitlements - spec example - free plan with its limits` (and `GetOrgEntitlements`)
+- `tests/contract/identity_entitlements_test.go` — `GetOrgEntitlements - unknown org - 404 problem, method and path match the spec` (and `GetMyEntitlements`)
 - `tests/contract/events_test.go` — `Catalog - each entry - names, schema $id and example match`
 
 ## Changes
@@ -109,3 +117,4 @@ updated: 2026-10-29
 | 2026-10-23 | Add `user.created` event (synthwerk#28 task 4). |
 | 2026-10-28 | Add members list, role change and `member.role_changed.v1` (synthwerk#29). |
 | 2026-10-29 | Add apps with an origin allow-list, the widget token and `app.created.v1` (synthwerk#30). |
+| 2026-10-29 | Add entitlements: `GET /v1/me/entitlements`, `GET /v1/orgs/{orgId}/entitlements` and `org.entitlements_changed.v1` (synthwerk#31). Spec 0.2.0. |

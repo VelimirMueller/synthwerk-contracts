@@ -74,3 +74,12 @@ events:
     status: draft
     schema: identity/app.created.v1.schema.json
     example: examples/dev.synthwerk.identity.app.created.v1.json
+
+  - type: dev.synthwerk.identity.org.entitlements_changed.v1
+    nats_subject: evt.identity.org.entitlements_changed.v1
+    stream: EVT_IDENTITY
+    producer: identity
+    consumers: [llm, pulse]
+    status: draft
+    schema: identity/org.entitlements_changed.v1.schema.json
+    example: examples/dev.synthwerk.identity.org.entitlements_changed.v1.json
