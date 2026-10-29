@@ -20,26 +20,23 @@ func TestIdentityEntitlements(t *testing.T) {
 
 	routes := []struct {
 		name, path, want string
-		call             func(c *identity.ClientWithResponses) (*identity.Entitlements, int, error)
+		call             func(c *identity.ClientWithResponses) (*identity.Entitlements, *identity.NotFound, int, error)
 	}{
 		{"GetMyEntitlements", "/v1/me/entitlements", "GET /v1/me/entitlements",
-			func(c *identity.ClientWithResponses) (*identity.Entitlements, int, error) {
+			func(c *identity.ClientWithResponses) (*identity.Entitlements, *identity.NotFound, int, error) {
 				res, err := c.IdentityGetMyEntitlementsWithResponse(ctx)
 				if err != nil {
-					return nil, 0, err
+					return nil, nil, 0, err
 				}
-				return res.JSON200, res.StatusCode(), nil
+				return res.JSON200, res.ApplicationproblemJSON404, res.StatusCode(), nil
 			}},
 		{"GetOrgEntitlements", "/v1/orgs/{orgId}/entitlements", "GET /v1/orgs/" + org.String() + "/entitlements",
-			func(c *identity.ClientWithResponses) (*identity.Entitlements, int, error) {
+			func(c *identity.ClientWithResponses) (*identity.Entitlements, *identity.NotFound, int, error) {
 				res, err := c.IdentityGetOrgEntitlementsWithResponse(ctx, org)
 				if err != nil {
-					return nil, 0, err
+					return nil, nil, 0, err
 				}
-				if res.StatusCode() == http.StatusNotFound && (res.ApplicationproblemJSON404 == nil || res.ApplicationproblemJSON404.Code != "not_found") {
-					t.Fatalf("404 body %+v", res.ApplicationproblemJSON404)
-				}
-				return res.JSON200, res.StatusCode(), nil
+				return res.JSON200, res.ApplicationproblemJSON404, res.StatusCode(), nil
 			}},
 	}
 
@@ -52,7 +49,7 @@ func TestIdentityEntitlements(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			e, status, err := r.call(c)
+			e, _, status, err := r.call(c)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -76,12 +73,12 @@ func TestIdentityEntitlements(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			e, status, err := r.call(c)
+			e, nf, status, err := r.call(c)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got != r.want || status != http.StatusNotFound || e != nil {
-				t.Fatalf("sent %q, status %d, body %+v; want %q and 404", got, status, e, r.want)
+			if got != r.want || status != http.StatusNotFound || e != nil || nf == nil || nf.Code != "not_found" {
+				t.Fatalf("sent %q, status %d, body %+v, problem %+v; want %q and 404 not_found", got, status, e, nf, r.want)
 			}
 		})
 	}
