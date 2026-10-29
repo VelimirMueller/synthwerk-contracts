@@ -8,7 +8,7 @@ paths: ["go/kit/**", "go/examples/**"]
 api: ["GET /healthz", "GET /readyz"]
 events: ["dev.synthwerk.pulse.target.status_changed.v1"]
 mcp: []
-updated: 2026-10-23
+updated: 2026-10-29
 ---
 
 # Go service kit
@@ -26,7 +26,7 @@ updated: 2026-10-23
 | `kit/log` | `log/slog` JSON logger with the shared fields, trace ids and a filter for forbidden keys. HTTP middleware for the request line and `X-Request-ID`. |
 | `kit/otel` | Tracer, meter and logger providers. OTLP over gRPC only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. W3C `traceparent` propagation. |
 | `kit/cloudevents` | Builds and checks CloudEvents 1.0.2 events: UUIDv7 id, `source`, `orgid`, `traceparent`, NATS subject from the type. |
-| `kit/outbox` | Outbox table, `Enqueue` in the caller's transaction, and the relay to JetStream with `Nats-Msg-Id` = event id. |
+| `kit/outbox` | Outbox table, `Enqueue` in the caller's transaction, the relay to JetStream with `Nats-Msg-Id` = event id, and `Cleanup` of old published rows. |
 | `kit/env` | Reads `SYNTHWERK_<SERVICE>_*` and `SYNTHWERK_PLATFORM_ENV` (D-40). |
 | `kit/auth` | Verifies Zitadel access tokens against the issuer JWKS (D-20, D-23). Maps claims to a `Principal` (subject, org, roles, scopes). HTTP middleware and `RequireRole`, `RequireOrg`, `RequireScope`, `RequireMFA`. |
 | `kit/auth/authtest` | Fake issuer for tests: serves discovery and a JWKS over `httptest`, mints signed tokens. |
@@ -35,6 +35,8 @@ updated: 2026-10-23
 - A failed critical check gives `down` (503). A failed optional check gives `degraded` (200). `detail` is constant text, never the error.
 - The relay locks rows with `FOR UPDATE SKIP LOCKED`, publishes, and marks them in one database transaction. Several relays can run at once.
 - A crash after the publish and before the commit leaves the row unpublished. The next run publishes it again with the same `Nats-Msg-Id`. JetStream drops the copy, so a consumer gets the event once.
+- `relay.Run` deletes published rows older than `Config.Retention` (default 7 days), at start and then every `Config.CleanupInterval` (default 1 h). The age counts from `published_at`.
+- The clean-up never deletes an unpublished row, however old. `outbox.Cleanup(ctx, db, retention)` runs the same delete once.
 - `auth.Verifier` allows RS256 and ES256 only. It checks `iss`, `aud` (any of a list), `exp` (required), `nbf` and `iat` with 30 s leeway (max 60 s).
 - The JWKS cache refreshes after 15 min, and at once on an unknown `kid`, at most once per 10 s. When a refresh fails, the last good keys stay in use.
 - `ZitadelMapper` keeps a role only when the roles claim grants it in the token's org. `operator` counts only when granted in `PlatformOrgID`. A token without `sub` or org id is refused.
@@ -54,7 +56,7 @@ updated: 2026-10-23
 
 1. Copy `go/examples/service/` into the new service repo. Rename `Service` (env prefix and `source`).
 2. Add the module: `go get github.com/VelimirMueller/synthwerk-contracts/go@<version>`.
-3. Run `outbox.Schema` in the service migrations, or call `outbox.Migrate` at startup.
+3. Run `outbox.Schema` in the service migrations, or call `outbox.Migrate` at startup. A service that copied the schema before 2026-10-29 adds the index `synthwerk_outbox_published`.
 4. In each write: begin a transaction, write the data row, call `outbox.Enqueue(ctx, tx, event)`, commit.
 5. Start one `outbox.Relay` per process with `relay.Run(ctx)`.
 6. Add one `health.Check` per dependency. Call `MarkStarted` when the service can serve.
@@ -75,7 +77,9 @@ updated: 2026-10-23
 | OTLP protocol | `grpc` only. Another `OTEL_EXPORTER_OTLP_PROTOCOL` fails at startup. |
 | Log format | `json` (default). `console` only in env `local`. |
 | `source` env | `local`, `dev`, `stg`, `prd`. Env `ci` publishes as `local` (the envelope has no `ci`). |
-| Published rows | Stay in the table. Clean-up is not in the kit yet. |
+| Published rows | Deleted by the relay after `Config.Retention`, default 7 days. A negative value keeps them. |
+| Clean-up interval | 1 h (`Config.CleanupInterval`) |
+| Unpublished rows | Never deleted |
 | JWT algorithms | RS256, ES256. `none` and HS* are refused. RSA keys below 2048 bits are skipped. |
 | JWT header `typ` | `at+jwt`, `application/at+jwt`, `JWT` (Zitadel v4.20.0) by default (`Config.AcceptedTypes`). No `typ` is refused unless the list has `""`. |
 | ID tokens | A token with `nonce` or `at_hash` is refused, whatever its `typ`. |
@@ -105,6 +109,8 @@ updated: 2026-10-23
 - `tests/integration/outbox/outbox_test.go` — `relay - crash after publish, then restart - consumer gets the event once`
 - `tests/integration/outbox/outbox_test.go` — `relay - no stream for the subject - row kept, published after the stream exists`
 - `tests/integration/outbox/outbox_test.go` — `relay - two relays at once - every event once`
+- `tests/integration/outbox/outbox_test.go` — `cleanup - published rows past the retention - deleted, unpublished rows kept`
+- `tests/integration/outbox/outbox_test.go` — `relay - retention set - Run deletes old published rows, publishes the rest`
 - `tests/integration/example/example_test.go` — `set status - status changed - one valid event on EVT_PULSE`
 - `tests/contract/kit_test.go` — `readyz - critical check fails - 503 matches schema`
 - `tests/contract/kit_test.go` — `NATSSubject - every catalog type - equals catalog nats_subject`
@@ -130,3 +136,4 @@ updated: 2026-10-23
 | 2026-10-28 | `kit/auth`: `RequireMFA` stays fail closed; an enrolment flag never counts as MFA (#28, D-47 limitation). |
 | 2026-10-23 | `kit/auth`: Zitadel v4.20.0 token shape (`client_id`, `aud`, org scope), `RequireMFA` (SW-M2-0.5). |
 | 2026-10-23 | D-44: `kit/cloudevents` adds `WithOrg`/`OrgID`; `WithTenant`/`TenantID` deprecated, still working. |
+| 2026-10-29 | `kit/outbox`: the relay deletes published rows after a retention (default 7 days); unpublished rows stay (#3). |

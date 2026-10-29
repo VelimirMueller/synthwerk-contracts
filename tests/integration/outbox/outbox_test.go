@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go/jetstream"
 
@@ -139,6 +140,44 @@ func unpublished(t *testing.T, db *pgxpool.Pool) int {
 		t.Fatal(err)
 	}
 	return n
+}
+
+// age sets published_at and created_at of one row to now() minus the given ages.
+// A negative published age leaves the row unpublished.
+func age(t *testing.T, db *pgxpool.Pool, id string, created, published time.Duration) {
+	t.Helper()
+	var err error
+	if published < 0 {
+		_, err = db.Exec(t.Context(), `UPDATE synthwerk_outbox
+			SET created_at = now() - make_interval(secs => $2), published_at = NULL WHERE id = $1`,
+			id, created.Seconds())
+	} else {
+		_, err = db.Exec(t.Context(), `UPDATE synthwerk_outbox
+			SET created_at = now() - make_interval(secs => $2),
+			    published_at = now() - make_interval(secs => $3) WHERE id = $1`,
+			id, created.Seconds(), published.Seconds())
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// ids returns the ids of every outbox row.
+func ids(t *testing.T, db *pgxpool.Pool) map[string]bool {
+	t.Helper()
+	rows, err := db.Query(t.Context(), `SELECT id::text FROM synthwerk_outbox`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		t.Fatal(err)
+	}
+	set := map[string]bool{}
+	for _, id := range got {
+		set[id] = true
+	}
+	return set
 }
 
 //nolint:contextcheck // the helpers take their context from t.
@@ -288,6 +327,84 @@ func TestOutbox(t *testing.T) {
 		}
 		if len(msgs) != events || len(seen) != events {
 			t.Fatalf("%d messages, %d distinct ids; want %d each", len(msgs), len(seen), events)
+		}
+	})
+
+	t.Run("cleanup - published rows past the retention - deleted, unpublished rows kept", func(t *testing.T) {
+		db, _ := setup(t)
+		const day = 24 * time.Hour
+		oldPublished := write(t, db, true)
+		newPublished := write(t, db, true)
+		oldUnpublished := write(t, db, true)
+		newUnpublished := write(t, db, true)
+		age(t, db, oldPublished.ID, 30*day, 8*day)
+		age(t, db, newPublished.ID, 30*day, 2*time.Hour)
+		age(t, db, oldUnpublished.ID, 30*day, -1)
+		age(t, db, newUnpublished.ID, 0, -1)
+
+		// Default retention (7 days): only the row published 8 days ago goes.
+		n, err := outbox.Cleanup(ctx, db, outbox.DefaultRetention)
+		if err != nil || n != 1 {
+			t.Fatalf("Cleanup(7 days) = %d, %v; want 1, nil", n, err)
+		}
+		got := ids(t, db)
+		if got[oldPublished.ID] || len(got) != 3 {
+			t.Fatalf("rows after Cleanup(7 days): %v; want all but %s", got, oldPublished.ID)
+		}
+
+		// A shorter retention (1 h) also deletes the row published 2 h ago.
+		if n, err := outbox.Cleanup(ctx, db, time.Hour); err != nil || n != 1 {
+			t.Fatalf("Cleanup(1 h) = %d, %v; want 1, nil", n, err)
+		}
+		got = ids(t, db)
+		if !got[oldUnpublished.ID] || !got[newUnpublished.ID] || len(got) != 2 {
+			t.Fatalf("rows after Cleanup(1 h): %v; want only the 2 unpublished rows", got)
+		}
+		if got := unpublished(t, db); got != 2 {
+			t.Fatalf("%d unpublished rows, want 2", got)
+		}
+
+		if _, err := outbox.Cleanup(ctx, db, 0); err == nil {
+			t.Fatal("Cleanup(0) returned no error")
+		}
+	})
+
+	t.Run("relay - retention set - Run deletes old published rows, publishes the rest", func(t *testing.T) {
+		db, js := setup(t)
+		old := write(t, db, true)
+		age(t, db, old.ID, 2*time.Hour, time.Hour)
+		pending := write(t, db, true)
+		age(t, db, pending.ID, 2*time.Hour, -1)
+
+		runCtx, stop := context.WithCancel(ctx)
+		done := make(chan error, 1)
+		go func() {
+			done <- relay(t, db, js, outbox.Config{
+				Interval: 20 * time.Millisecond, Retention: time.Minute, CleanupInterval: 20 * time.Millisecond,
+			}).Run(runCtx)
+		}()
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			got := ids(t, db)
+			if !got[old.ID] && unpublished(t, db) == 0 {
+				break
+			}
+			if time.Now().After(deadline) {
+				stop()
+				t.Fatalf("rows after 10 s: %v; want %s deleted and every row published", got, old.ID)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		stop()
+		if err := <-done; err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		// The row published just now is younger than the retention: it stays.
+		if got := ids(t, db); !got[pending.ID] || len(got) != 1 {
+			t.Fatalf("rows: %v; want only %s", got, pending.ID)
+		}
+		if msgs := consume(t, js); len(msgs) != 1 {
+			t.Fatalf("%d messages, want 1", len(msgs))
 		}
 	})
 }
