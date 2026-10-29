@@ -18,6 +18,40 @@ export interface paths {
         get: operations["identity.getMe"];
         put?: never;
         post?: never;
+        /**
+         * Delete the own account
+         * @description Deletes the caller's account (synthwerk#41). Emits `dev.synthwerk.identity.user.deleted.v1`; the other services delete the user's rows when they get it.
+         *     - Needs a recent sign-in with MFA: the token has `amr` `mfa` and the user's newest gated sign-in is at most 15 minutes old (identity setting, default 15 minutes). Else 403 `recent_mfa_required`: sign in again, then retry.
+         *     - Last owner rule: an org with other members must keep an owner. When the caller is its only owner, the answer is 409 `last_owner` and nothing changes. Make another member `owner` first.
+         *     - An org where the caller is the only member closes with the account. Identity deletes it with its apps and entitlements. `deleted_org_ids` lists these orgs.
+         *     - Identity deletes its own rows of the user in one transaction with the event. The Zitadel user is removed after the answer, with retries. A token issued before stays valid until it expires.
+         *     - An `operator` gets 403 `forbidden`: platform users are never removed through this route.
+         *     - A repeat while the old token is still valid answers 202 again, with the first `requested_at` and an empty `deleted_org_ids`. It changes nothing.
+         */
+        delete: operations["identity.deleteMe"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export the own data
+         * @description All data Synthwerk keeps about the caller, as one JSON document (synthwerk#41, GDPR Art. 15 and 20).
+         *     - `identity`: the memberships in every org and the newest MFA evidence.
+         *     - `services`: identity asks every service that keeps user rows (today: llm) with the caller's token and puts each answer here unchanged. A service that does not answer has `status` `unavailable`, and `complete` is false. Retry later for a full export.
+         *     - Profile data (email, name, passkeys) lives in Zitadel. The user reads it in the Zitadel account console.
+         *     - Any signed-in user may call it. Operators too: it shows only the caller's own data.
+         */
+        get: operations["identity.exportMe"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -696,6 +730,78 @@ export interface components {
             app_id: string;
             origin: components["schemas"]["AppOrigin"];
         };
+        /** @description The answer to `DELETE /v1/me`. */
+        AccountDeletion: {
+            /** @description Subject id (token `sub`) of the deleted user. */
+            user_id: string;
+            /**
+             * @description `accepted`: identity deleted its rows and published the fact. The Zitadel user is removed next, with retries.
+             * @enum {string}
+             */
+            status: "accepted";
+            /**
+             * Format: date-time
+             * @description When identity took the first delete request of this user.
+             */
+            requested_at: string;
+            /** @description Orgs that closed with the account, because the caller was their only member. */
+            deleted_org_ids: string[];
+        };
+        /** @description Everything Synthwerk keeps about one user. Machine-readable (GDPR Art. 20). */
+        UserExport: {
+            /**
+             * @description Version of this document format. A new field keeps 1; a removed or renamed field gives 2.
+             * @enum {integer}
+             */
+            format_version: 1;
+            /** @description Token `sub` of the caller. */
+            subject: string;
+            /** Format: date-time */
+            exported_at: string;
+            /** @description False when at least one service in `services` has `status` `unavailable`. */
+            complete: boolean;
+            identity: components["schemas"]["IdentityExport"];
+            /** @description One entry per service that keeps user rows. Order by `service`. */
+            services: components["schemas"]["ServiceExport"][];
+        };
+        /** @description The rows identity keeps about the user. */
+        IdentityExport: {
+            /** @description Every org membership of the user, by org name. */
+            memberships: components["schemas"]["ExportMembership"][];
+            mfa_evidence?: components["schemas"]["ExportMfaEvidence"];
+        };
+        ExportMembership: {
+            /** Format: uuid */
+            org_id: string;
+            org_name: string;
+            org_slug: string;
+            role: components["schemas"]["OrgRole"];
+            /** Format: date-time */
+            joined_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @description The newest sign-in with MFA that the MFA gate stored. Absent when there is none. It holds no session token. */
+        ExportMfaEvidence: {
+            /** @description Zitadel session id. Not a credential. */
+            session_id: string;
+            amr: string[];
+            /** Format: date-time */
+            checked_at: string;
+        };
+        ServiceExport: {
+            /** @description Service name, for example `llm`. */
+            service: string;
+            /**
+             * @description `unavailable`: the service did not answer in time, or answered with an error. `data` is absent.
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+            /** @description The service's own export, unchanged. Its schema is in the service's spec, for example `LlmExport` in `openapi/llm`. */
+            data?: {
+                [key: string]: unknown;
+            };
+        };
         /**
          * @description RFC 9457 problem details with the stable Synthwerk `code`.
          *     Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
@@ -707,7 +813,7 @@ export interface components {
          *     | `forbidden` | 403 | Role does not allow the call. |
          *     | `not_found` | 404 | Unknown org or member, or no membership. |
          *     | `slug_taken` | 409 | Another org has the slug. |
-         *     | `last_owner` | 409 | The org would lose its last owner. |
+         *     | `last_owner` | 409 | The org would lose its last owner (role change or account delete). |
          *     | `own_role` | 409 | The caller tried to change their own role. |
          *     | `own_membership` | 409 | The caller tried to deactivate their own membership. |
          *     | `member_exists` | 409 | The email is an active or deactivated member of this org. |
@@ -715,6 +821,7 @@ export interface components {
          *     | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
          *     | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
          *     | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+         *     | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
          */
         Problem: {
             /**
@@ -929,6 +1036,45 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /**
+         * @description - `recent_mfa_required`: the token has no `amr` `mfa`, or the newest sign-in with MFA is older than 15 minutes. Sign in again with MFA, then retry.
+         *     - `forbidden`: the caller is an `operator`. Platform users are not removed here.
+         */
+        RecentMFARequired: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://schemas.synthwerk.dev/problems/recent_mfa_required",
+                 *       "title": "Recent MFA required",
+                 *       "status": 403,
+                 *       "code": "recent_mfa_required",
+                 *       "detail": "Sign in again with MFA, then retry."
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description The caller is the only owner of an org that has other members. Code `last_owner`. Nothing changed. Make another member `owner` first. */
+        LastOwner: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://schemas.synthwerk.dev/problems/last_owner",
+                 *       "title": "Last owner",
+                 *       "status": 409,
+                 *       "code": "last_owner",
+                 *       "detail": "Make another member owner of org 0199f3a0-5b6c-7d8e-9f0a-1b2c3d4e5f60 first."
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description Zitadel did not take the change. Nothing changed. Code `upstream_unavailable`. Retry later. */
         UpstreamUnavailable: {
             headers: {
@@ -994,6 +1140,101 @@ export interface operations {
                      *     }
                      */
                     "application/json": components["schemas"]["Me"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    "identity.deleteMe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account is deleted in identity. The Zitadel user is removed next. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "user_id": "396370217707541255",
+                     *       "status": "accepted",
+                     *       "requested_at": "2026-10-30T10:00:00Z",
+                     *       "deleted_org_ids": [
+                     *         "019a3c20-1a2b-7c3d-8e4f-5a6b7c8d9e0f"
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AccountDeletion"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["RecentMFARequired"];
+            409: components["responses"]["LastOwner"];
+        };
+    };
+    "identity.exportMe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The export. */
+            200: {
+                headers: {
+                    /** @description `attachment; filename="synthwerk-export.json"`. */
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "format_version": 1,
+                     *       "subject": "396370217707541255",
+                     *       "exported_at": "2026-10-30T10:00:00Z",
+                     *       "complete": true,
+                     *       "identity": {
+                     *         "memberships": [
+                     *           {
+                     *             "org_id": "0199f3a0-5b6c-7d8e-9f0a-1b2c3d4e5f60",
+                     *             "org_name": "Synthwerk",
+                     *             "org_slug": "synthwerk",
+                     *             "role": "member",
+                     *             "joined_at": "2026-10-23T08:30:00Z",
+                     *             "updated_at": "2026-10-28T09:00:00Z"
+                     *           }
+                     *         ],
+                     *         "mfa_evidence": {
+                     *           "session_id": "396370299912345678",
+                     *           "amr": [
+                     *             "pwd",
+                     *             "otp",
+                     *             "mfa"
+                     *           ],
+                     *           "checked_at": "2026-10-30T09:55:00Z"
+                     *         }
+                     *       },
+                     *       "services": [
+                     *         {
+                     *           "service": "llm",
+                     *           "status": "ok",
+                     *           "data": {
+                     *             "conversations": [],
+                     *             "quota_usage": []
+                     *           }
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["UserExport"];
                 };
             };
             401: components["responses"]["Unauthenticated"];

@@ -5,8 +5,8 @@ status: planned
 epic: E2
 owner: contracts
 paths: ["openapi/identity/**", "codegen/oapi-codegen.identity.yaml", "events/identity/**"]
-api: ["GET /v1/me", "GET /v1/orgs", "POST /v1/orgs", "GET /v1/orgs/{orgId}", "GET /v1/orgs/{orgId}/members", "POST /v1/orgs/{orgId}/members", "PATCH /v1/orgs/{orgId}/members/{userId}", "POST /v1/orgs/{orgId}/members/{userId}:deactivate", "POST /v1/orgs/{orgId}/members/{userId}:reactivate", "GET /v1/orgs/{orgId}/invitations", "GET /v1/orgs/{orgId}/audit-events", "GET /v1/orgs/{orgId}/apps", "POST /v1/orgs/{orgId}/apps", "GET /v1/orgs/{orgId}/apps/{appId}", "PATCH /v1/orgs/{orgId}/apps/{appId}", "DELETE /v1/orgs/{orgId}/apps/{appId}", "POST /v1/apps/{appId}/widget-tokens", "GET /v1/apps/{appId}/widget-settings", "GET /v1/me/entitlements", "GET /v1/orgs/{orgId}/entitlements"]
-events: ["dev.synthwerk.identity.org.created.v1", "dev.synthwerk.identity.user.created.v1", "dev.synthwerk.identity.member.role_changed.v1", "dev.synthwerk.identity.app.created.v1", "dev.synthwerk.identity.org.entitlements_changed.v1", "dev.synthwerk.identity.member.invited.v1", "dev.synthwerk.identity.member.invite_revoked.v1", "dev.synthwerk.identity.member.deactivated.v1", "dev.synthwerk.identity.member.reactivated.v1"]
+api: ["GET /v1/me", "GET /v1/orgs", "POST /v1/orgs", "GET /v1/orgs/{orgId}", "GET /v1/orgs/{orgId}/members", "POST /v1/orgs/{orgId}/members", "PATCH /v1/orgs/{orgId}/members/{userId}", "POST /v1/orgs/{orgId}/members/{userId}:deactivate", "POST /v1/orgs/{orgId}/members/{userId}:reactivate", "GET /v1/orgs/{orgId}/invitations", "GET /v1/orgs/{orgId}/audit-events", "GET /v1/orgs/{orgId}/apps", "POST /v1/orgs/{orgId}/apps", "GET /v1/orgs/{orgId}/apps/{appId}", "PATCH /v1/orgs/{orgId}/apps/{appId}", "DELETE /v1/orgs/{orgId}/apps/{appId}", "POST /v1/apps/{appId}/widget-tokens", "GET /v1/apps/{appId}/widget-settings", "GET /v1/me/entitlements", "GET /v1/orgs/{orgId}/entitlements", "GET /v1/me/export", "DELETE /v1/me"]
+events: ["dev.synthwerk.identity.org.created.v1", "dev.synthwerk.identity.user.created.v1", "dev.synthwerk.identity.member.role_changed.v1", "dev.synthwerk.identity.app.created.v1", "dev.synthwerk.identity.org.entitlements_changed.v1", "dev.synthwerk.identity.member.invited.v1", "dev.synthwerk.identity.member.invite_revoked.v1", "dev.synthwerk.identity.member.deactivated.v1", "dev.synthwerk.identity.member.reactivated.v1", "dev.synthwerk.identity.user.deleted.v1"]
 mcp: []
 updated: 2026-10-30
 ---
@@ -45,6 +45,8 @@ updated: 2026-10-30
 - `GET /v1/me/entitlements` returns the plan and the limits of the token's org. A service that acts for a user forwards the caller's token (llm quotas).
 - `GET /v1/orgs/{orgId}/entitlements` returns the plan and the limits of one org (any org role, or operator).
 - A new org gets the plan `free`. Every change of a plan or its limits emits `dev.synthwerk.identity.org.entitlements_changed.v1` with the full new state (#31).
+- `GET /v1/me/export` returns every row Synthwerk keeps about the caller: the identity rows, plus the export of each service that keeps user rows (today llm), asked with the caller's token (#41).
+- `DELETE /v1/me` deletes the caller's account. It needs a sign-in with MFA in the last 15 minutes. It emits `dev.synthwerk.identity.user.deleted.v1`; the other services delete the user's rows when they get it (#41).
 - Creating an org emits `dev.synthwerk.identity.org.created.v1`.
 - A new Zitadel user (Action webhook) emits `dev.synthwerk.identity.user.created.v1`, with Zitadel ids only.
 - Go: package `github.com/VelimirMueller/synthwerk-contracts/go/identity`. TS: `createIdentityClient` in `@synthwerk/contracts`.
@@ -83,6 +85,10 @@ updated: 2026-10-30
 | Widget settings | `position` `bottom-right`/`bottom-left`, `theme` `default`/`contrast`, `mode` `system`/`light`/`dark`, `lang` `auto`/`de`/`en`, `accent` `flagship`/`lab`/`ops`/`venture`, `greeting` 0 to 280 characters, plain text |
 | Widget settings read | No token. `Origin` must be in the allow-list. `Cache-Control: no-cache`, refusals `no-store`. Settings only: no origins, org or name |
 | CORS caching | Widget settings and widget token routes send `Vary: Origin` on every answer, preflight included. Token answers and refusals send `Cache-Control: no-store` |
+| Export | One JSON document, `format_version` 1. `complete` is false when a service did not answer; `services[].data` is that service's own export schema (`LlmExport`) |
+| Account delete | Token with `amr` `mfa` and a gated sign-in at most 15 minutes old, else 403 `recent_mfa_required`. Operators get 403 `forbidden` |
+| Last owner on delete | Only owner of an org with other members: 409 `last_owner`, nothing changes. Only member of an org: the org closes with the account (`deleted_org_ids`) |
+| After delete | Identity rows go in one transaction with the event. The Zitadel user is removed after the answer, with retries. Old tokens stay valid until they expire |
 | Widget token keys | Public keys at `/.well-known/jwks.json` of identity (outside the OpenAPI, no token) |
 
 ## Events
@@ -98,6 +104,7 @@ updated: 2026-10-30
 | `dev.synthwerk.identity.member.invite_revoked.v1` | An owner or admin revoked a pending invitation. `invitation_id` and `role`, no email. |
 | `dev.synthwerk.identity.member.deactivated.v1` | An owner or admin deactivated a member. `user_sub` and the kept `role`. |
 | `dev.synthwerk.identity.member.reactivated.v1` | An owner or admin reactivated a member. `user_sub` and `role`. |
+| `dev.synthwerk.identity.user.deleted.v1` | A user deleted the own account. `user_sub` and the orgs that closed with it. Consumers delete or anonymise the user's rows. |
 
 ## Errors
 
@@ -107,10 +114,11 @@ updated: 2026-10-30
 | 401 | `unauthenticated` | Token missing or not valid. |
 | 403 | `forbidden` | Role does not allow the call. Generic body. |
 | 403 | `app_limit_reached` | The org has `apps_per_org` apps already. |
+| 403 | `recent_mfa_required` | Account delete without a sign-in with MFA in the last 15 minutes. |
 | 403 | `origin_not_allowed` | The `Origin` header is missing or not in the allow-list of the app. |
 | 404 | `not_found` | Unknown org or app, or the caller is not a member. Same body. |
 | 409 | `slug_taken` | Another org has the slug. |
-| 409 | `last_owner` | The org would lose its last owner. |
+| 409 | `last_owner` | The org would lose its last owner (role change or account delete). |
 | 409 | `own_role` | The caller tried to change their own role. |
 | 409 | `own_membership` | The caller tried to deactivate their own membership. |
 | 409 | `member_exists` | The invited email is an active or deactivated member of this org. |
@@ -145,6 +153,9 @@ updated: 2026-10-30
 - `tests/contract/identity_client_test.go` — `Client <operation> - 404 problem - method and path match the spec` (every operation)
 - `tests/contract/identity_entitlements_test.go` — `GetMyEntitlements - spec example - free plan with its limits` (and `GetOrgEntitlements`)
 - `tests/contract/identity_entitlements_test.go` — `GetOrgEntitlements - unknown org - 404 problem, method and path match the spec` (and `GetMyEntitlements`)
+- `tests/contract/identity_account_test.go` — `ExportMe - spec example - identity rows and the llm part`; `ExportMe - no token - 401 unauthenticated`
+- `tests/contract/identity_account_test.go` — `DeleteMe - spec example - accepted with the closed org`
+- `tests/contract/identity_account_test.go` — `DeleteMe - no recent MFA - 403 recent_mfa_required`; `last owner of an org with members - 409 last_owner`; `no token - 401 unauthenticated`
 - `tests/contract/events_test.go` — `Catalog - each entry - names, schema $id and example match`
 
 ## Changes
@@ -159,3 +170,4 @@ updated: 2026-10-30
 | 2026-10-29 | Add entitlements: `GET /v1/me/entitlements`, `GET /v1/orgs/{orgId}/entitlements` and `org.entitlements_changed.v1` (synthwerk#31). Spec 0.2.0. |
 | 2026-10-30 | Add widget settings (`updateApp`, `GET /v1/apps/{appId}/widget-settings`) and 403 `app_limit_reached` on `createApp` (synthwerk#38). Spec 0.3.0. |
 | 2026-10-30 | Add invite, deactivate and reactivate members, the member `status`, the invite rate limit, pending invitations and their revoke, the audit list and `member.invited.v1`, `member.invite_revoked.v1`, `member.deactivated.v1` and `member.reactivated.v1` (synthwerk#37). Spec 0.4.0. |
+| 2026-10-30 | Add `GET /v1/me/export`, `DELETE /v1/me`, problem code `recent_mfa_required` and `user.deleted.v1` (synthwerk#41). Spec 0.5.0. |

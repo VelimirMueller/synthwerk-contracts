@@ -4,6 +4,29 @@
  */
 
 export interface paths {
+    "/v1/me/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export the own data
+         * @description Every conversation, message and quota row of the caller, in every org (synthwerk#41).
+         *     - The owner comes from the token `sub` only. Rows of other users never appear, also not the shared org row of a quota.
+         *     - Every conversation llm still keeps is in it, also one marked deleted.
+         *     - Any signed-in user may call it with the Zitadel access token. A widget token (claim `synthwerk:origin`) gets 403: the export is for the user, not for an embedded widget.
+         */
+        get: operations["llm.exportMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/conversations": {
         parameters: {
             query?: never;
@@ -176,6 +199,58 @@ export interface components {
              */
             event: "error";
             data: components["schemas"]["Problem"];
+        };
+        /** @description Every row llm keeps about one user. Identity embeds it in `UserExport` as the `data` of service `llm`. */
+        LlmExport: {
+            /** @description Conversations of the user in every org, oldest first. */
+            conversations: components["schemas"]["ExportConversation"][];
+            /** @description The user's own token use per org and UTC day, oldest first. Never the shared org row. */
+            quota_usage: components["schemas"]["ExportQuotaUsage"][];
+        };
+        ExportConversation: {
+            /** Format: uuid */
+            id: string;
+            /** @description The org of the token that created the conversation (Zitadel org id). */
+            org_id: string;
+            model: components["schemas"]["ModelAlias"];
+            /** Format: date-time */
+            created_at: string;
+            /** @description Messages, oldest first. */
+            messages: components["schemas"]["ExportMessage"][];
+        };
+        ExportMessage: {
+            /** Format: uuid */
+            id: string;
+            role: components["schemas"]["MessageRole"];
+            /** @description Plain text. Never HTML. */
+            content: string;
+            status: components["schemas"]["MessageStatus"];
+            /**
+             * Format: int32
+             * @description Input tokens of the answer. Only on assistant messages that finished.
+             */
+            tokens_in?: number;
+            /**
+             * Format: int32
+             * @description Output tokens of the answer. Only on assistant messages that finished.
+             */
+            tokens_out?: number;
+            /** Format: date-time */
+            created_at: string;
+        };
+        ExportQuotaUsage: {
+            /** @description Zitadel org id. */
+            org_id: string;
+            /**
+             * Format: date
+             * @description The UTC day.
+             */
+            window_start: string;
+            /**
+             * Format: int64
+             * @description Tokens the user used in the org that day.
+             */
+            used: number;
         };
         /**
          * @description RFC 9457 problem details with the stable Synthwerk `code`.
@@ -376,6 +451,65 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    "llm.exportMe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The export. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "conversations": [
+                     *         {
+                     *           "id": "6f1c2d3e-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+                     *           "org_id": "396370208765350663",
+                     *           "model": "default",
+                     *           "created_at": "2026-10-23T09:00:00Z",
+                     *           "messages": [
+                     *             {
+                     *               "id": "0199f3b0-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+                     *               "role": "user",
+                     *               "content": "What does pulse check?",
+                     *               "status": "completed",
+                     *               "created_at": "2026-10-23T09:00:05Z"
+                     *             },
+                     *             {
+                     *               "id": "0199f3b0-1a2c-7c3d-8e4f-5a6b7c8d9e10",
+                     *               "role": "assistant",
+                     *               "content": "Pulse reads /readyz of every service.",
+                     *               "status": "completed",
+                     *               "tokens_in": 12,
+                     *               "tokens_out": 9,
+                     *               "created_at": "2026-10-23T09:00:05Z"
+                     *             }
+                     *           ]
+                     *         }
+                     *       ],
+                     *       "quota_usage": [
+                     *         {
+                     *           "org_id": "396370208765350663",
+                     *           "window_start": "2026-10-23",
+                     *           "used": 21
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["LlmExport"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
     "llm.createConversation": {
         parameters: {
             query?: never;
