@@ -8,7 +8,7 @@ paths: ["openapi/llm/**", "codegen/oapi-codegen.llm.yaml", "events/llm/message.c
 api: ["POST /v1/conversations", "GET /v1/conversations/{id}", "POST /v1/conversations/{id}/messages"]
 events: ["dev.synthwerk.llm.message.completed.v1"]
 mcp: []
-updated: 2026-10-23
+updated: 2026-10-29
 ---
 
 # LLM chat API
@@ -66,9 +66,29 @@ data: <one line of JSON>
 |---|---|
 | Message input | max 8000 characters (413 above) |
 | Open streams per owner | default 2 (429 above) |
+| Token quota per user and per org | per UTC day, set by the service (429 `quota_exhausted` above) |
 | Heartbeat | every 15 s |
 | Text format | plain text only, never HTML |
 | Token | Bearer JWT on every route |
+
+## Quota error
+
+A send over quota answers `429` before any model call (synthwerk#33):
+
+```json
+{
+  "type": "https://schemas.synthwerk.dev/problems/quota_exhausted",
+  "title": "Quota exhausted",
+  "status": 429,
+  "code": "quota_exhausted",
+  "quota": { "scope": "user", "unit": "tokens", "limit": 50000, "resets_at": "2026-10-24T00:00:00Z" }
+}
+```
+
+- `quota.scope`: `user` (the caller's own quota in this org) or `org` (the shared quota of the org).
+- `quota.limit`: tokens per window for that scope. `quota.resets_at`: start of the next window.
+- `Retry-After`: seconds until `resets_at`.
+- `quota` holds no usage of other users. It is optional: other problems never carry it.
 
 ## Events
 
@@ -86,14 +106,16 @@ data: <one line of JSON>
 | 404 | `not_found` | Unknown id or another owner's id. Same body. |
 | 413 | `input_too_large` | Message above the input limit. |
 | 429 | `too_many_streams` | Owner has the max number of open streams. |
-| 429 | `quota_exhausted` | Reserved (D-46). M2 never sends it. |
+| 429 | `quota_exhausted` | User or org quota of the window used up. No model call. Body member `quota`; `Retry-After` = seconds to the reset. |
 | 503 | `model_unavailable` | Provider down or busy. Also an `error` event mid-stream. |
 
 ## Tests
 
 - `tests/contract/llm_test.go` — `StreamEvent - each spec example - decodes to its event type`
 - `tests/contract/llm_test.go` — `SendMessage - no token - 401 problem with code unauthenticated`
-- `tests/contract/llm_test.go` — `Problem - quota_exhausted - reserved in the 429 response`
+- `tests/contract/llm_test.go` — `Problem - each 429 example - decodes strictly to a Problem with its code`
+- `tests/contract/llm_test.go` — `Problem - quota_exhausted - names scope, unit, limit and reset`
+- `tests/contract/llm_test.go` — `Problem - quota member - only in the problem schema, optional`
 - `tests/contract/events_test.go` — `Catalog - each entry - names, schema $id and example match`
 
 ## Changes
@@ -102,3 +124,4 @@ data: <one line of JSON>
 |---|---|
 | 2026-10-23 | First version: conversations, stream events, problem codes, `message.completed` event. |
 | 2026-10-23 | `message.completed` carries the org id in the `orgid` extension. `tenantid` is deprecated (D-44). |
+| 2026-10-29 | `quota_exhausted` is sent (synthwerk#33). New optional problem member `quota` (`QuotaExceeded`). Spec version 0.2.0. |

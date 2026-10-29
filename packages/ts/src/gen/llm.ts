@@ -189,7 +189,7 @@ export interface components {
          *     | `not_found` | 404 | Unknown id or another owner's id. |
          *     | `input_too_large` | 413 | Message above the input limit. |
          *     | `too_many_streams` | 429 | Owner has the max number of open streams. |
-         *     | `quota_exhausted` | 429 | Reserved (D-46). Not sent in M2. |
+         *     | `quota_exhausted` | 429 | User or org quota used up. `quota` names the scope and the reset. |
          *     | `model_unavailable` | 503 | Provider down or busy. Also as an `error` event mid-stream. |
          */
         Problem: {
@@ -210,6 +210,34 @@ export interface components {
             instance?: string;
             /** @description W3C trace id of the request, for support. */
             trace_id?: string;
+            quota?: components["schemas"]["QuotaExceeded"];
+        };
+        /**
+         * @description The quota that ran out. Only in a `quota_exhausted` problem.
+         *     No usage numbers of other users: a member sees the org limit, never the use of a peer.
+         */
+        QuotaExceeded: {
+            /**
+             * @description - `user`: the caller used up the own quota in this org.
+             *     - `org`: the org used up the shared quota of all its users.
+             * @enum {string}
+             */
+            scope: "user" | "org";
+            /**
+             * @description What the quota counts. Input plus output tokens of every answer.
+             * @enum {string}
+             */
+            unit: "tokens";
+            /**
+             * Format: int64
+             * @description Tokens per window for this scope.
+             */
+            limit: number;
+            /**
+             * Format: date-time
+             * @description Start of the next window (UTC). The quota is full again from then.
+             */
+            resets_at: string;
         };
     };
     responses: {
@@ -304,7 +332,9 @@ export interface components {
         };
         /**
          * @description - `too_many_streams`: the owner already has the max number of open streams (default 2).
-         *     - `quota_exhausted`: reserved (D-46). M2 has no quotas and never sends it. Clients must handle it already.
+         *     - `quota_exhausted`: the user or the org used up its token quota of the window (D-46, #33). The model sees no call.
+         *       The body holds `quota`: the scope that ran out, its limit and when the window resets.
+         *       `Retry-After` is the number of seconds until that reset.
          */
         TooManyRequests: {
             headers: {
@@ -313,14 +343,6 @@ export interface components {
                 [name: string]: unknown;
             };
             content: {
-                /**
-                 * @example {
-                 *       "type": "https://schemas.synthwerk.dev/problems/too_many_streams",
-                 *       "title": "Too many streams",
-                 *       "status": 429,
-                 *       "code": "too_many_streams"
-                 *     }
-                 */
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };

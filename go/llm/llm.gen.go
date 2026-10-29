@@ -124,6 +124,39 @@ func (e MessageStatus) Valid() bool {
 	}
 }
 
+// Defines values for QuotaExceededScope.
+const (
+	QuotaExceededScopeOrg  QuotaExceededScope = "org"
+	QuotaExceededScopeUser QuotaExceededScope = "user"
+)
+
+// Valid indicates whether the value is a known member of the QuotaExceededScope enum.
+func (e QuotaExceededScope) Valid() bool {
+	switch e {
+	case QuotaExceededScopeOrg:
+		return true
+	case QuotaExceededScopeUser:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for QuotaExceededUnit.
+const (
+	QuotaExceededUnitTokens QuotaExceededUnit = "tokens"
+)
+
+// Valid indicates whether the value is a known member of the QuotaExceededUnit enum.
+func (e QuotaExceededUnit) Valid() bool {
+	switch e {
+	case QuotaExceededUnitTokens:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UsageEventEvent.
 const (
 	UsageEventEventUsage UsageEventEvent = "usage"
@@ -209,7 +242,7 @@ type ErrorEvent struct {
 	// | `not_found` | 404 | Unknown id or another owner's id. |
 	// | `input_too_large` | 413 | Message above the input limit. |
 	// | `too_many_streams` | 429 | Owner has the max number of open streams. |
-	// | `quota_exhausted` | 429 | Reserved (D-46). Not sent in M2. |
+	// | `quota_exhausted` | 429 | User or org quota used up. `quota` names the scope and the reset. |
 	// | `model_unavailable` | 503 | Provider down or busy. Also as an `error` event mid-stream. |
 	Data  Problem         `json:"data"`
 	Event ErrorEventEvent `json:"event"`
@@ -256,7 +289,7 @@ type ModelAlias = string
 // | `not_found` | 404 | Unknown id or another owner's id. |
 // | `input_too_large` | 413 | Message above the input limit. |
 // | `too_many_streams` | 429 | Owner has the max number of open streams. |
-// | `quota_exhausted` | 429 | Reserved (D-46). Not sent in M2. |
+// | `quota_exhausted` | 429 | User or org quota used up. `quota` names the scope and the reset. |
 // | `model_unavailable` | 503 | Provider down or busy. Also as an `error` event mid-stream. |
 type Problem struct {
 	// Code Stable machine code, for example `model_unavailable`.
@@ -267,6 +300,10 @@ type Problem struct {
 
 	// Instance URI of this instance, for example the request path.
 	Instance *string `json:"instance,omitempty"`
+
+	// Quota The quota that ran out. Only in a `quota_exhausted` problem.
+	// No usage numbers of other users: a member sees the org limit, never the use of a peer.
+	Quota *QuotaExceeded `json:"quota,omitempty"`
 
 	// Status HTTP status. In an `error` event the HTTP status stays 200; this field holds the status the error maps to.
 	Status int `json:"status"`
@@ -280,6 +317,30 @@ type Problem struct {
 	// Type `https://schemas.synthwerk.dev/problems/<code>`.
 	Type string `json:"type"`
 }
+
+// QuotaExceeded The quota that ran out. Only in a `quota_exhausted` problem.
+// No usage numbers of other users: a member sees the org limit, never the use of a peer.
+type QuotaExceeded struct {
+	// Limit Tokens per window for this scope.
+	Limit int64 `json:"limit"`
+
+	// ResetsAt Start of the next window (UTC). The quota is full again from then.
+	ResetsAt time.Time `json:"resets_at"`
+
+	// Scope - `user`: the caller used up the own quota in this org.
+	// - `org`: the org used up the shared quota of all its users.
+	Scope QuotaExceededScope `json:"scope"`
+
+	// Unit What the quota counts. Input plus output tokens of every answer.
+	Unit QuotaExceededUnit `json:"unit"`
+}
+
+// QuotaExceededScope - `user`: the caller used up the own quota in this org.
+// - `org`: the org used up the shared quota of all its users.
+type QuotaExceededScope string
+
+// QuotaExceededUnit What the quota counts. Input plus output tokens of every answer.
+type QuotaExceededUnit string
 
 // SendMessageRequest defines model for SendMessageRequest.
 type SendMessageRequest struct {
@@ -328,7 +389,7 @@ type ConversationId = openapi_types.UUID
 // | `not_found` | 404 | Unknown id or another owner's id. |
 // | `input_too_large` | 413 | Message above the input limit. |
 // | `too_many_streams` | 429 | Owner has the max number of open streams. |
-// | `quota_exhausted` | 429 | Reserved (D-46). Not sent in M2. |
+// | `quota_exhausted` | 429 | User or org quota used up. `quota` names the scope and the reset. |
 // | `model_unavailable` | 503 | Provider down or busy. Also as an `error` event mid-stream. |
 type Forbidden = Problem
 
@@ -343,7 +404,7 @@ type Forbidden = Problem
 // | `not_found` | 404 | Unknown id or another owner's id. |
 // | `input_too_large` | 413 | Message above the input limit. |
 // | `too_many_streams` | 429 | Owner has the max number of open streams. |
-// | `quota_exhausted` | 429 | Reserved (D-46). Not sent in M2. |
+// | `quota_exhausted` | 429 | User or org quota used up. `quota` names the scope and the reset. |
 // | `model_unavailable` | 503 | Provider down or busy. Also as an `error` event mid-stream. |
 type InputTooLarge = Problem
 
@@ -358,7 +419,7 @@ type InputTooLarge = Problem
 // | `not_found` | 404 | Unknown id or another owner's id. |
 // | `input_too_large` | 413 | Message above the input limit. |
 // | `too_many_streams` | 429 | Owner has the max number of open streams. |
-// | `quota_exhausted` | 429 | Reserved (D-46). Not sent in M2. |
+// | `quota_exhausted` | 429 | User or org quota used up. `quota` names the scope and the reset. |
 // | `model_unavailable` | 503 | Provider down or busy. Also as an `error` event mid-stream. |
 type InvalidRequest = Problem
 
@@ -373,7 +434,7 @@ type InvalidRequest = Problem
 // | `not_found` | 404 | Unknown id or another owner's id. |
 // | `input_too_large` | 413 | Message above the input limit. |
 // | `too_many_streams` | 429 | Owner has the max number of open streams. |
-// | `quota_exhausted` | 429 | Reserved (D-46). Not sent in M2. |
+// | `quota_exhausted` | 429 | User or org quota used up. `quota` names the scope and the reset. |
 // | `model_unavailable` | 503 | Provider down or busy. Also as an `error` event mid-stream. |
 type ModelUnavailable = Problem
 
@@ -388,7 +449,7 @@ type ModelUnavailable = Problem
 // | `not_found` | 404 | Unknown id or another owner's id. |
 // | `input_too_large` | 413 | Message above the input limit. |
 // | `too_many_streams` | 429 | Owner has the max number of open streams. |
-// | `quota_exhausted` | 429 | Reserved (D-46). Not sent in M2. |
+// | `quota_exhausted` | 429 | User or org quota used up. `quota` names the scope and the reset. |
 // | `model_unavailable` | 503 | Provider down or busy. Also as an `error` event mid-stream. |
 type NotFound = Problem
 
@@ -403,7 +464,7 @@ type NotFound = Problem
 // | `not_found` | 404 | Unknown id or another owner's id. |
 // | `input_too_large` | 413 | Message above the input limit. |
 // | `too_many_streams` | 429 | Owner has the max number of open streams. |
-// | `quota_exhausted` | 429 | Reserved (D-46). Not sent in M2. |
+// | `quota_exhausted` | 429 | User or org quota used up. `quota` names the scope and the reset. |
 // | `model_unavailable` | 503 | Provider down or busy. Also as an `error` event mid-stream. |
 type TooManyRequests = Problem
 
@@ -418,7 +479,7 @@ type TooManyRequests = Problem
 // | `not_found` | 404 | Unknown id or another owner's id. |
 // | `input_too_large` | 413 | Message above the input limit. |
 // | `too_many_streams` | 429 | Owner has the max number of open streams. |
-// | `quota_exhausted` | 429 | Reserved (D-46). Not sent in M2. |
+// | `quota_exhausted` | 429 | User or org quota used up. `quota` names the scope and the reset. |
 // | `model_unavailable` | 503 | Provider down or busy. Also as an `error` event mid-stream. |
 type Unauthenticated = Problem
 
