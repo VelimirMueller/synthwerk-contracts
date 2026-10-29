@@ -34,11 +34,11 @@
 //     the token's org id. Grants in other orgs are ignored.
 //   - No scope claim: Principal.Scopes stays empty and RequireScope refuses, until an
 //     Action sets synthwerk:scope.
-//   - Force MFA is enforced only by the Zitadel login UI. RequireMFA reads only
-//     "amr" (evidence from the sign-in), never an enrolment flag. Zitadel v4.20.0
-//     access tokens carry no "amr", and the pre-access-token Action gets no session
-//     data, so RequireMFA refuses every Zitadel token (fail closed). Do not mount it
-//     until Zitadel exposes the session factors.
+//   - RequireMFA reads only "amr" (evidence from the sign-in), never an enrolment
+//     flag. Zitadel v4.20.0 access tokens carry "amr" only with the MFA gate of
+//     synthwerk-identity on (synthwerk#94, synthwerk-infra ADR-0004): it refuses
+//     every sign-in without a second factor and adds the "amr" of the gated sign-in.
+//     Without the gate, Zitadel tokens have no "amr" and RequireMFA refuses them.
 //
 // RequireOrg reads a path value, so register it on the mux that matches the pattern.
 // Add v.Ready as a readiness check ("jwks") so a service is not ready without keys.
