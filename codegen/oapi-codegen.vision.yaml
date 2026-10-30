@@ -1,0 +1,10 @@
+# oapi-codegen v2 config: Go types and client for openapi/vision/openapi.yaml.
+# Run: just gen
+package: vision
+generate:
+  models: true
+  client: true
+output: go/vision/vision.gen.go
+compatibility:
+  # Enum constants carry their type name: no clashes across schemas.
+  always-prefix-enum-values: true

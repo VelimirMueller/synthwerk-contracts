@@ -3,6 +3,7 @@ import createClient, { type ClientOptions } from "openapi-fetch";
 import type { components, paths } from "./gen/health.ts";
 import type { components as IdentityComponents, paths as IdentityPaths } from "./gen/identity.ts";
 import type { components as LlmComponents, paths as LlmPaths } from "./gen/llm.ts";
+import type { components as VisionComponents, paths as VisionPaths } from "./gen/vision.ts";
 
 export type HealthPaths = paths;
 export type Liveness = components["schemas"]["Liveness"];
@@ -50,4 +51,19 @@ export type WidgetToken = IdentityComponents["schemas"]["WidgetToken"];
 /** Client for the identity API (the caller, orgs, roles, apps and widget tokens). */
 export function createIdentityClient(options: ClientOptions) {
   return createClient<IdentityPaths>(options);
+}
+
+export type { VisionPaths };
+export type LabelSet = VisionComponents["schemas"]["LabelSet"];
+export type Label = VisionComponents["schemas"]["Label"];
+export type LabelTopic = VisionComponents["schemas"]["Topic"];
+export type CreateLabelRequest = VisionComponents["schemas"]["CreateLabelRequest"];
+export type Feedback = VisionComponents["schemas"]["Feedback"];
+
+/**
+ * Client for the vision label-set admin routes. Server side only: the bearer is the vision
+ * admin token, a service credential that must never reach a browser.
+ */
+export function createVisionClient(options: ClientOptions) {
+  return createClient<VisionPaths>(options);
 }

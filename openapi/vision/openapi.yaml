@@ -1,0 +1,398 @@
+openapi: 3.1.0
+info:
+  title: Synthwerk vision label sets
+  version: 0.1.0
+  summary: Label sets and corrections per org. The admin routes of synthwerk-vision.
+  description: |
+    The label-set admin contract of synthwerk-vision (synthwerk#44).
+    - Each org can have its own label set and its own corrections. An org without its own set uses the default set.
+    - The first change of an org copies the default set into the org. After that, the two sets change independently.
+    - A classification uses the set and the corrections of the widget token's org (claim `urn:zitadel:iam:user:resourceowner:id`).
+    - Caller: a service with the vision admin token, today the studio BFF. The BFF checks first that the signed-in user is an active `owner` or `admin` of the org (token roles and the stored membership in identity). Vision trusts the org id in the path.
+    - The admin routes do not exist (404) when vision has no admin token.
+    - Errors are FastAPI bodies `{detail}`, not RFC 9457 problems yet. Clients branch on the status, never on `detail`.
+    - The classification and upload routes are not in this spec yet.
+  license:
+    name: MIT
+    identifier: MIT
+  contact:
+    name: Velimir Mueller
+    url: https://github.com/VelimirMueller/synthwerk-contracts
+tags:
+  - name: label-sets
+    description: The label set of an org.
+  - name: corrections
+    description: The correct label for one picture, per org.
+security:
+  - service: []
+paths:
+  /v1/orgs/{orgId}/labels:
+    parameters:
+      - $ref: "#/components/parameters/OrgId"
+    get:
+      operationId: vision.getLabelSet
+      summary: Get the label set of an org
+      description: The default set while the org has no own set (`custom` false). `labels` lists the labels added on top of the packaged taxonomy; `topics` lists every topic a new label can go under.
+      tags: [label-sets]
+      security:
+        - service: []
+      responses:
+        "200":
+          description: The label set.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LabelSet"
+              example:
+                org_id: "283746192837461928"
+                custom: true
+                labels:
+                  - id: runtime:rice-paddy
+                    name: rice paddy
+                    topic: landscape
+                    prompt: a green rice paddy field
+                    path: [landscape, rice paddy]
+                topics:
+                  - id: animal
+                    parent: null
+                    depth: 0
+                  - id: landscape
+                    parent: null
+                    depth: 0
+                total_labels: 1069
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Invalid"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+    post:
+      operationId: vision.createLabel
+      summary: Add a label to the label set of an org
+      description: |
+        Adds a text label. The model embeds the text; it does not retrain.
+        - The first change of an org copies the default set into the org.
+        - A text no worker embedded yet loads the text tower: the answer can take about 30 s.
+        - `new_topic` true creates `topic` under `topic_parent` (null = a root topic).
+        - The id is `runtime:` and a slug of the name.
+      tags: [label-sets]
+      security:
+        - service: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLabelRequest"
+            example:
+              name: rice paddy
+              topic: landscape
+              prompt: a green rice paddy field
+      responses:
+        "201":
+          description: The label is in the set and scored from now on.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Label"
+              example:
+                id: runtime:rice-paddy
+                name: rice paddy
+                topic: landscape
+                prompt: a green rice paddy field
+                path: [landscape, rice paddy]
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Invalid"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /v1/orgs/{orgId}/labels/{labelId}:
+    parameters:
+      - $ref: "#/components/parameters/OrgId"
+      - name: labelId
+        in: path
+        required: true
+        description: Id of an added label, `runtime:<slug>`.
+        schema:
+          type: string
+          maxLength: 128
+    delete:
+      operationId: vision.deleteLabel
+      summary: Remove an added label from the label set of an org
+      description: Packaged labels stay (409). The first change of an org copies the default set into the org.
+      tags: [label-sets]
+      security:
+        - service: []
+      responses:
+        "204":
+          description: The label is gone from the org set.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Invalid"
+  /v1/orgs/{orgId}/feedback:
+    parameters:
+      - $ref: "#/components/parameters/OrgId"
+    post:
+      operationId: vision.createFeedback
+      summary: Store the correct label of a picture for an org
+      description: |
+        Later classifications of the same picture (also resized or re-encoded) by this org get `correction`. Other orgs never see it.
+        - The label must be in the org's label set (409 otherwise).
+        - An org gets its own correction first, else a default correction from the operator route `POST /v1/feedback`.
+      tags: [corrections]
+      security:
+        - service: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/CreateFeedbackRequest"
+      responses:
+        "201":
+          description: The correction is stored.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Feedback"
+              example:
+                id: 42
+                label_id: runtime:rice-paddy
+                dhash: 0f1e2d3c4b5a6978
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/TooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedImage"
+        "422":
+          $ref: "#/components/responses/Invalid"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+components:
+  securitySchemes:
+    service:
+      type: http
+      scheme: bearer
+      description: The vision admin token (`SYNTHWERK_VISION_ADMIN_TOKEN`). A service credential, never sent to a browser. Not a user or widget token.
+  parameters:
+    OrgId:
+      name: orgId
+      in: path
+      required: true
+      description: The Zitadel org id, the same value as the `urn:zitadel:iam:user:resourceowner:id` claim of the widget token. Not the identity org UUID.
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9_-]{1,64}$"
+        maxLength: 64
+  schemas:
+    LabelSet:
+      type: object
+      additionalProperties: false
+      required: [org_id, custom, labels, topics, total_labels]
+      properties:
+        org_id:
+          type: string
+          maxLength: 64
+        custom:
+          type: boolean
+          description: True when the org has its own set. False, the org uses the default set.
+        labels:
+          type: array
+          maxItems: 10000
+          description: Labels added on top of the packaged taxonomy.
+          items:
+            $ref: "#/components/schemas/Label"
+        topics:
+          type: array
+          maxItems: 10000
+          description: Every topic of the set.
+          items:
+            $ref: "#/components/schemas/Topic"
+        total_labels:
+          type: integer
+          minimum: 0
+          description: All labels the model scores for the org, packaged and added.
+    Label:
+      type: object
+      additionalProperties: false
+      required: [id, name, topic, path]
+      properties:
+        id:
+          type: string
+          maxLength: 128
+        name:
+          type: string
+          maxLength: 80
+        topic:
+          type: string
+          maxLength: 80
+        prompt:
+          type: [string, "null"]
+          maxLength: 200
+          description: The text the model embeds instead of the name.
+        path:
+          type: array
+          maxItems: 32
+          description: Root topic, …, topic, label name.
+          items:
+            type: string
+            maxLength: 200
+    Topic:
+      type: object
+      additionalProperties: false
+      required: [id, parent, depth]
+      properties:
+        id:
+          type: string
+          maxLength: 80
+        parent:
+          type: [string, "null"]
+          maxLength: 80
+        depth:
+          type: integer
+          minimum: 0
+          description: 0 for a root topic.
+    CreateLabelRequest:
+      type: object
+      additionalProperties: false
+      required: [name, topic]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: The label as responses show it.
+        topic:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: An existing topic, or the new topic when `new_topic` is true.
+        prompt:
+          type: [string, "null"]
+          maxLength: 200
+          description: The text to embed instead of the name.
+        new_topic:
+          type: boolean
+          default: false
+        topic_parent:
+          type: [string, "null"]
+          maxLength: 80
+          description: Parent of the new topic. Null makes a root topic.
+    CreateFeedbackRequest:
+      type: object
+      required: [image, label_id]
+      properties:
+        image:
+          type: string
+          format: binary
+          maxLength: 5242880
+          description: JPEG, PNG or WebP. The vision upload limit applies (default 5 MiB).
+        label_id:
+          type: string
+          maxLength: 128
+          description: The correct label id. Must be in the org's label set.
+    Feedback:
+      type: object
+      additionalProperties: false
+      required: [id, label_id, dhash]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        label_id:
+          type: string
+          maxLength: 128
+        dhash:
+          type: string
+          maxLength: 16
+          description: The 64-bit difference hash of the picture, hex.
+    Error:
+      type: object
+      required: [detail]
+      description: FastAPI error body. `detail` is text for people, or the list of validation errors on 422.
+      properties:
+        detail:
+          oneOf:
+            - type: string
+              maxLength: 1024
+            - type: array
+              maxItems: 100
+              items:
+                type: object
+  responses:
+    Unauthenticated:
+      description: No or wrong admin token.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            detail: invalid token
+    NotFound:
+      description: Vision has no admin token (the route does not exist), or the label is not in the org set.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            detail: Not Found
+    Conflict:
+      description: The label clashes, the topic is unknown, the label is packaged, or the model has a fixed label set.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            detail: label 'runtime:rice-paddy' already exists
+    Invalid:
+      description: The org id or the body is not valid.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            detail:
+              - type: string_pattern_mismatch
+                loc: [path, org_id]
+                msg: String should match pattern '^[A-Za-z0-9_-]{1,64}$'
+    TooLarge:
+      description: The image is larger than the upload limit.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            detail: upload exceeds 5242880 bytes
+    UnsupportedImage:
+      description: The file is not a JPEG, PNG or WebP image.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            detail: not a JPEG, PNG or WebP image
+    Unavailable:
+      description: The model is not loaded, or the feedback store is not available.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            detail: classification model not loaded
