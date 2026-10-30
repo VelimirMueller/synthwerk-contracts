@@ -5,13 +5,7 @@
   "description": "A studio owner or admin replaced the draft of a builder page with a published version (synthwerk#108). Nothing went live. CloudEvents subject: the page id. The orgid extension and data.org_id hold the identity org id. actor: user:<sub>. No page content.",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "org_id",
-    "page_id",
-    "slug",
-    "locale",
-    "version"
-  ],
+  "required": ["org_id", "page_id", "slug", "locale", "version"],
   "properties": {
     "org_id": {
       "description": "The identity org id.",
@@ -34,10 +28,7 @@
     },
     "locale": {
       "description": "Language of the page.",
-      "enum": [
-        "de",
-        "en"
-      ]
+      "enum": ["de", "en"]
     },
     "version": {
       "description": "The published version copied into the draft.",

@@ -5,13 +5,7 @@
   "description": "A studio owner deleted a builder page with its draft and versions (synthwerk#108). CloudEvents subject: the page id. The orgid extension and data.org_id hold the identity org id. actor: user:<sub> of the owner. No page content.",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "org_id",
-    "page_id",
-    "slug",
-    "locale",
-    "previous_version"
-  ],
+  "required": ["org_id", "page_id", "slug", "locale", "previous_version"],
   "properties": {
     "org_id": {
       "description": "The identity org id.",
@@ -34,17 +28,11 @@
     },
     "locale": {
       "description": "Language of the page.",
-      "enum": [
-        "de",
-        "en"
-      ]
+      "enum": ["de", "en"]
     },
     "previous_version": {
       "description": "The version that was live before the delete. null: nothing was live.",
-      "type": [
-        "integer",
-        "null"
-      ],
+      "type": ["integer", "null"],
       "minimum": 1
     }
   }
