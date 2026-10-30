@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.synthwerk.dev/events/studio/page.unpublished.v1.json",
+  "title": "studio.page.unpublished.v1",
+  "description": "A studio owner or admin took a builder page off the public site (synthwerk#108). Every version stays; publish or roll back makes it live again. CloudEvents subject: the page id. The orgid extension and data.org_id hold the identity org id. actor: user:<sub>. No page content.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "org_id",
+    "page_id",
+    "slug",
+    "locale",
+    "previous_version"
+  ],
+  "properties": {
+    "org_id": {
+      "description": "The identity org id.",
+      "type": "string",
+      "format": "uuid",
+      "maxLength": 36
+    },
+    "page_id": {
+      "description": "The builder page id.",
+      "type": "string",
+      "format": "uuid",
+      "maxLength": 36
+    },
+    "slug": {
+      "description": "URL slug of the page. Never free text.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"
+    },
+    "locale": {
+      "description": "Language of the page.",
+      "enum": [
+        "de",
+        "en"
+      ]
+    },
+    "previous_version": {
+      "description": "The version that was live before.",
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}
