@@ -17,6 +17,41 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Classification defines model for Classification.
+type Classification struct {
+	// Correction A stored correction for this picture, or null. Prefer it over `primary`. The model scores stay as they are.
+	Correction *Correction `json:"correction,omitempty"`
+
+	// Image The classified image. Vision does not store it.
+	Image ImageInfo `json:"image"`
+
+	// Labels The top-k labels, best first.
+	Labels  []ScoredLabel `json:"labels"`
+	Model   ModelInfo     `json:"model"`
+	Primary ScoredLabel   `json:"primary"`
+
+	// RequestId The same value as the `X-Request-ID` header.
+	RequestId string `json:"request_id"`
+
+	// TimingsMs Milliseconds per step, for example `inference`, `rollup` and `total`.
+	TimingsMs map[string]float64 `json:"timings_ms"`
+	Topic     ScoredTopic        `json:"topic"`
+
+	// Topics The topics at or above the minimum score, best first.
+	Topics []ScoredTopic `json:"topics"`
+
+	// Uncertain True when the root topic score is below the threshold.
+	Uncertain bool `json:"uncertain"`
+}
+
+// Correction A stored correction for this picture.
+type Correction struct {
+	// Distance dHash bits between this picture and the corrected one.
+	Distance   int         `json:"distance"`
+	FeedbackId int         `json:"feedback_id"`
+	Label      ScoredLabel `json:"label"`
+}
+
 // CreateFeedbackRequest defines model for CreateFeedbackRequest.
 type CreateFeedbackRequest struct {
 	// Image JPEG, PNG or WebP. The vision upload limit applies (default 5 MiB).
@@ -66,6 +101,35 @@ type Feedback struct {
 	LabelId string `json:"label_id"`
 }
 
+// Image defines model for Image.
+type Image struct {
+	// ContentType `image/jpeg`, `image/png` or `image/webp`.
+	ContentType string `json:"content_type"`
+	Height      int    `json:"height"`
+
+	// Id The id vision generated for the stored image (32 hex characters today).
+	Id        string `json:"id"`
+	SizeBytes int    `json:"size_bytes"`
+	Width     int    `json:"width"`
+}
+
+// ImageInfo The classified image. Vision does not store it.
+type ImageInfo struct {
+	ContentType string `json:"content_type"`
+	Height      int    `json:"height"`
+
+	// Sha256 SHA-256 of the image bytes, hex.
+	Sha256    string `json:"sha256"`
+	SizeBytes int    `json:"size_bytes"`
+	Width     int    `json:"width"`
+}
+
+// ImageUpload defines model for ImageUpload.
+type ImageUpload struct {
+	// Image JPEG, PNG or WebP. The vision upload limit applies (default 5 MiB).
+	Image openapi_types.File `json:"image"`
+}
+
 // Label defines model for Label.
 type Label struct {
 	Id   string `json:"id"`
@@ -95,6 +159,39 @@ type LabelSet struct {
 	TotalLabels int `json:"total_labels"`
 }
 
+// ModelInfo defines model for ModelInfo.
+type ModelInfo struct {
+	Name            string `json:"name"`
+	TaxonomyVersion int    `json:"taxonomy_version"`
+}
+
+// ScoredLabel defines model for ScoredLabel.
+type ScoredLabel struct {
+	// Id Stable label id. A WordNet synset id for ImageNet labels.
+	Id    string `json:"id"`
+	Label string `json:"label"`
+
+	// Path Root topic, …, topic, label.
+	Path []string `json:"path"`
+
+	// Score The probability of this exact label.
+	Score float64 `json:"score"`
+
+	// Topic The most specific topic of the label.
+	Topic string `json:"topic"`
+}
+
+// ScoredTopic defines model for ScoredTopic.
+type ScoredTopic struct {
+	// Depth 0 for a root topic such as `animal` or `vehicle`.
+	Depth  int     `json:"depth"`
+	Id     string  `json:"id"`
+	Parent *string `json:"parent"`
+
+	// Score The sum of the probabilities of all labels below the topic.
+	Score float64 `json:"score"`
+}
+
 // Topic defines model for Topic.
 type Topic struct {
 	// Depth 0 for a root topic.
@@ -112,8 +209,14 @@ type Conflict = Error
 // Invalid FastAPI error body. `detail` is text for people, or the list of validation errors on 422.
 type Invalid = Error
 
+// NoWidgetToken FastAPI error body. `detail` is text for people, or the list of validation errors on 422.
+type NoWidgetToken = Error
+
 // NotFound FastAPI error body. `detail` is text for people, or the list of validation errors on 422.
 type NotFound = Error
+
+// StorageFull FastAPI error body. `detail` is text for people, or the list of validation errors on 422.
+type StorageFull = Error
 
 // TooLarge FastAPI error body. `detail` is text for people, or the list of validation errors on 422.
 type TooLarge = Error
@@ -126,6 +229,15 @@ type Unavailable = Error
 
 // UnsupportedImage FastAPI error body. `detail` is text for people, or the list of validation errors on 422.
 type UnsupportedImage = Error
+
+// WrongOrigin FastAPI error body. `detail` is text for people, or the list of validation errors on 422.
+type WrongOrigin = Error
+
+// VisionCreateClassificationMultipartRequestBody defines body for VisionCreateClassification for multipart/form-data ContentType.
+type VisionCreateClassificationMultipartRequestBody = ImageUpload
+
+// VisionCreateImageMultipartRequestBody defines body for VisionCreateImage for multipart/form-data ContentType.
+type VisionCreateImageMultipartRequestBody = ImageUpload
 
 // VisionCreateFeedbackMultipartRequestBody defines body for VisionCreateFeedback for multipart/form-data ContentType.
 type VisionCreateFeedbackMultipartRequestBody = CreateFeedbackRequest
@@ -269,6 +381,29 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 // The interface specification for the client above.
 type ClientInterface interface {
 
+	// VisionCreateClassificationWithBody Classify an image
+	//
+	// Classifies the image. Vision does not store it.
+	// - Answers the top-k labels, each with its topic path (for example animal, mammal, dog, beagle), and the topic scores. A topic score is the sum of the label probabilities below it.
+	// - The label set and the corrections are those of the widget token's org (synthwerk#44).
+	// - `correction` is a stored correction for this picture (resized or re-encoded copies match), else null. Prefer it over `primary`.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/classifications (the `VisionCreateClassification` operationId).
+	VisionCreateClassificationWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// VisionCreateImageWithBody Store an image for the org of the widget token
+	//
+	// Stores the image under an id that vision generates.
+	// - Each org has a byte quota and a file quota, and all orgs share a total byte quota. A full quota gives 507 and vision stores nothing.
+	// - Nothing deletes old uploads yet.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/images (the `VisionCreateImage` operationId).
+	VisionCreateImageWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// VisionCreateFeedbackWithBody Store the correct label of a picture for an org
 	//
 	// Later classifications of the same picture (also resized or re-encoded) by this org get `correction`. Other orgs never see it.
@@ -319,6 +454,49 @@ type ClientInterface interface {
 	//
 	// Corresponds with DELETE /v1/orgs/{orgId}/labels/{labelId} (the `VisionDeleteLabel` operationId).
 	VisionDeleteLabel(ctx context.Context, orgId OrgId, labelId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+// VisionCreateClassificationWithBody Classify an image
+//
+// Classifies the image. Vision does not store it.
+// - Answers the top-k labels, each with its topic path (for example animal, mammal, dog, beagle), and the topic scores. A topic score is the sum of the label probabilities below it.
+// - The label set and the corrections are those of the widget token's org (synthwerk#44).
+// - `correction` is a stored correction for this picture (resized or re-encoded copies match), else null. Prefer it over `primary`.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/classifications (the `VisionCreateClassification` operationId).
+func (c *Client) VisionCreateClassificationWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewVisionCreateClassificationRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// VisionCreateImageWithBody Store an image for the org of the widget token
+//
+// Stores the image under an id that vision generates.
+// - Each org has a byte quota and a file quota, and all orgs share a total byte quota. A full quota gives 507 and vision stores nothing.
+// - Nothing deletes old uploads yet.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/images (the `VisionCreateImage` operationId).
+func (c *Client) VisionCreateImageWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewVisionCreateImageRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 // VisionCreateFeedbackWithBody Store the correct label of a picture for an org
@@ -420,6 +598,64 @@ func (c *Client) VisionDeleteLabel(ctx context.Context, orgId OrgId, labelId str
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewVisionCreateClassificationRequestWithBody constructs an http.Request for the VisionCreateClassification method, with any body, and a specified content type
+func NewVisionCreateClassificationRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/classifications")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewVisionCreateImageRequestWithBody constructs an http.Request for the VisionCreateImage method, with any body, and a specified content type
+func NewVisionCreateImageRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/images")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
 }
 
 // NewVisionCreateFeedbackRequestWithBody constructs an http.Request for the VisionCreateFeedback method, with any body, and a specified content type
@@ -624,6 +860,29 @@ func WithBaseURL(baseURL string) ClientOption {
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
 
+	// VisionCreateClassificationWithBodyWithResponse Classify an image
+	//
+	// Classifies the image. Vision does not store it.
+	// - Answers the top-k labels, each with its topic path (for example animal, mammal, dog, beagle), and the topic scores. A topic score is the sum of the label probabilities below it.
+	// - The label set and the corrections are those of the widget token's org (synthwerk#44).
+	// - `correction` is a stored correction for this picture (resized or re-encoded copies match), else null. Prefer it over `primary`.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/classifications (the `VisionCreateClassification` operationId).
+	VisionCreateClassificationWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*VisionCreateClassificationResponse, error)
+
+	// VisionCreateImageWithBodyWithResponse Store an image for the org of the widget token
+	//
+	// Stores the image under an id that vision generates.
+	// - Each org has a byte quota and a file quota, and all orgs share a total byte quota. A full quota gives 507 and vision stores nothing.
+	// - Nothing deletes old uploads yet.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/images (the `VisionCreateImage` operationId).
+	VisionCreateImageWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*VisionCreateImageResponse, error)
+
 	// VisionCreateFeedbackWithBodyWithResponse Store the correct label of a picture for an org
 	//
 	// Later classifications of the same picture (also resized or re-encoded) by this org get `correction`. Other orgs never see it.
@@ -678,6 +937,207 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with DELETE /v1/orgs/{orgId}/labels/{labelId} (the `VisionDeleteLabel` operationId).
 	VisionDeleteLabelWithResponse(ctx context.Context, orgId OrgId, labelId string, reqEditors ...RequestEditorFn) (*VisionDeleteLabelResponse, error)
+}
+
+// VisionCreateClassificationResponse200Headers the declared response headers of an HTTP 200 response for VisionCreateClassification
+type VisionCreateClassificationResponse200Headers struct {
+	XRequestID *string
+}
+
+// VisionCreateClassificationResponse401Headers the declared response headers of an HTTP 401 response for VisionCreateClassification
+type VisionCreateClassificationResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type VisionCreateClassificationResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Classification
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *NoWidgetToken
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *WrongOrigin
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *TooLarge
+	// JSON415 the response for an HTTP 415 `application/json` response
+	JSON415 *UnsupportedImage
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *Invalid
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Unavailable
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *VisionCreateClassificationResponse200Headers
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *VisionCreateClassificationResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r VisionCreateClassificationResponse) GetJSON200() *Classification {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r VisionCreateClassificationResponse) GetJSON401() *NoWidgetToken {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r VisionCreateClassificationResponse) GetJSON403() *WrongOrigin {
+	return r.JSON403
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r VisionCreateClassificationResponse) GetJSON413() *TooLarge {
+	return r.JSON413
+}
+
+// GetJSON415 returns the response for an HTTP 415 `application/json` response
+func (r VisionCreateClassificationResponse) GetJSON415() *UnsupportedImage {
+	return r.JSON415
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r VisionCreateClassificationResponse) GetJSON422() *Invalid {
+	return r.JSON422
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r VisionCreateClassificationResponse) GetJSON503() *Unavailable {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r VisionCreateClassificationResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r VisionCreateClassificationResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r VisionCreateClassificationResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r VisionCreateClassificationResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// VisionCreateImageResponse201Headers the declared response headers of an HTTP 201 response for VisionCreateImage
+type VisionCreateImageResponse201Headers struct {
+	XRequestID *string
+}
+
+// VisionCreateImageResponse401Headers the declared response headers of an HTTP 401 response for VisionCreateImage
+type VisionCreateImageResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type VisionCreateImageResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Image
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *NoWidgetToken
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *WrongOrigin
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *TooLarge
+	// JSON415 the response for an HTTP 415 `application/json` response
+	JSON415 *UnsupportedImage
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *Invalid
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Unavailable
+	// JSON507 the response for an HTTP 507 `application/json` response
+	JSON507 *StorageFull
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *VisionCreateImageResponse201Headers
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *VisionCreateImageResponse401Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r VisionCreateImageResponse) GetJSON201() *Image {
+	return r.JSON201
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r VisionCreateImageResponse) GetJSON401() *NoWidgetToken {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r VisionCreateImageResponse) GetJSON403() *WrongOrigin {
+	return r.JSON403
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r VisionCreateImageResponse) GetJSON413() *TooLarge {
+	return r.JSON413
+}
+
+// GetJSON415 returns the response for an HTTP 415 `application/json` response
+func (r VisionCreateImageResponse) GetJSON415() *UnsupportedImage {
+	return r.JSON415
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r VisionCreateImageResponse) GetJSON422() *Invalid {
+	return r.JSON422
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r VisionCreateImageResponse) GetJSON503() *Unavailable {
+	return r.JSON503
+}
+
+// GetJSON507 returns the response for an HTTP 507 `application/json` response
+func (r VisionCreateImageResponse) GetJSON507() *StorageFull {
+	return r.JSON507
+}
+
+// GetBody returns the raw response body bytes
+func (r VisionCreateImageResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r VisionCreateImageResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r VisionCreateImageResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r VisionCreateImageResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
 }
 
 type VisionCreateFeedbackResponse struct {
@@ -984,6 +1444,41 @@ func (r VisionDeleteLabelResponse) ContentType() string {
 	return ""
 }
 
+// VisionCreateClassificationWithBodyWithResponse Classify an image
+//
+// Classifies the image. Vision does not store it.
+// - Answers the top-k labels, each with its topic path (for example animal, mammal, dog, beagle), and the topic scores. A topic score is the sum of the label probabilities below it.
+// - The label set and the corrections are those of the widget token's org (synthwerk#44).
+// - `correction` is a stored correction for this picture (resized or re-encoded copies match), else null. Prefer it over `primary`.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/classifications (the `VisionCreateClassification` operationId).
+func (c *ClientWithResponses) VisionCreateClassificationWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*VisionCreateClassificationResponse, error) {
+	rsp, err := c.VisionCreateClassificationWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseVisionCreateClassificationResponse(rsp)
+}
+
+// VisionCreateImageWithBodyWithResponse Store an image for the org of the widget token
+//
+// Stores the image under an id that vision generates.
+// - Each org has a byte quota and a file quota, and all orgs share a total byte quota. A full quota gives 507 and vision stores nothing.
+// - Nothing deletes old uploads yet.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/images (the `VisionCreateImage` operationId).
+func (c *ClientWithResponses) VisionCreateImageWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*VisionCreateImageResponse, error) {
+	rsp, err := c.VisionCreateImageWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseVisionCreateImageResponse(rsp)
+}
+
 // VisionCreateFeedbackWithBodyWithResponse Store the correct label of a picture for an org
 //
 // Later classifications of the same picture (also resized or re-encoded) by this org get `correction`. Other orgs never see it.
@@ -1067,6 +1562,195 @@ func (c *ClientWithResponses) VisionDeleteLabelWithResponse(ctx context.Context,
 		return nil, err
 	}
 	return ParseVisionDeleteLabelResponse(rsp)
+}
+
+// ParseVisionCreateClassificationResponse parses an HTTP response from a VisionCreateClassificationWithResponse call
+func ParseVisionCreateClassificationResponse(rsp *http.Response) (*VisionCreateClassificationResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &VisionCreateClassificationResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Classification
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoWidgetToken
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest WrongOrigin
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest TooLarge
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 415:
+		var dest UnsupportedImage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON415 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Invalid
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Unavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers VisionCreateClassificationResponse200Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers200 = &headers
+	case rsp.StatusCode == 401:
+		var headers VisionCreateClassificationResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseVisionCreateImageResponse parses an HTTP response from a VisionCreateImageWithResponse call
+func ParseVisionCreateImageResponse(rsp *http.Response) (*VisionCreateImageResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &VisionCreateImageResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Image
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoWidgetToken
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest WrongOrigin
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest TooLarge
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 415:
+		var dest UnsupportedImage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON415 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Invalid
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Unavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 507:
+		var dest StorageFull
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON507 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers VisionCreateImageResponse201Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers201 = &headers
+	case rsp.StatusCode == 401:
+		var headers VisionCreateImageResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
 }
 
 // ParseVisionCreateFeedbackResponse parses an HTTP response from a VisionCreateFeedbackWithResponse call

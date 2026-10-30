@@ -4,6 +4,51 @@
  */
 
 export interface paths {
+    "/v1/classifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Classify an image
+         * @description Classifies the image. Vision does not store it.
+         *     - Answers the top-k labels, each with its topic path (for example animal, mammal, dog, beagle), and the topic scores. A topic score is the sum of the label probabilities below it.
+         *     - The label set and the corrections are those of the widget token's org (synthwerk#44).
+         *     - `correction` is a stored correction for this picture (resized or re-encoded copies match), else null. Prefer it over `primary`.
+         */
+        post: operations["vision.createClassification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Store an image for the org of the widget token
+         * @description Stores the image under an id that vision generates.
+         *     - Each org has a byte quota and a file quota, and all orgs share a total byte quota. A full quota gives 507 and vision stores nothing.
+         *     - Nothing deletes old uploads yet.
+         */
+        post: operations["vision.createImage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{orgId}/labels": {
         parameters: {
             query?: never;
@@ -89,6 +134,87 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ImageUpload: {
+            /**
+             * Format: binary
+             * @description JPEG, PNG or WebP. The vision upload limit applies (default 5 MiB).
+             */
+            image: string;
+        };
+        Image: {
+            /** @description The id vision generated for the stored image (32 hex characters today). */
+            id: string;
+            /** @description `image/jpeg`, `image/png` or `image/webp`. */
+            content_type: string;
+            size_bytes: number;
+            width: number;
+            height: number;
+        };
+        /** @description The classified image. Vision does not store it. */
+        ImageInfo: {
+            /** @description SHA-256 of the image bytes, hex. */
+            sha256: string;
+            content_type: string;
+            size_bytes: number;
+            width: number;
+            height: number;
+        };
+        ModelInfo: {
+            name: string;
+            taxonomy_version: number;
+        };
+        ScoredLabel: {
+            /** @description Stable label id. A WordNet synset id for ImageNet labels. */
+            id: string;
+            label: string;
+            /**
+             * Format: double
+             * @description The probability of this exact label.
+             */
+            score: number;
+            /** @description The most specific topic of the label. */
+            topic: string;
+            /** @description Root topic, …, topic, label. */
+            path: string[];
+        };
+        ScoredTopic: {
+            id: string;
+            parent: string | null;
+            /** @description 0 for a root topic such as `animal` or `vehicle`. */
+            depth: number;
+            /**
+             * Format: double
+             * @description The sum of the probabilities of all labels below the topic.
+             */
+            score: number;
+        };
+        /** @description A stored correction for this picture. */
+        Correction: {
+            feedback_id: number;
+            label: components["schemas"]["ScoredLabel"];
+            /** @description dHash bits between this picture and the corrected one. */
+            distance: number;
+        };
+        Classification: {
+            /** @description The same value as the `X-Request-ID` header. */
+            request_id: string;
+            image: components["schemas"]["ImageInfo"];
+            model: components["schemas"]["ModelInfo"];
+            primary: components["schemas"]["ScoredLabel"];
+            topic: components["schemas"]["ScoredTopic"];
+            /** @description The top-k labels, best first. */
+            labels: components["schemas"]["ScoredLabel"][];
+            /** @description The topics at or above the minimum score, best first. */
+            topics: components["schemas"]["ScoredTopic"][];
+            /** @description True when the root topic score is below the threshold. */
+            uncertain: boolean;
+            /** @description A stored correction for this picture, or null. Prefer it over `primary`. The model scores stay as they are. */
+            correction?: components["schemas"]["Correction"] | null;
+            /** @description Milliseconds per step, for example `inference`, `rollup` and `total`. */
+            timings_ms: {
+                [key: string]: number;
+            };
+        };
         LabelSet: {
             org_id: string;
             /** @description True when the org has its own set. False, the org uses the default set. */
@@ -148,6 +274,50 @@ export interface components {
         };
     };
     responses: {
+        /** @description No widget token, a token that is not valid, or not a widget token. The body never names the reason. */
+        NoWidgetToken: {
+            headers: {
+                /** @description `Bearer` without a token, `Bearer error="invalid_token"` with a refused token. */
+                "WWW-Authenticate"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "detail": "a valid widget token is required"
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The token is valid, but the `Origin` header is missing, different from the token origin, or sent twice. */
+        WrongOrigin: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "detail": "origin does not match the widget token"
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The upload quota of the org, or the total quota, is full. Vision stored nothing. */
+        StorageFull: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "detail": "upload storage quota reached"
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description No or wrong admin token. */
         Unauthenticated: {
             headers: {
@@ -190,7 +360,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description The org id or the body is not valid. */
+        /** @description The org id or the body is not valid, for example no `image` field. */
         Invalid: {
             headers: {
                 [name: string]: unknown;
@@ -235,13 +405,13 @@ export interface components {
             content: {
                 /**
                  * @example {
-                 *       "detail": "not a JPEG, PNG or WebP image"
+                 *       "detail": "unsupported image format: GIF"
                  *     }
                  */
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description The model is not loaded, or the feedback store is not available. */
+        /** @description The model is not loaded, the token keys cannot be loaded, the upload storage does not answer, or the feedback store is not available. */
         Unavailable: {
             headers: {
                 [name: string]: unknown;
@@ -261,11 +431,164 @@ export interface components {
         OrgId: string;
     };
     requestBodies: never;
-    headers: never;
+    headers: {
+        /** @description The request id. A caller value of 1 to 64 characters `[A-Za-z0-9_.-]` is kept, else vision generates one. Every answer has it, errors included. */
+        RequestId: string;
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    "vision.createClassification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["ImageUpload"];
+            };
+        };
+        responses: {
+            /** @description The classification. */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "request_id": "da71efe1c2b94f0e8a7d3b6c5e4f2a10",
+                     *       "image": {
+                     *         "sha256": "99645f6c6ed4a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a",
+                     *         "content_type": "image/jpeg",
+                     *         "size_bytes": 149115,
+                     *         "width": 960,
+                     *         "height": 480
+                     *       },
+                     *       "model": {
+                     *         "name": "siglip2-base-patch16-224",
+                     *         "taxonomy_version": 1
+                     *       },
+                     *       "primary": {
+                     *         "id": "open:hut",
+                     *         "label": "hut",
+                     *         "score": 0.3229,
+                     *         "topic": "building",
+                     *         "path": [
+                     *           "building and structure",
+                     *           "building",
+                     *           "hut"
+                     *         ]
+                     *       },
+                     *       "topic": {
+                     *         "id": "building and structure",
+                     *         "parent": null,
+                     *         "depth": 0,
+                     *         "score": 0.815
+                     *       },
+                     *       "labels": [
+                     *         {
+                     *           "id": "open:hut",
+                     *           "label": "hut",
+                     *           "score": 0.3229,
+                     *           "topic": "building",
+                     *           "path": [
+                     *             "building and structure",
+                     *             "building",
+                     *             "hut"
+                     *           ]
+                     *         },
+                     *         {
+                     *           "id": "n02859443",
+                     *           "label": "boathouse",
+                     *           "score": 0.1376,
+                     *           "topic": "building",
+                     *           "path": [
+                     *             "building and structure",
+                     *             "building",
+                     *             "boathouse"
+                     *           ]
+                     *         }
+                     *       ],
+                     *       "topics": [
+                     *         {
+                     *           "id": "building and structure",
+                     *           "parent": null,
+                     *           "depth": 0,
+                     *           "score": 0.815
+                     *         },
+                     *         {
+                     *           "id": "building",
+                     *           "parent": "building and structure",
+                     *           "depth": 1,
+                     *           "score": 0.7964
+                     *         }
+                     *       ],
+                     *       "uncertain": false,
+                     *       "correction": null,
+                     *       "timings_ms": {
+                     *         "inference": 31.45,
+                     *         "rollup": 0.14,
+                     *         "total": 35.72
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Classification"];
+                };
+            };
+            401: components["responses"]["NoWidgetToken"];
+            403: components["responses"]["WrongOrigin"];
+            413: components["responses"]["TooLarge"];
+            415: components["responses"]["UnsupportedImage"];
+            422: components["responses"]["Invalid"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    "vision.createImage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["ImageUpload"];
+            };
+        };
+        responses: {
+            /** @description The image is stored. */
+            201: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "3f2b8c1e9d4a4b7e8f60a1b2c3d4e5f6",
+                     *       "content_type": "image/jpeg",
+                     *       "size_bytes": 149115,
+                     *       "width": 960,
+                     *       "height": 480
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Image"];
+                };
+            };
+            401: components["responses"]["NoWidgetToken"];
+            403: components["responses"]["WrongOrigin"];
+            413: components["responses"]["TooLarge"];
+            415: components["responses"]["UnsupportedImage"];
+            422: components["responses"]["Invalid"];
+            503: components["responses"]["Unavailable"];
+            507: components["responses"]["StorageFull"];
+        };
+    };
     "vision.getLabelSet": {
         parameters: {
             query?: never;

@@ -1,17 +1,18 @@
 openapi: 3.1.0
 info:
-  title: Synthwerk vision label sets
-  version: 0.1.0
-  summary: Label sets and corrections per org. The admin routes of synthwerk-vision.
+  title: Synthwerk vision
+  version: 0.2.0
+  summary: Classification, upload, and the label sets and corrections per org of synthwerk-vision.
   description: |
-    The label-set admin contract of synthwerk-vision (synthwerk#44).
+    The contract of synthwerk-vision: classification and upload for widgets (synthwerk#76), and the label-set admin routes (synthwerk#44).
+    - Classification and upload need a widget token from identity (`POST /v1/apps/{appId}/widget-tokens`) and the matching `Origin` header. The token is origin-bound and lives at most 15 min.
+    - Both take `multipart/form-data` with one field, `image` (JPEG, PNG or WebP). The upload limit is `SYNTHWERK_VISION_MAX_UPLOAD_BYTES` (default 5 MiB).
     - Each org can have its own label set and its own corrections. An org without its own set uses the default set.
     - The first change of an org copies the default set into the org. After that, the two sets change independently.
     - A classification uses the set and the corrections of the widget token's org (claim `urn:zitadel:iam:user:resourceowner:id`).
-    - Caller: a service with the vision admin token, today the studio BFF. The BFF checks first that the signed-in user is an active `owner` or `admin` of the org (token roles and the stored membership in identity). Vision trusts the org id in the path.
+    - Admin caller: a service with the vision admin token, today the studio BFF. The BFF checks first that the signed-in user is an active `owner` or `admin` of the org (token roles and the stored membership in identity). Vision trusts the org id in the path.
     - The admin routes do not exist (404) when vision has no admin token.
     - Errors are FastAPI bodies `{detail}`, not RFC 9457 problems yet. Clients branch on the status, never on `detail`.
-    - The classification and upload routes are not in this spec yet.
   license:
     name: MIT
     identifier: MIT
@@ -19,6 +20,10 @@ info:
     name: Velimir Mueller
     url: https://github.com/VelimirMueller/synthwerk-contracts
 tags:
+  - name: classification
+    description: Classify an image without storing it.
+  - name: images
+    description: Store an image for the org of the widget token.
   - name: label-sets
     description: The label set of an org.
   - name: corrections
@@ -26,6 +31,141 @@ tags:
 security:
   - service: []
 paths:
+  /v1/classifications:
+    post:
+      operationId: vision.createClassification
+      summary: Classify an image
+      description: |
+        Classifies the image. Vision does not store it.
+        - Answers the top-k labels, each with its topic path (for example animal, mammal, dog, beagle), and the topic scores. A topic score is the sum of the label probabilities below it.
+        - The label set and the corrections are those of the widget token's org (synthwerk#44).
+        - `correction` is a stored correction for this picture (resized or re-encoded copies match), else null. Prefer it over `primary`.
+      tags: [classification]
+      security:
+        - widget: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/ImageUpload"
+      responses:
+        "200":
+          description: The classification.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Classification"
+              example:
+                request_id: da71efe1c2b94f0e8a7d3b6c5e4f2a10
+                image:
+                  sha256: 99645f6c6ed4a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a
+                  content_type: image/jpeg
+                  size_bytes: 149115
+                  width: 960
+                  height: 480
+                model:
+                  name: siglip2-base-patch16-224
+                  taxonomy_version: 1
+                primary:
+                  id: open:hut
+                  label: hut
+                  score: 0.3229
+                  topic: building
+                  path: [building and structure, building, hut]
+                topic:
+                  id: building and structure
+                  parent: null
+                  depth: 0
+                  score: 0.815
+                labels:
+                  - id: open:hut
+                    label: hut
+                    score: 0.3229
+                    topic: building
+                    path: [building and structure, building, hut]
+                  - id: n02859443
+                    label: boathouse
+                    score: 0.1376
+                    topic: building
+                    path: [building and structure, building, boathouse]
+                topics:
+                  - id: building and structure
+                    parent: null
+                    depth: 0
+                    score: 0.815
+                  - id: building
+                    parent: building and structure
+                    depth: 1
+                    score: 0.7964
+                uncertain: false
+                correction: null
+                timings_ms:
+                  inference: 31.45
+                  rollup: 0.14
+                  total: 35.72
+        "401":
+          $ref: "#/components/responses/NoWidgetToken"
+        "403":
+          $ref: "#/components/responses/WrongOrigin"
+        "413":
+          $ref: "#/components/responses/TooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedImage"
+        "422":
+          $ref: "#/components/responses/Invalid"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /v1/images:
+    post:
+      operationId: vision.createImage
+      summary: Store an image for the org of the widget token
+      description: |
+        Stores the image under an id that vision generates.
+        - Each org has a byte quota and a file quota, and all orgs share a total byte quota. A full quota gives 507 and vision stores nothing.
+        - Nothing deletes old uploads yet.
+      tags: [images]
+      security:
+        - widget: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/ImageUpload"
+      responses:
+        "201":
+          description: The image is stored.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Image"
+              example:
+                id: 3f2b8c1e9d4a4b7e8f60a1b2c3d4e5f6
+                content_type: image/jpeg
+                size_bytes: 149115
+                width: 960
+                height: 480
+        "401":
+          $ref: "#/components/responses/NoWidgetToken"
+        "403":
+          $ref: "#/components/responses/WrongOrigin"
+        "413":
+          $ref: "#/components/responses/TooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedImage"
+        "422":
+          $ref: "#/components/responses/Invalid"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+        "507":
+          $ref: "#/components/responses/StorageFull"
   /v1/orgs/{orgId}/labels:
     parameters:
       - $ref: "#/components/parameters/OrgId"
@@ -189,10 +329,21 @@ paths:
           $ref: "#/components/responses/Unavailable"
 components:
   securitySchemes:
+    widget:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: A widget token from identity (`POST /v1/apps/{appId}/widget-tokens`, synthwerk#76). ES256, at most 15 min, bound to one origin by the claim `synthwerk:origin`. The browser `Origin` header must equal that claim. Never log it.
     service:
       type: http
       scheme: bearer
       description: The vision admin token (`SYNTHWERK_VISION_ADMIN_TOKEN`). A service credential, never sent to a browser. Not a user or widget token.
+  headers:
+    RequestId:
+      description: The request id. A caller value of 1 to 64 characters `[A-Za-z0-9_.-]` is kept, else vision generates one. Every answer has it, errors included.
+      schema:
+        type: string
+        maxLength: 64
   parameters:
     OrgId:
       name: orgId
@@ -204,6 +355,180 @@ components:
         pattern: "^[A-Za-z0-9_-]{1,64}$"
         maxLength: 64
   schemas:
+    ImageUpload:
+      type: object
+      required: [image]
+      properties:
+        image:
+          type: string
+          format: binary
+          maxLength: 5242880
+          description: JPEG, PNG or WebP. The vision upload limit applies (default 5 MiB).
+    Image:
+      type: object
+      additionalProperties: false
+      required: [id, content_type, size_bytes, width, height]
+      properties:
+        id:
+          type: string
+          maxLength: 128
+          description: The id vision generated for the stored image (32 hex characters today).
+        content_type:
+          type: string
+          maxLength: 32
+          description: "`image/jpeg`, `image/png` or `image/webp`."
+        size_bytes:
+          type: integer
+          minimum: 0
+        width:
+          type: integer
+          minimum: 1
+        height:
+          type: integer
+          minimum: 1
+    ImageInfo:
+      type: object
+      additionalProperties: false
+      required: [sha256, content_type, size_bytes, width, height]
+      description: The classified image. Vision does not store it.
+      properties:
+        sha256:
+          type: string
+          maxLength: 64
+          description: SHA-256 of the image bytes, hex.
+        content_type:
+          type: string
+          maxLength: 32
+        size_bytes:
+          type: integer
+          minimum: 0
+        width:
+          type: integer
+          minimum: 1
+        height:
+          type: integer
+          minimum: 1
+    ModelInfo:
+      type: object
+      additionalProperties: false
+      required: [name, taxonomy_version]
+      properties:
+        name:
+          type: string
+          maxLength: 128
+        taxonomy_version:
+          type: integer
+          minimum: 0
+    ScoredLabel:
+      type: object
+      additionalProperties: false
+      required: [id, label, score, topic, path]
+      properties:
+        id:
+          type: string
+          maxLength: 128
+          description: Stable label id. A WordNet synset id for ImageNet labels.
+        label:
+          type: string
+          maxLength: 200
+        score:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: The probability of this exact label.
+        topic:
+          type: string
+          maxLength: 80
+          description: The most specific topic of the label.
+        path:
+          type: array
+          maxItems: 32
+          description: Root topic, …, topic, label.
+          items:
+            type: string
+            maxLength: 200
+    ScoredTopic:
+      type: object
+      additionalProperties: false
+      required: [id, parent, depth, score]
+      properties:
+        id:
+          type: string
+          maxLength: 80
+        parent:
+          type: [string, "null"]
+          maxLength: 80
+        depth:
+          type: integer
+          minimum: 0
+          description: 0 for a root topic such as `animal` or `vehicle`.
+        score:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: The sum of the probabilities of all labels below the topic.
+    Correction:
+      type: object
+      additionalProperties: false
+      required: [feedback_id, label, distance]
+      description: A stored correction for this picture.
+      properties:
+        feedback_id:
+          type: integer
+          minimum: 1
+        label:
+          $ref: "#/components/schemas/ScoredLabel"
+        distance:
+          type: integer
+          minimum: 0
+          maximum: 64
+          description: dHash bits between this picture and the corrected one.
+    Classification:
+      type: object
+      additionalProperties: false
+      required: [request_id, image, model, primary, topic, labels, topics, uncertain, timings_ms]
+      properties:
+        request_id:
+          type: string
+          maxLength: 64
+          description: The same value as the `X-Request-ID` header.
+        image:
+          $ref: "#/components/schemas/ImageInfo"
+        model:
+          $ref: "#/components/schemas/ModelInfo"
+        primary:
+          $ref: "#/components/schemas/ScoredLabel"
+        topic:
+          $ref: "#/components/schemas/ScoredTopic"
+        labels:
+          type: array
+          maxItems: 1000
+          description: The top-k labels, best first.
+          items:
+            $ref: "#/components/schemas/ScoredLabel"
+        topics:
+          type: array
+          maxItems: 10000
+          description: The topics at or above the minimum score, best first.
+          items:
+            $ref: "#/components/schemas/ScoredTopic"
+        uncertain:
+          type: boolean
+          description: True when the root topic score is below the threshold.
+        correction:
+          description: A stored correction for this picture, or null. Prefer it over `primary`. The model scores stay as they are.
+          oneOf:
+            - $ref: "#/components/schemas/Correction"
+            - type: "null"
+        timings_ms:
+          type: object
+          description: Milliseconds per step, for example `inference`, `rollup` and `total`.
+          maxProperties: 32
+          additionalProperties:
+            type: number
+            format: double
     LabelSet:
       type: object
       additionalProperties: false
@@ -339,6 +664,36 @@ components:
               items:
                 type: object
   responses:
+    NoWidgetToken:
+      description: No widget token, a token that is not valid, or not a widget token. The body never names the reason.
+      headers:
+        WWW-Authenticate:
+          description: "`Bearer` without a token, `Bearer error=\"invalid_token\"` with a refused token."
+          schema:
+            type: string
+            maxLength: 64
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            detail: a valid widget token is required
+    WrongOrigin:
+      description: The token is valid, but the `Origin` header is missing, different from the token origin, or sent twice.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            detail: origin does not match the widget token
+    StorageFull:
+      description: The upload quota of the org, or the total quota, is full. Vision stored nothing.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            detail: upload storage quota reached
     Unauthenticated:
       description: No or wrong admin token.
       content:
@@ -364,7 +719,7 @@ components:
           example:
             detail: label 'runtime:rice-paddy' already exists
     Invalid:
-      description: The org id or the body is not valid.
+      description: The org id or the body is not valid, for example no `image` field.
       content:
         application/json:
           schema:
@@ -389,9 +744,9 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
           example:
-            detail: not a JPEG, PNG or WebP image
+            detail: "unsupported image format: GIF"
     Unavailable:
-      description: The model is not loaded, or the feedback store is not available.
+      description: The model is not loaded, the token keys cannot be loaded, the upload storage does not answer, or the feedback store is not available.
       content:
         application/json:
           schema:
