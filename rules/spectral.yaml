@@ -26,9 +26,9 @@ rules:
         match: "^(/healthz|/readyz|/v[1-9][0-9]*(/([a-z][a-z0-9-]*|\\{[a-z][A-Za-z0-9]*\\}))+(:[a-z][A-Za-z]*)?)$"
 
   synthwerk-security:
-    description: Every operation needs a security requirement. Only the allow-listed public paths may skip it.
+    description: Every operation needs a security requirement. Only the allow-listed public paths may skip it (probes, and the widget settings a signed-out visitor needs, synthwerk#38).
     severity: error
-    given: "$.paths[?(!@property.match(/^\\/(healthz|readyz)$/))][get,put,post,delete,patch]"
+    given: "$.paths[?(!@property.match(/^\\/(healthz|readyz|v1\\/apps\\/\\{appId\\}\\/widget-settings)$/))][get,put,post,delete,patch]"
     then:
       - field: security
         function: truthy

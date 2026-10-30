@@ -63,6 +63,108 @@ func (e Role) Valid() bool {
 	}
 }
 
+// Defines values for WidgetSettingsAccent.
+const (
+	WidgetSettingsAccentFlagship WidgetSettingsAccent = "flagship"
+	WidgetSettingsAccentLab      WidgetSettingsAccent = "lab"
+	WidgetSettingsAccentOps      WidgetSettingsAccent = "ops"
+	WidgetSettingsAccentVenture  WidgetSettingsAccent = "venture"
+)
+
+// Valid indicates whether the value is a known member of the WidgetSettingsAccent enum.
+func (e WidgetSettingsAccent) Valid() bool {
+	switch e {
+	case WidgetSettingsAccentFlagship:
+		return true
+	case WidgetSettingsAccentLab:
+		return true
+	case WidgetSettingsAccentOps:
+		return true
+	case WidgetSettingsAccentVenture:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WidgetSettingsLang.
+const (
+	WidgetSettingsLangAuto WidgetSettingsLang = "auto"
+	WidgetSettingsLangDe   WidgetSettingsLang = "de"
+	WidgetSettingsLangEn   WidgetSettingsLang = "en"
+)
+
+// Valid indicates whether the value is a known member of the WidgetSettingsLang enum.
+func (e WidgetSettingsLang) Valid() bool {
+	switch e {
+	case WidgetSettingsLangAuto:
+		return true
+	case WidgetSettingsLangDe:
+		return true
+	case WidgetSettingsLangEn:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WidgetSettingsMode.
+const (
+	WidgetSettingsModeDark   WidgetSettingsMode = "dark"
+	WidgetSettingsModeLight  WidgetSettingsMode = "light"
+	WidgetSettingsModeSystem WidgetSettingsMode = "system"
+)
+
+// Valid indicates whether the value is a known member of the WidgetSettingsMode enum.
+func (e WidgetSettingsMode) Valid() bool {
+	switch e {
+	case WidgetSettingsModeDark:
+		return true
+	case WidgetSettingsModeLight:
+		return true
+	case WidgetSettingsModeSystem:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WidgetSettingsPosition.
+const (
+	WidgetSettingsPositionBottomLeft  WidgetSettingsPosition = "bottom-left"
+	WidgetSettingsPositionBottomRight WidgetSettingsPosition = "bottom-right"
+)
+
+// Valid indicates whether the value is a known member of the WidgetSettingsPosition enum.
+func (e WidgetSettingsPosition) Valid() bool {
+	switch e {
+	case WidgetSettingsPositionBottomLeft:
+		return true
+	case WidgetSettingsPositionBottomRight:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WidgetSettingsTheme.
+const (
+	WidgetSettingsThemeContrast WidgetSettingsTheme = "contrast"
+	WidgetSettingsThemeDefault  WidgetSettingsTheme = "default"
+)
+
+// Valid indicates whether the value is a known member of the WidgetSettingsTheme enum.
+func (e WidgetSettingsTheme) Valid() bool {
+	switch e {
+	case WidgetSettingsThemeContrast:
+		return true
+	case WidgetSettingsThemeDefault:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for WidgetTokenTokenType.
 const (
 	WidgetTokenTokenTypeBearer WidgetTokenTokenType = "Bearer"
@@ -89,6 +191,12 @@ type App struct {
 	Name      string             `json:"name"`
 	OrgId     openapi_types.UUID `json:"org_id"`
 	UpdatedAt time.Time          `json:"updated_at"`
+
+	// WidgetSettings How the widget of an app looks (synthwerk#38). The studio sets them; the widget loads them (widgets#34).
+	// - An attribute on `<synthwerk-chat>` wins over the stored value.
+	// - Colours come only from `@synthwerk/tokens`: a theme and an accent group. No free CSS.
+	// - A new app gets the defaults: `bottom-right`, `default`, `system`, `auto`, `flagship`, empty greeting.
+	WidgetSettings WidgetSettings `json:"widget_settings"`
 }
 
 // AppOrigin A web origin: `scheme://host[:port]`. Identity stores and returns the canonical form.
@@ -220,6 +328,7 @@ type OrgRole string
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
+// | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type Problem struct {
 	// Code Stable machine code, for example `not_found`.
@@ -251,7 +360,52 @@ type UpdateAppRequest struct {
 	// AllowedOrigins Replaces the whole list. Two entries with the same canonical form are refused (400).
 	AllowedOrigins *[]AppOrigin `json:"allowed_origins,omitempty"`
 	Name           *string      `json:"name,omitempty"`
+
+	// WidgetSettings How the widget of an app looks (synthwerk#38). The studio sets them; the widget loads them (widgets#34).
+	// - An attribute on `<synthwerk-chat>` wins over the stored value.
+	// - Colours come only from `@synthwerk/tokens`: a theme and an accent group. No free CSS.
+	// - A new app gets the defaults: `bottom-right`, `default`, `system`, `auto`, `flagship`, empty greeting.
+	WidgetSettings *WidgetSettings `json:"widget_settings,omitempty"`
 }
+
+// WidgetSettings How the widget of an app looks (synthwerk#38). The studio sets them; the widget loads them (widgets#34).
+// - An attribute on `<synthwerk-chat>` wins over the stored value.
+// - Colours come only from `@synthwerk/tokens`: a theme and an accent group. No free CSS.
+// - A new app gets the defaults: `bottom-right`, `default`, `system`, `auto`, `flagship`, empty greeting.
+type WidgetSettings struct {
+	// Accent Token accent group (`data-group`).
+	Accent WidgetSettingsAccent `json:"accent"`
+
+	// Greeting First message of the chat, plain text. Empty = the widget's own greeting. Never rendered as HTML.
+	Greeting string `json:"greeting"`
+
+	// Lang Widget language. `auto` uses the browser language, else `en`.
+	Lang WidgetSettingsLang `json:"lang"`
+
+	// Mode Colour mode. `system` follows the visitor's system setting.
+	Mode WidgetSettingsMode `json:"mode"`
+
+	// Position Corner of the launcher.
+	Position WidgetSettingsPosition `json:"position"`
+
+	// Theme Token theme (`data-theme`).
+	Theme WidgetSettingsTheme `json:"theme"`
+}
+
+// WidgetSettingsAccent Token accent group (`data-group`).
+type WidgetSettingsAccent string
+
+// WidgetSettingsLang Widget language. `auto` uses the browser language, else `en`.
+type WidgetSettingsLang string
+
+// WidgetSettingsMode Colour mode. `system` follows the visitor's system setting.
+type WidgetSettingsMode string
+
+// WidgetSettingsPosition Corner of the launcher.
+type WidgetSettingsPosition string
+
+// WidgetSettingsTheme Token theme (`data-theme`).
+type WidgetSettingsTheme string
 
 // WidgetToken defines model for WidgetToken.
 type WidgetToken struct {
@@ -298,8 +452,26 @@ type UserId = string
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
+// | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type Conflict = Problem
+
+// CreateAppForbidden RFC 9457 problem details with the stable Synthwerk `code`.
+// Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
+//
+// | Code | Status | Cause |
+// |---|---|---|
+// | `invalid_request` | 400 | Body or parameter not valid. |
+// | `unauthenticated` | 401 | Token missing or not valid. |
+// | `forbidden` | 403 | Role does not allow the call. |
+// | `not_found` | 404 | Unknown org or member, or no membership. |
+// | `slug_taken` | 409 | Another org has the slug. |
+// | `last_owner` | 409 | The org would lose its last owner. |
+// | `own_role` | 409 | The caller tried to change their own role. |
+// | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
+// | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
+// | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+type CreateAppForbidden = Problem
 
 // Forbidden RFC 9457 problem details with the stable Synthwerk `code`.
 // Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
@@ -314,6 +486,7 @@ type Conflict = Problem
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
+// | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type Forbidden = Problem
 
@@ -330,6 +503,7 @@ type Forbidden = Problem
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
+// | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type InvalidRequest = Problem
 
@@ -346,6 +520,7 @@ type InvalidRequest = Problem
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
+// | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type NotFound = Problem
 
@@ -362,6 +537,7 @@ type NotFound = Problem
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
+// | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type OriginNotAllowed = Problem
 
@@ -378,6 +554,7 @@ type OriginNotAllowed = Problem
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
+// | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type RoleConflict = Problem
 
@@ -394,6 +571,7 @@ type RoleConflict = Problem
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
+// | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type Unauthenticated = Problem
 
@@ -410,8 +588,15 @@ type Unauthenticated = Problem
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
+// | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type UpstreamUnavailable = Problem
+
+// IdentityGetWidgetSettingsParams defines parameters for IdentityGetWidgetSettings.
+type IdentityGetWidgetSettingsParams struct {
+	// Origin The page origin. Browsers set it. Compared exactly with the allow-list after the default port is removed.
+	Origin string `json:"Origin"`
+}
 
 // IdentityCreateWidgetTokenParams defines parameters for IdentityCreateWidgetToken.
 type IdentityCreateWidgetTokenParams struct {
@@ -532,6 +717,18 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 // The interface specification for the client above.
 type ClientInterface interface {
 
+	// IdentityGetWidgetSettings Get the widget settings
+	//
+	// The widget settings of an app, for the widget on the page. No token: a signed-out visitor gets them too, and the widget makes no AI call for them.
+	// - The `Origin` header must equal one entry of the allow-list of the app. Else 403 `origin_not_allowed`.
+	// - Only an allowed origin gets `Access-Control-Allow-Origin`.
+	// - The answer holds the settings only: no origins, no org, no name.
+	// - `Cache-Control: no-cache`: a change in the studio shows on the next page load.
+	// - Every answer of this route, the CORS preflight included, sends `Vary: Origin`: a shared cache never serves the answer of one origin to another. A refusal sends `Cache-Control: no-store`.
+	//
+	// Corresponds with GET /v1/apps/{appId}/widget-settings (the `IdentityGetWidgetSettings` operationId).
+	IdentityGetWidgetSettings(ctx context.Context, appId AppId, params *IdentityGetWidgetSettingsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// IdentityCreateWidgetToken Issue a widget token
 	//
 	// Issues a short-lived widget token for the signed-in caller, bound to the app and to the request origin.
@@ -542,6 +739,7 @@ type ClientInterface interface {
 	// - Claims: `iss` (identity), `aud`, `sub` (the user), `urn:zitadel:iam:user:resourceowner:id` (the Zitadel org), `client_id` (the app id), `synthwerk:origin` (the canonical origin), `iat`, `nbf`, `exp`, `jti`. No roles: a widget token is never an admin token.
 	// - Verify it with the key set at `/.well-known/jwks.json` of identity (RFC 7517). A service that accepts it must also compare `synthwerk:origin` with the `Origin` header.
 	// - Browsers send a CORS preflight first. Identity answers it with the CORS headers only for an allowed origin.
+	// - Every answer of this route, the CORS preflight included, sends `Vary: Origin` and `Cache-Control: no-store`.
 	//
 	// Corresponds with POST /v1/apps/{appId}/widget-tokens (the `IdentityCreateWidgetToken` operationId).
 	IdentityCreateWidgetToken(ctx context.Context, appId AppId, params *IdentityCreateWidgetTokenParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -606,6 +804,8 @@ type ClientInterface interface {
 	// Creates an app with its origin allow-list. Emits `dev.synthwerk.identity.app.created.v1`.
 	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
 	// - Each origin is `scheme://host[:port]`, nothing more. The rules are in `AppOrigin`.
+	// - The org may have `apps_per_org` apps (entitlements, `0` = no limit). One more gets 403 `app_limit_reached`.
+	// - A new app gets the default widget settings (`WidgetSettings`).
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -617,6 +817,8 @@ type ClientInterface interface {
 	// Creates an app with its origin allow-list. Emits `dev.synthwerk.identity.app.created.v1`.
 	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
 	// - Each origin is `scheme://host[:port]`, nothing more. The rules are in `AppOrigin`.
+	// - The org may have `apps_per_org` apps (entitlements, `0` = no limit). One more gets 403 `app_limit_reached`.
+	// - A new app gets the default widget settings (`WidgetSettings`).
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -642,7 +844,7 @@ type ClientInterface interface {
 
 	// IdentityUpdateAppWithBody Update an app
 	//
-	// Sets the name or the origin allow-list of an app. A new list replaces the old list.
+	// Sets the name, the origin allow-list or the widget settings of an app. A new list replaces the old list. New widget settings replace the old settings as a whole.
 	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
 	// - A widget token issued before the change stays valid until it expires (15 minutes or less).
 	// - Emits no event yet.
@@ -654,7 +856,7 @@ type ClientInterface interface {
 
 	// IdentityUpdateApp Update an app
 	//
-	// Sets the name or the origin allow-list of an app. A new list replaces the old list.
+	// Sets the name, the origin allow-list or the widget settings of an app. A new list replaces the old list. New widget settings replace the old settings as a whole.
 	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
 	// - A widget token issued before the change stays valid until it expires (15 minutes or less).
 	// - Emits no event yet.
@@ -707,6 +909,28 @@ type ClientInterface interface {
 	IdentityChangeMemberRole(ctx context.Context, orgId OrgId, userId UserId, body IdentityChangeMemberRoleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
+// IdentityGetWidgetSettings Get the widget settings
+//
+// The widget settings of an app, for the widget on the page. No token: a signed-out visitor gets them too, and the widget makes no AI call for them.
+// - The `Origin` header must equal one entry of the allow-list of the app. Else 403 `origin_not_allowed`.
+// - Only an allowed origin gets `Access-Control-Allow-Origin`.
+// - The answer holds the settings only: no origins, no org, no name.
+// - `Cache-Control: no-cache`: a change in the studio shows on the next page load.
+// - Every answer of this route, the CORS preflight included, sends `Vary: Origin`: a shared cache never serves the answer of one origin to another. A refusal sends `Cache-Control: no-store`.
+//
+// Corresponds with GET /v1/apps/{appId}/widget-settings (the `IdentityGetWidgetSettings` operationId).
+func (c *Client) IdentityGetWidgetSettings(ctx context.Context, appId AppId, params *IdentityGetWidgetSettingsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIdentityGetWidgetSettingsRequest(c.Server, appId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // IdentityCreateWidgetToken Issue a widget token
 //
 // Issues a short-lived widget token for the signed-in caller, bound to the app and to the request origin.
@@ -717,6 +941,7 @@ type ClientInterface interface {
 // - Claims: `iss` (identity), `aud`, `sub` (the user), `urn:zitadel:iam:user:resourceowner:id` (the Zitadel org), `client_id` (the app id), `synthwerk:origin` (the canonical origin), `iat`, `nbf`, `exp`, `jti`. No roles: a widget token is never an admin token.
 // - Verify it with the key set at `/.well-known/jwks.json` of identity (RFC 7517). A service that accepts it must also compare `synthwerk:origin` with the `Origin` header.
 // - Browsers send a CORS preflight first. Identity answers it with the CORS headers only for an allowed origin.
+// - Every answer of this route, the CORS preflight included, sends `Vary: Origin` and `Cache-Control: no-store`.
 //
 // Corresponds with POST /v1/apps/{appId}/widget-tokens (the `IdentityCreateWidgetToken` operationId).
 func (c *Client) IdentityCreateWidgetToken(ctx context.Context, appId AppId, params *IdentityCreateWidgetTokenParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -861,6 +1086,8 @@ func (c *Client) IdentityListApps(ctx context.Context, orgId OrgId, params *Iden
 // Creates an app with its origin allow-list. Emits `dev.synthwerk.identity.app.created.v1`.
 // - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
 // - Each origin is `scheme://host[:port]`, nothing more. The rules are in `AppOrigin`.
+// - The org may have `apps_per_org` apps (entitlements, `0` = no limit). One more gets 403 `app_limit_reached`.
+// - A new app gets the default widget settings (`WidgetSettings`).
 //
 // Takes any type of body and a specified content type.
 //
@@ -882,6 +1109,8 @@ func (c *Client) IdentityCreateAppWithBody(ctx context.Context, orgId OrgId, con
 // Creates an app with its origin allow-list. Emits `dev.synthwerk.identity.app.created.v1`.
 // - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
 // - Each origin is `scheme://host[:port]`, nothing more. The rules are in `AppOrigin`.
+// - The org may have `apps_per_org` apps (entitlements, `0` = no limit). One more gets 403 `app_limit_reached`.
+// - A new app gets the default widget settings (`WidgetSettings`).
 //
 // Takes a body of the `application/json` content type.
 //
@@ -937,7 +1166,7 @@ func (c *Client) IdentityGetApp(ctx context.Context, orgId OrgId, appId AppId, r
 
 // IdentityUpdateAppWithBody Update an app
 //
-// Sets the name or the origin allow-list of an app. A new list replaces the old list.
+// Sets the name, the origin allow-list or the widget settings of an app. A new list replaces the old list. New widget settings replace the old settings as a whole.
 // - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
 // - A widget token issued before the change stays valid until it expires (15 minutes or less).
 // - Emits no event yet.
@@ -959,7 +1188,7 @@ func (c *Client) IdentityUpdateAppWithBody(ctx context.Context, orgId OrgId, app
 
 // IdentityUpdateApp Update an app
 //
-// Sets the name or the origin allow-list of an app. A new list replaces the old list.
+// Sets the name, the origin allow-list or the widget settings of an app. A new list replaces the old list. New widget settings replace the old settings as a whole.
 // - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
 // - A widget token issued before the change stays valid until it expires (15 minutes or less).
 // - Emits no event yet.
@@ -1059,6 +1288,53 @@ func (c *Client) IdentityChangeMemberRole(ctx context.Context, orgId OrgId, user
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewIdentityGetWidgetSettingsRequest constructs an http.Request for the IdentityGetWidgetSettings method
+func NewIdentityGetWidgetSettingsRequest(server string, appId AppId, params *IdentityGetWidgetSettingsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "appId", appId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/apps/%s/widget-settings", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Origin", params.Origin, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Origin", headerParam0)
+
+	}
+
+	return req, nil
 }
 
 // NewIdentityCreateWidgetTokenRequest constructs an http.Request for the IdentityCreateWidgetToken method
@@ -1763,6 +2039,20 @@ func WithBaseURL(baseURL string) ClientOption {
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
 
+	// IdentityGetWidgetSettingsWithResponse Get the widget settings
+	//
+	// The widget settings of an app, for the widget on the page. No token: a signed-out visitor gets them too, and the widget makes no AI call for them.
+	// - The `Origin` header must equal one entry of the allow-list of the app. Else 403 `origin_not_allowed`.
+	// - Only an allowed origin gets `Access-Control-Allow-Origin`.
+	// - The answer holds the settings only: no origins, no org, no name.
+	// - `Cache-Control: no-cache`: a change in the studio shows on the next page load.
+	// - Every answer of this route, the CORS preflight included, sends `Vary: Origin`: a shared cache never serves the answer of one origin to another. A refusal sends `Cache-Control: no-store`.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/apps/{appId}/widget-settings (the `IdentityGetWidgetSettings` operationId).
+	IdentityGetWidgetSettingsWithResponse(ctx context.Context, appId AppId, params *IdentityGetWidgetSettingsParams, reqEditors ...RequestEditorFn) (*IdentityGetWidgetSettingsResponse, error)
+
 	// IdentityCreateWidgetTokenWithResponse Issue a widget token
 	//
 	// Issues a short-lived widget token for the signed-in caller, bound to the app and to the request origin.
@@ -1773,6 +2063,7 @@ type ClientWithResponsesInterface interface {
 	// - Claims: `iss` (identity), `aud`, `sub` (the user), `urn:zitadel:iam:user:resourceowner:id` (the Zitadel org), `client_id` (the app id), `synthwerk:origin` (the canonical origin), `iat`, `nbf`, `exp`, `jti`. No roles: a widget token is never an admin token.
 	// - Verify it with the key set at `/.well-known/jwks.json` of identity (RFC 7517). A service that accepts it must also compare `synthwerk:origin` with the `Origin` header.
 	// - Browsers send a CORS preflight first. Identity answers it with the CORS headers only for an allowed origin.
+	// - Every answer of this route, the CORS preflight included, sends `Vary: Origin` and `Cache-Control: no-store`.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -1849,6 +2140,8 @@ type ClientWithResponsesInterface interface {
 	// Creates an app with its origin allow-list. Emits `dev.synthwerk.identity.app.created.v1`.
 	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
 	// - Each origin is `scheme://host[:port]`, nothing more. The rules are in `AppOrigin`.
+	// - The org may have `apps_per_org` apps (entitlements, `0` = no limit). One more gets 403 `app_limit_reached`.
+	// - A new app gets the default widget settings (`WidgetSettings`).
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -1860,6 +2153,8 @@ type ClientWithResponsesInterface interface {
 	// Creates an app with its origin allow-list. Emits `dev.synthwerk.identity.app.created.v1`.
 	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
 	// - Each origin is `scheme://host[:port]`, nothing more. The rules are in `AppOrigin`.
+	// - The org may have `apps_per_org` apps (entitlements, `0` = no limit). One more gets 403 `app_limit_reached`.
+	// - A new app gets the default widget settings (`WidgetSettings`).
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -1889,7 +2184,7 @@ type ClientWithResponsesInterface interface {
 
 	// IdentityUpdateAppWithBodyWithResponse Update an app
 	//
-	// Sets the name or the origin allow-list of an app. A new list replaces the old list.
+	// Sets the name, the origin allow-list or the widget settings of an app. A new list replaces the old list. New widget settings replace the old settings as a whole.
 	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
 	// - A widget token issued before the change stays valid until it expires (15 minutes or less).
 	// - Emits no event yet.
@@ -1901,7 +2196,7 @@ type ClientWithResponsesInterface interface {
 
 	// IdentityUpdateAppWithResponse Update an app
 	//
-	// Sets the name or the origin allow-list of an app. A new list replaces the old list.
+	// Sets the name, the origin allow-list or the widget settings of an app. A new list replaces the old list. New widget settings replace the old settings as a whole.
 	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
 	// - A widget token issued before the change stays valid until it expires (15 minutes or less).
 	// - Emits no event yet.
@@ -1958,14 +2253,92 @@ type ClientWithResponsesInterface interface {
 	IdentityChangeMemberRoleWithResponse(ctx context.Context, orgId OrgId, userId UserId, body IdentityChangeMemberRoleJSONRequestBody, reqEditors ...RequestEditorFn) (*IdentityChangeMemberRoleResponse, error)
 }
 
+// IdentityGetWidgetSettingsResponse200Headers the declared response headers of an HTTP 200 response for IdentityGetWidgetSettings
+type IdentityGetWidgetSettingsResponse200Headers struct {
+	CacheControl *string
+	Vary         *string
+}
+
+// IdentityGetWidgetSettingsResponse403Headers the declared response headers of an HTTP 403 response for IdentityGetWidgetSettings
+type IdentityGetWidgetSettingsResponse403Headers struct {
+	CacheControl *string
+	Vary         *string
+}
+
+type IdentityGetWidgetSettingsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *WidgetSettings
+	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
+	ApplicationproblemJSON403 *OriginNotAllowed
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *NotFound
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *IdentityGetWidgetSettingsResponse200Headers
+	// Headers403 the parsed response headers for an HTTP 403 response
+	Headers403 *IdentityGetWidgetSettingsResponse403Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r IdentityGetWidgetSettingsResponse) GetJSON200() *WidgetSettings {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
+func (r IdentityGetWidgetSettingsResponse) GetApplicationproblemJSON403() *OriginNotAllowed {
+	return r.ApplicationproblemJSON403
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r IdentityGetWidgetSettingsResponse) GetApplicationproblemJSON404() *NotFound {
+	return r.ApplicationproblemJSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r IdentityGetWidgetSettingsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r IdentityGetWidgetSettingsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IdentityGetWidgetSettingsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IdentityGetWidgetSettingsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // IdentityCreateWidgetTokenResponse201Headers the declared response headers of an HTTP 201 response for IdentityCreateWidgetToken
 type IdentityCreateWidgetTokenResponse201Headers struct {
 	CacheControl *string
+	Vary         *string
 }
 
 // IdentityCreateWidgetTokenResponse401Headers the declared response headers of an HTTP 401 response for IdentityCreateWidgetToken
 type IdentityCreateWidgetTokenResponse401Headers struct {
 	WWWAuthenticate *string
+}
+
+// IdentityCreateWidgetTokenResponse403Headers the declared response headers of an HTTP 403 response for IdentityCreateWidgetToken
+type IdentityCreateWidgetTokenResponse403Headers struct {
+	CacheControl *string
+	Vary         *string
 }
 
 type IdentityCreateWidgetTokenResponse struct {
@@ -1983,6 +2356,8 @@ type IdentityCreateWidgetTokenResponse struct {
 	Headers201 *IdentityCreateWidgetTokenResponse201Headers
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *IdentityCreateWidgetTokenResponse401Headers
+	// Headers403 the parsed response headers for an HTTP 403 response
+	Headers403 *IdentityCreateWidgetTokenResponse403Headers
 }
 
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
@@ -2447,7 +2822,7 @@ type IdentityCreateAppResponse struct {
 	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
 	ApplicationproblemJSON401 *Unauthenticated
 	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
-	ApplicationproblemJSON403 *Forbidden
+	ApplicationproblemJSON403 *CreateAppForbidden
 	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
 	ApplicationproblemJSON404 *NotFound
 	// Headers201 the parsed response headers for an HTTP 201 response
@@ -2472,7 +2847,7 @@ func (r IdentityCreateAppResponse) GetApplicationproblemJSON401() *Unauthenticat
 }
 
 // GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
-func (r IdentityCreateAppResponse) GetApplicationproblemJSON403() *Forbidden {
+func (r IdentityCreateAppResponse) GetApplicationproblemJSON403() *CreateAppForbidden {
 	return r.ApplicationproblemJSON403
 }
 
@@ -2938,6 +3313,26 @@ func (r IdentityChangeMemberRoleResponse) ContentType() string {
 	return ""
 }
 
+// IdentityGetWidgetSettingsWithResponse Get the widget settings
+//
+// The widget settings of an app, for the widget on the page. No token: a signed-out visitor gets them too, and the widget makes no AI call for them.
+// - The `Origin` header must equal one entry of the allow-list of the app. Else 403 `origin_not_allowed`.
+// - Only an allowed origin gets `Access-Control-Allow-Origin`.
+// - The answer holds the settings only: no origins, no org, no name.
+// - `Cache-Control: no-cache`: a change in the studio shows on the next page load.
+// - Every answer of this route, the CORS preflight included, sends `Vary: Origin`: a shared cache never serves the answer of one origin to another. A refusal sends `Cache-Control: no-store`.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/apps/{appId}/widget-settings (the `IdentityGetWidgetSettings` operationId).
+func (c *ClientWithResponses) IdentityGetWidgetSettingsWithResponse(ctx context.Context, appId AppId, params *IdentityGetWidgetSettingsParams, reqEditors ...RequestEditorFn) (*IdentityGetWidgetSettingsResponse, error) {
+	rsp, err := c.IdentityGetWidgetSettings(ctx, appId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIdentityGetWidgetSettingsResponse(rsp)
+}
+
 // IdentityCreateWidgetTokenWithResponse Issue a widget token
 //
 // Issues a short-lived widget token for the signed-in caller, bound to the app and to the request origin.
@@ -2948,6 +3343,7 @@ func (r IdentityChangeMemberRoleResponse) ContentType() string {
 // - Claims: `iss` (identity), `aud`, `sub` (the user), `urn:zitadel:iam:user:resourceowner:id` (the Zitadel org), `client_id` (the app id), `synthwerk:origin` (the canonical origin), `iat`, `nbf`, `exp`, `jti`. No roles: a widget token is never an admin token.
 // - Verify it with the key set at `/.well-known/jwks.json` of identity (RFC 7517). A service that accepts it must also compare `synthwerk:origin` with the `Origin` header.
 // - Browsers send a CORS preflight first. Identity answers it with the CORS headers only for an allowed origin.
+// - Every answer of this route, the CORS preflight included, sends `Vary: Origin` and `Cache-Control: no-store`.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -3072,6 +3468,8 @@ func (c *ClientWithResponses) IdentityListAppsWithResponse(ctx context.Context, 
 // Creates an app with its origin allow-list. Emits `dev.synthwerk.identity.app.created.v1`.
 // - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
 // - Each origin is `scheme://host[:port]`, nothing more. The rules are in `AppOrigin`.
+// - The org may have `apps_per_org` apps (entitlements, `0` = no limit). One more gets 403 `app_limit_reached`.
+// - A new app gets the default widget settings (`WidgetSettings`).
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -3089,6 +3487,8 @@ func (c *ClientWithResponses) IdentityCreateAppWithBodyWithResponse(ctx context.
 // Creates an app with its origin allow-list. Emits `dev.synthwerk.identity.app.created.v1`.
 // - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
 // - Each origin is `scheme://host[:port]`, nothing more. The rules are in `AppOrigin`.
+// - The org may have `apps_per_org` apps (entitlements, `0` = no limit). One more gets 403 `app_limit_reached`.
+// - A new app gets the default widget settings (`WidgetSettings`).
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -3136,7 +3536,7 @@ func (c *ClientWithResponses) IdentityGetAppWithResponse(ctx context.Context, or
 
 // IdentityUpdateAppWithBodyWithResponse Update an app
 //
-// Sets the name or the origin allow-list of an app. A new list replaces the old list.
+// Sets the name, the origin allow-list or the widget settings of an app. A new list replaces the old list. New widget settings replace the old settings as a whole.
 // - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
 // - A widget token issued before the change stays valid until it expires (15 minutes or less).
 // - Emits no event yet.
@@ -3154,7 +3554,7 @@ func (c *ClientWithResponses) IdentityUpdateAppWithBodyWithResponse(ctx context.
 
 // IdentityUpdateAppWithResponse Update an app
 //
-// Sets the name or the origin allow-list of an app. A new list replaces the old list.
+// Sets the name, the origin allow-list or the widget settings of an app. A new list replaces the old list. New widget settings replace the old settings as a whole.
 // - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
 // - A widget token issued before the change stays valid until it expires (15 minutes or less).
 // - Emits no event yet.
@@ -3240,6 +3640,83 @@ func (c *ClientWithResponses) IdentityChangeMemberRoleWithResponse(ctx context.C
 	return ParseIdentityChangeMemberRoleResponse(rsp)
 }
 
+// ParseIdentityGetWidgetSettingsResponse parses an HTTP response from a IdentityGetWidgetSettingsWithResponse call
+func ParseIdentityGetWidgetSettingsResponse(rsp *http.Response) (*IdentityGetWidgetSettingsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IdentityGetWidgetSettingsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest WidgetSettings
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest OriginNotAllowed
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers IdentityGetWidgetSettingsResponse200Headers
+		if values := rsp.Header.Values("Cache-Control"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Cache-Control", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.CacheControl = &value
+		}
+		if values := rsp.Header.Values("Vary"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Vary", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.Vary = &value
+		}
+		response.Headers200 = &headers
+	case rsp.StatusCode == 403:
+		var headers IdentityGetWidgetSettingsResponse403Headers
+		if values := rsp.Header.Values("Cache-Control"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Cache-Control", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.CacheControl = &value
+		}
+		if values := rsp.Header.Values("Vary"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Vary", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.Vary = &value
+		}
+		response.Headers403 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseIdentityCreateWidgetTokenResponse parses an HTTP response from a IdentityCreateWidgetTokenWithResponse call
 func ParseIdentityCreateWidgetTokenResponse(rsp *http.Response) (*IdentityCreateWidgetTokenResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -3294,6 +3771,13 @@ func ParseIdentityCreateWidgetTokenResponse(rsp *http.Response) (*IdentityCreate
 			}
 			headers.CacheControl = &value
 		}
+		if values := rsp.Header.Values("Vary"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Vary", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.Vary = &value
+		}
 		response.Headers201 = &headers
 	case rsp.StatusCode == 401:
 		var headers IdentityCreateWidgetTokenResponse401Headers
@@ -3305,6 +3789,23 @@ func ParseIdentityCreateWidgetTokenResponse(rsp *http.Response) (*IdentityCreate
 			headers.WWWAuthenticate = &value
 		}
 		response.Headers401 = &headers
+	case rsp.StatusCode == 403:
+		var headers IdentityCreateWidgetTokenResponse403Headers
+		if values := rsp.Header.Values("Cache-Control"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Cache-Control", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.CacheControl = &value
+		}
+		if values := rsp.Header.Values("Vary"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Vary", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.Vary = &value
+		}
+		response.Headers403 = &headers
 	}
 
 	return response, nil
@@ -3688,7 +4189,7 @@ func ParseIdentityCreateAppResponse(rsp *http.Response) (*IdentityCreateAppRespo
 		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Forbidden
+		var dest CreateAppForbidden
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

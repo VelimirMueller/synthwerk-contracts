@@ -5,6 +5,7 @@ package contract_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -156,6 +157,104 @@ func TestIdentityContract(t *testing.T) {
 		strict(t, body, &p)
 		if p.Code != "origin_not_allowed" || p.Status != http.StatusForbidden {
 			t.Fatalf("got %+v", p)
+		}
+	})
+
+	t.Run("CreateApp - org at its app limit - 403 problem with code app_limit_reached", func(t *testing.T) {
+		body := toJSON(t, spec.Components.Responses["CreateAppForbidden"].Content["application/problem+json"].Example)
+		var p identity.Problem
+		strict(t, body, &p)
+		if p.Code != "app_limit_reached" || p.Status != http.StatusForbidden {
+			t.Fatalf("got %+v", p)
+		}
+
+		client, err := identity.NewClientWithResponses(serveAs(t, http.StatusForbidden, "application/problem+json", body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := client.IdentityCreateAppWithResponse(ctx, uuid.MustParse("0199f3a0-5b6c-7d8e-9f0a-1b2c3d4e5f60"),
+			identity.CreateAppRequest{Name: "Fourth app", AllowedOrigins: []identity.AppOrigin{"https://shop.example"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.ApplicationproblemJSON403 == nil || res.ApplicationproblemJSON403.Code != "app_limit_reached" {
+			t.Fatalf("status %d, got %+v", res.StatusCode(), res.ApplicationproblemJSON403)
+		}
+	})
+
+	t.Run("UpdateApp - widget settings - the client sends them, the answer carries them", func(t *testing.T) {
+		body := toJSON(t, spec.Paths["/v1/orgs/{orgId}/apps/{appId}"].Patch.Responses["200"].Content["application/json"].Example)
+		var sent map[string]any
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewDecoder(r.Body).Decode(&sent)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(body)
+		}))
+		t.Cleanup(srv.Close)
+		client, err := identity.NewClientWithResponses(srv.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		settings := identity.WidgetSettings{
+			Position: identity.WidgetSettingsPositionBottomLeft, Theme: identity.WidgetSettingsThemeDefault,
+			Mode: identity.WidgetSettingsModeDark, Lang: identity.WidgetSettingsLangDe,
+			Accent: identity.WidgetSettingsAccentLab, Greeting: "Hallo! Wie kann ich helfen?",
+		}
+		res, err := client.IdentityUpdateAppWithResponse(ctx, uuid.MustParse("0199f3a0-5b6c-7d8e-9f0a-1b2c3d4e5f60"),
+			uuid.MustParse("019a3b10-7c2d-7e4f-8a5b-6c7d8e9f0a1b"), identity.UpdateAppRequest{WidgetSettings: &settings})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ws, ok := sent["widget_settings"].(map[string]any)
+		if !ok || ws["position"] != "bottom-left" || ws["accent"] != "lab" || ws["greeting"] != "Hallo! Wie kann ich helfen?" {
+			t.Fatalf("sent %+v", sent)
+		}
+		if _, ok := sent["name"]; ok {
+			t.Fatalf("absent name was sent: %+v", sent)
+		}
+		if res.JSON200 == nil || res.JSON200.WidgetSettings != settings {
+			t.Fatalf("got %+v", res.JSON200)
+		}
+	})
+
+	t.Run("GetWidgetSettings - spec example - settings only, Origin sent, no token", func(t *testing.T) {
+		body := toJSON(t, spec.Paths["/v1/apps/{appId}/widget-settings"].Get.Responses["200"].Content["application/json"].Example)
+		var ws identity.WidgetSettings
+		strict(t, body, &ws)
+
+		var gotOrigin, gotAuth string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotOrigin, gotAuth = r.Header.Get("Origin"), r.Header.Get("Authorization")
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(body)
+		}))
+		t.Cleanup(srv.Close)
+		client, err := identity.NewClientWithResponses(srv.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := client.IdentityGetWidgetSettingsWithResponse(ctx, uuid.MustParse("019a3b10-7c2d-7e4f-8a5b-6c7d8e9f0a1b"),
+			&identity.IdentityGetWidgetSettingsParams{Origin: "https://shop.example"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if gotOrigin != "https://shop.example" || gotAuth != "" {
+			t.Fatalf("Origin %q, Authorization %q", gotOrigin, gotAuth)
+		}
+		if res.JSON200 == nil || *res.JSON200 != ws || !ws.Position.Valid() || !ws.Accent.Valid() {
+			t.Fatalf("got %+v", res.JSON200)
+		}
+	})
+
+	t.Run("WidgetSettings - enums - only token themes and accent groups", func(t *testing.T) {
+		if identity.WidgetSettingsAccent("#ff0000").Valid() || identity.WidgetSettingsTheme("neon").Valid() {
+			t.Fatal("a free colour or theme is valid")
+		}
+		for _, a := range []identity.WidgetSettingsAccent{identity.WidgetSettingsAccentFlagship, identity.WidgetSettingsAccentLab,
+			identity.WidgetSettingsAccentOps, identity.WidgetSettingsAccentVenture} {
+			if !a.Valid() {
+				t.Fatalf("%s not valid", a)
+			}
 		}
 	})
 

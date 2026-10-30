@@ -190,6 +190,8 @@ export interface paths {
          * @description Creates an app with its origin allow-list. Emits `dev.synthwerk.identity.app.created.v1`.
          *     - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
          *     - Each origin is `scheme://host[:port]`, nothing more. The rules are in `AppOrigin`.
+         *     - The org may have `apps_per_org` apps (entitlements, `0` = no limit). One more gets 403 `app_limit_reached`.
+         *     - A new app gets the default widget settings (`WidgetSettings`).
          */
         post: operations["identity.createApp"];
         delete?: never;
@@ -229,12 +231,40 @@ export interface paths {
         head?: never;
         /**
          * Update an app
-         * @description Sets the name or the origin allow-list of an app. A new list replaces the old list.
+         * @description Sets the name, the origin allow-list or the widget settings of an app. A new list replaces the old list. New widget settings replace the old settings as a whole.
          *     - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
          *     - A widget token issued before the change stays valid until it expires (15 minutes or less).
          *     - Emits no event yet.
          */
         patch: operations["identity.updateApp"];
+        trace?: never;
+    };
+    "/v1/apps/{appId}/widget-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description App id. */
+                appId: components["parameters"]["AppId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Get the widget settings
+         * @description The widget settings of an app, for the widget on the page. No token: a signed-out visitor gets them too, and the widget makes no AI call for them.
+         *     - The `Origin` header must equal one entry of the allow-list of the app. Else 403 `origin_not_allowed`.
+         *     - Only an allowed origin gets `Access-Control-Allow-Origin`.
+         *     - The answer holds the settings only: no origins, no org, no name.
+         *     - `Cache-Control: no-cache`: a change in the studio shows on the next page load.
+         *     - Every answer of this route, the CORS preflight included, sends `Vary: Origin`: a shared cache never serves the answer of one origin to another. A refusal sends `Cache-Control: no-store`.
+         */
+        get: operations["identity.getWidgetSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/apps/{appId}/widget-tokens": {
@@ -259,6 +289,7 @@ export interface paths {
          *     - Claims: `iss` (identity), `aud`, `sub` (the user), `urn:zitadel:iam:user:resourceowner:id` (the Zitadel org), `client_id` (the app id), `synthwerk:origin` (the canonical origin), `iat`, `nbf`, `exp`, `jti`. No roles: a widget token is never an admin token.
          *     - Verify it with the key set at `/.well-known/jwks.json` of identity (RFC 7517). A service that accepts it must also compare `synthwerk:origin` with the `Origin` header.
          *     - Browsers send a CORS preflight first. Identity answers it with the CORS headers only for an allowed origin.
+         *     - Every answer of this route, the CORS preflight included, sends `Vary: Origin` and `Cache-Control: no-store`.
          */
         post: operations["identity.createWidgetToken"];
         delete?: never;
@@ -380,6 +411,7 @@ export interface components {
             name: string;
             /** @description Origins that may get a widget token for this app. Canonical form. */
             allowed_origins: components["schemas"]["AppOrigin"][];
+            widget_settings: components["schemas"]["WidgetSettings"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -400,6 +432,42 @@ export interface components {
             name?: string;
             /** @description Replaces the whole list. Two entries with the same canonical form are refused (400). */
             allowed_origins?: components["schemas"]["AppOrigin"][];
+            widget_settings?: components["schemas"]["WidgetSettings"];
+        };
+        /**
+         * @description How the widget of an app looks (synthwerk#38). The studio sets them; the widget loads them (widgets#34).
+         *     - An attribute on `<synthwerk-chat>` wins over the stored value.
+         *     - Colours come only from `@synthwerk/tokens`: a theme and an accent group. No free CSS.
+         *     - A new app gets the defaults: `bottom-right`, `default`, `system`, `auto`, `flagship`, empty greeting.
+         */
+        WidgetSettings: {
+            /**
+             * @description Corner of the launcher.
+             * @enum {string}
+             */
+            position: "bottom-right" | "bottom-left";
+            /**
+             * @description Token theme (`data-theme`).
+             * @enum {string}
+             */
+            theme: "default" | "contrast";
+            /**
+             * @description Colour mode. `system` follows the visitor's system setting.
+             * @enum {string}
+             */
+            mode: "system" | "light" | "dark";
+            /**
+             * @description Widget language. `auto` uses the browser language, else `en`.
+             * @enum {string}
+             */
+            lang: "auto" | "de" | "en";
+            /**
+             * @description Token accent group (`data-group`).
+             * @enum {string}
+             */
+            accent: "flagship" | "lab" | "ops" | "venture";
+            /** @description First message of the chat, plain text. Empty = the widget's own greeting. Never rendered as HTML. */
+            greeting: string;
         };
         WidgetToken: {
             /** @description The widget token (JWT). Send it in the header `Authorization` as `Bearer <token>`, from the same origin. Never log it. */
@@ -428,6 +496,7 @@ export interface components {
          *     | `last_owner` | 409 | The org would lose its last owner. |
          *     | `own_role` | 409 | The caller tried to change their own role. |
          *     | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
+         *     | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
          *     | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
          */
         Problem: {
@@ -559,9 +628,35 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /**
+         * @description The app was not created.
+         *     - `forbidden`: the caller's role does not allow the call. The body is generic.
+         *     - `app_limit_reached`: the org has `apps_per_org` apps already. Delete an app or change the plan.
+         */
+        CreateAppForbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://schemas.synthwerk.dev/problems/app_limit_reached",
+                 *       "title": "App limit reached",
+                 *       "status": 403,
+                 *       "code": "app_limit_reached",
+                 *       "detail": "The plan of this org allows 3 apps."
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description The `Origin` header is missing, not valid, or not in the allow-list of the app. Code `origin_not_allowed`. The body never lists the allowed origins. */
         OriginNotAllowed: {
             headers: {
+                /** @description Always `no-store`. */
+                "Cache-Control"?: string;
+                /** @description Always `Origin`. */
+                Vary?: string;
                 [name: string]: unknown;
             };
             content: {
@@ -963,6 +1058,14 @@ export interface operations {
                      *             "http://localhost:3000"
                      *           ],
                      *           "created_at": "2026-10-29T10:00:00Z",
+                     *           "widget_settings": {
+                     *             "position": "bottom-right",
+                     *             "theme": "default",
+                     *             "mode": "system",
+                     *             "lang": "auto",
+                     *             "accent": "flagship",
+                     *             "greeting": ""
+                     *           },
                      *           "updated_at": "2026-10-29T10:00:00Z"
                      *         }
                      *       ]
@@ -1019,6 +1122,14 @@ export interface operations {
                      *         "http://localhost:3000"
                      *       ],
                      *       "created_at": "2026-10-29T10:00:00Z",
+                     *       "widget_settings": {
+                     *         "position": "bottom-right",
+                     *         "theme": "default",
+                     *         "mode": "system",
+                     *         "lang": "auto",
+                     *         "accent": "flagship",
+                     *         "greeting": ""
+                     *       },
                      *       "updated_at": "2026-10-29T10:00:00Z"
                      *     }
                      */
@@ -1027,7 +1138,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
-            403: components["responses"]["Forbidden"];
+            403: components["responses"]["CreateAppForbidden"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -1061,6 +1172,14 @@ export interface operations {
                      *         "http://localhost:3000"
                      *       ],
                      *       "created_at": "2026-10-29T10:00:00Z",
+                     *       "widget_settings": {
+                     *         "position": "bottom-right",
+                     *         "theme": "default",
+                     *         "mode": "system",
+                     *         "lang": "auto",
+                     *         "accent": "flagship",
+                     *         "greeting": ""
+                     *       },
                      *       "updated_at": "2026-10-29T10:00:00Z"
                      *     }
                      */
@@ -1139,6 +1258,14 @@ export interface operations {
                      *         "https://www.shop.example"
                      *       ],
                      *       "created_at": "2026-10-29T10:00:00Z",
+                     *       "widget_settings": {
+                     *         "position": "bottom-left",
+                     *         "theme": "default",
+                     *         "mode": "dark",
+                     *         "lang": "de",
+                     *         "accent": "lab",
+                     *         "greeting": "Hallo! Wie kann ich helfen?"
+                     *       },
                      *       "updated_at": "2026-10-29T11:00:00Z"
                      *     }
                      */
@@ -1148,6 +1275,48 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "identity.getWidgetSettings": {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The page origin. Browsers set it. Compared exactly with the allow-list after the default port is removed. */
+                Origin: string;
+            };
+            path: {
+                /** @description App id. */
+                appId: components["parameters"]["AppId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The widget settings. */
+            200: {
+                headers: {
+                    /** @description Always `no-cache`. A cache must check again before it reuses the answer. */
+                    "Cache-Control"?: string;
+                    /** @description Always `Origin`. The CORS headers depend on the request origin. */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "position": "bottom-left",
+                     *       "theme": "default",
+                     *       "mode": "dark",
+                     *       "lang": "de",
+                     *       "accent": "lab",
+                     *       "greeting": "Hallo! Wie kann ich helfen?"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["WidgetSettings"];
+                };
+            };
+            403: components["responses"]["OriginNotAllowed"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -1171,6 +1340,8 @@ export interface operations {
                 headers: {
                     /** @description Always `no-store`. */
                     "Cache-Control"?: string;
+                    /** @description Always `Origin`. The CORS headers depend on the request origin. */
+                    Vary?: string;
                     [name: string]: unknown;
                 };
                 content: {
