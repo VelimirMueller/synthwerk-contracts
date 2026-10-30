@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Synthwerk LLM gateway
-  version: 0.4.0
+  version: 0.5.0
   summary: Conversations and streamed answers. The M2 chat slice of synthwerk-llm.
   description: |
     The chat contract of synthwerk-llm (M2 spec #32, D-44).
@@ -12,6 +12,7 @@ info:
     - Stream protocol: `docs/features/llm-chat-api.md`.
     - Own data (synthwerk#41): `GET /v1/me/export` returns every row llm keeps about the caller, in every org. Identity calls it with the caller's token for `GET /v1/me/export` of identity. llm deletes the rows when it gets `dev.synthwerk.identity.user.deleted.v1`.
     - AI settings (synthwerk#39): an owner or admin sets the model choice, the system prompt, the input length, a token cap per user and the temperature of the org with `/v1/ai-settings`. Every value stays inside the model aliases of the service and the plan of the org. A change emits `dev.synthwerk.llm.ai_settings.changed.v1`; identity shows it in the audit list.
+    - CORS (infra#21): llm answers CORS for the three widget chat routes (create, read, send). The chat widget runs on customer sites. See the description of each route.
   license:
     name: MIT
     identifier: MIT
@@ -185,6 +186,9 @@ paths:
         Creates an empty conversation for the caller in the org of the token.
         - Without `model` the conversation gets the default model of the org (AI settings).
         - A `model` the org does not allow: 400 `invalid_request`.
+        - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+        - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+        - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
       tags: [conversations]
       security:
         - bearer: []
@@ -205,6 +209,11 @@ paths:
               schema:
                 type: string
                 maxLength: 128
+            Vary:
+              description: Always `Origin`. The CORS headers depend on the request origin (infra#21).
+              schema:
+                type: string
+                maxLength: 32
           content:
             application/json:
               schema:
@@ -231,12 +240,21 @@ paths:
       description: |
         The conversation with its messages, oldest first.
         An unknown id and another owner's id both answer 404 with the same body.
+        - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: GET` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: GET`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+        - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+        - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
       tags: [conversations]
       security:
         - bearer: []
       responses:
         "200":
           description: The conversation.
+          headers:
+            Vary:
+              description: Always `Origin`. The CORS headers depend on the request origin (infra#21).
+              schema:
+                type: string
+                maxLength: 32
           content:
             application/json:
               schema:
@@ -275,6 +293,9 @@ paths:
         - Order of events: zero or more `delta`, then `usage`, then `done`. Or an `error` event at any point.
         - Cancel: the client closes the connection. The server stops the model call and keeps the partial answer.
         - Headers: `Cache-Control: no-store`, `X-Accel-Buffering: no`. A comment line (`: ping`) every 15 s keeps the connection open.
+        - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+        - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+        - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
       tags: [conversations]
       security:
         - bearer: []
@@ -310,6 +331,12 @@ paths:
             event: done
             data: {"message_id":"0199f3b0-1a2c-7c3d-8e4f-5a6b7c8d9e10","finish_reason":"stop"}
             ```
+          headers:
+            Vary:
+              description: Always `Origin`. The CORS headers depend on the request origin (infra#21).
+              schema:
+                type: string
+                maxLength: 32
           content:
             text/event-stream:
               schema:

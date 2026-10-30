@@ -17,6 +17,7 @@ updated: 2026-10-30
 > - `synthwerk-llm` serves conversations. A sent message comes back as a Server-Sent Events stream.
 > - The stream has four events: `delta`, `usage`, `done`, `error` (D-44).
 > - An owner or admin sets the AI settings of the org with `/v1/ai-settings` (synthwerk#39). They stay inside the service aliases and the plan.
+> - llm answers CORS for create, read and send: the chat widget runs on customer sites (infra#21).
 > - The spec is `openapi/llm/openapi.yaml`. CI generates a Go client and a TS client from it.
 
 ## What it does
@@ -27,6 +28,8 @@ updated: 2026-10-30
 - `GET /v1/me/export` returns every conversation, message and own quota row of the caller, in every org (`LlmExport`, synthwerk#41). Identity embeds it in its own export.
 - `GET /v1/ai-settings` and `PUT /v1/ai-settings` read and replace the AI settings of the token's org (synthwerk#39). See [AI settings](#ai-settings).
 - The org and the owner come from the verified token. They are never body fields.
+- Create, read and send answer CORS in llm (infra#21). The preflight (`OPTIONS`) needs no token. Every answer sends `Vary: Origin`.
+- An allowed origin is in llm's static list or is listed by an app of an active org in identity. Only it gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`.
 - After each answer the service emits `dev.synthwerk.llm.message.completed.v1`. It holds metadata only.
 - Go: package `github.com/VelimirMueller/synthwerk-contracts/go/llm`. TS: `createLlmClient` and `StreamEvent` in `@synthwerk/contracts`.
 
@@ -143,6 +146,7 @@ A send over quota answers `429` before any model call (synthwerk#33):
 - `tests/contract/llm_test.go` — `Problem - quota member - only in the problem schema, optional`
 - `tests/contract/identity_account_test.go` — `LLM ExportMe - spec example - conversations, messages with tokens, own quota rows`; `LLM ExportMe - widget token - 403 forbidden`
 - `tests/contract/llm_settings_test.go` — `AiSettings - each 200 example - decodes strictly and stays inside its bounds`; `UpdateAiSettings - spec request example - client sends PUT /v1/ai-settings with the body`; `UpdateAiSettings - stale version - 409 version_conflict`; `GetAiSettings - identity down - 503 settings_unavailable`; `GetAiSettings - member token - 403 forbidden`
+- `tests/contract/llm_cors_test.go` — `CORS answer createConversation 201 - Vary documented, preflight described` (also getConversation, sendMessage)
 - `tests/contract/events_test.go` — `Catalog - each entry - names, schema $id and example match`; `AuditEvent.type - every identity event and every event identity consumes - matches the spec pattern`
 
 ## Changes
@@ -154,3 +158,4 @@ A send over quota answers `429` before any model call (synthwerk#33):
 | 2026-10-29 | `quota_exhausted` is sent (synthwerk#33). New optional problem member `quota` (`QuotaExceeded`). Spec version 0.2.0. |
 | 2026-10-30 | Add `GET /v1/me/export` and `LlmExport` (synthwerk#41). llm consumes `dev.synthwerk.identity.user.deleted.v1`. Spec version 0.3.0. |
 | 2026-10-30 | Add `GET`/`PUT /v1/ai-settings`, `AiSettings`, problem codes `version_conflict` and `settings_unavailable`, and `llm.ai_settings.changed.v1` (synthwerk#39). Spec version 0.4.0. |
+| 2026-10-30 | Describe the CORS answers of create, read and send; `Vary` on their success answers (infra#21). Spec version 0.5.0. |

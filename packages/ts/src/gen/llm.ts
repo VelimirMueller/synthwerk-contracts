@@ -77,6 +77,9 @@ export interface paths {
          * @description Creates an empty conversation for the caller in the org of the token.
          *     - Without `model` the conversation gets the default model of the org (AI settings).
          *     - A `model` the org does not allow: 400 `invalid_request`.
+         *     - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+         *     - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+         *     - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
          */
         post: operations["llm.createConversation"];
         delete?: never;
@@ -99,6 +102,9 @@ export interface paths {
          * Get a conversation
          * @description The conversation with its messages, oldest first.
          *     An unknown id and another owner's id both answer 404 with the same body.
+         *     - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: GET` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: GET`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+         *     - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+         *     - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
          */
         get: operations["llm.getConversation"];
         put?: never;
@@ -129,6 +135,9 @@ export interface paths {
          *     - Order of events: zero or more `delta`, then `usage`, then `done`. Or an `error` event at any point.
          *     - Cancel: the client closes the connection. The server stops the model call and keeps the partial answer.
          *     - Headers: `Cache-Control: no-store`, `X-Accel-Buffering: no`. A comment line (`: ping`) every 15 s keeps the connection open.
+         *     - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+         *     - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+         *     - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
          */
         post: operations["llm.sendMessage"];
         delete?: never;
@@ -810,6 +819,8 @@ export interface operations {
                 headers: {
                     /** @description Path of the new conversation. */
                     Location?: string;
+                    /** @description Always `Origin`. The CORS headers depend on the request origin (infra#21). */
+                    Vary?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -845,6 +856,8 @@ export interface operations {
             /** @description The conversation. */
             200: {
                 headers: {
+                    /** @description Always `Origin`. The CORS headers depend on the request origin (infra#21). */
+                    Vary?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -925,6 +938,8 @@ export interface operations {
              */
             200: {
                 headers: {
+                    /** @description Always `Origin`. The CORS headers depend on the request origin (infra#21). */
+                    Vary?: string;
                     [name: string]: unknown;
                 };
                 content: {

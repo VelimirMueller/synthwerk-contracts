@@ -971,6 +971,9 @@ type ClientInterface interface {
 	// Creates an empty conversation for the caller in the org of the token.
 	// - Without `model` the conversation gets the default model of the org (AI settings).
 	// - A `model` the org does not allow: 400 `invalid_request`.
+	// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+	// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+	// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -982,6 +985,9 @@ type ClientInterface interface {
 	// Creates an empty conversation for the caller in the org of the token.
 	// - Without `model` the conversation gets the default model of the org (AI settings).
 	// - A `model` the org does not allow: 400 `invalid_request`.
+	// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+	// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+	// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -992,6 +998,9 @@ type ClientInterface interface {
 	//
 	// The conversation with its messages, oldest first.
 	// An unknown id and another owner's id both answer 404 with the same body.
+	// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: GET` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: GET`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+	// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+	// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
 	//
 	// Corresponds with GET /v1/conversations/{id} (the `LlmGetConversation` operationId).
 	LlmGetConversation(ctx context.Context, id ConversationId, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1004,6 +1013,9 @@ type ClientInterface interface {
 	// - Order of events: zero or more `delta`, then `usage`, then `done`. Or an `error` event at any point.
 	// - Cancel: the client closes the connection. The server stops the model call and keeps the partial answer.
 	// - Headers: `Cache-Control: no-store`, `X-Accel-Buffering: no`. A comment line (`: ping`) every 15 s keeps the connection open.
+	// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+	// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+	// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -1018,6 +1030,9 @@ type ClientInterface interface {
 	// - Order of events: zero or more `delta`, then `usage`, then `done`. Or an `error` event at any point.
 	// - Cancel: the client closes the connection. The server stops the model call and keeps the partial answer.
 	// - Headers: `Cache-Control: no-store`, `X-Accel-Buffering: no`. A comment line (`: ping`) every 15 s keeps the connection open.
+	// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+	// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+	// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -1115,6 +1130,9 @@ func (c *Client) LlmUpdateAiSettings(ctx context.Context, body LlmUpdateAiSettin
 // Creates an empty conversation for the caller in the org of the token.
 // - Without `model` the conversation gets the default model of the org (AI settings).
 // - A `model` the org does not allow: 400 `invalid_request`.
+// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
 //
 // Takes any type of body and a specified content type.
 //
@@ -1136,6 +1154,9 @@ func (c *Client) LlmCreateConversationWithBody(ctx context.Context, contentType 
 // Creates an empty conversation for the caller in the org of the token.
 // - Without `model` the conversation gets the default model of the org (AI settings).
 // - A `model` the org does not allow: 400 `invalid_request`.
+// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -1156,6 +1177,9 @@ func (c *Client) LlmCreateConversation(ctx context.Context, body LlmCreateConver
 //
 // The conversation with its messages, oldest first.
 // An unknown id and another owner's id both answer 404 with the same body.
+// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: GET` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: GET`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
 //
 // Corresponds with GET /v1/conversations/{id} (the `LlmGetConversation` operationId).
 func (c *Client) LlmGetConversation(ctx context.Context, id ConversationId, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -1178,6 +1202,9 @@ func (c *Client) LlmGetConversation(ctx context.Context, id ConversationId, reqE
 // - Order of events: zero or more `delta`, then `usage`, then `done`. Or an `error` event at any point.
 // - Cancel: the client closes the connection. The server stops the model call and keeps the partial answer.
 // - Headers: `Cache-Control: no-store`, `X-Accel-Buffering: no`. A comment line (`: ping`) every 15 s keeps the connection open.
+// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
 //
 // Takes any type of body and a specified content type.
 //
@@ -1202,6 +1229,9 @@ func (c *Client) LlmSendMessageWithBody(ctx context.Context, id ConversationId, 
 // - Order of events: zero or more `delta`, then `usage`, then `done`. Or an `error` event at any point.
 // - Cancel: the client closes the connection. The server stops the model call and keeps the partial answer.
 // - Headers: `Cache-Control: no-store`, `X-Accel-Buffering: no`. A comment line (`: ping`) every 15 s keeps the connection open.
+// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -1549,6 +1579,9 @@ type ClientWithResponsesInterface interface {
 	// Creates an empty conversation for the caller in the org of the token.
 	// - Without `model` the conversation gets the default model of the org (AI settings).
 	// - A `model` the org does not allow: 400 `invalid_request`.
+	// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+	// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+	// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -1560,6 +1593,9 @@ type ClientWithResponsesInterface interface {
 	// Creates an empty conversation for the caller in the org of the token.
 	// - Without `model` the conversation gets the default model of the org (AI settings).
 	// - A `model` the org does not allow: 400 `invalid_request`.
+	// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+	// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+	// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -1570,6 +1606,9 @@ type ClientWithResponsesInterface interface {
 	//
 	// The conversation with its messages, oldest first.
 	// An unknown id and another owner's id both answer 404 with the same body.
+	// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: GET` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: GET`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+	// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+	// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -1584,6 +1623,9 @@ type ClientWithResponsesInterface interface {
 	// - Order of events: zero or more `delta`, then `usage`, then `done`. Or an `error` event at any point.
 	// - Cancel: the client closes the connection. The server stops the model call and keeps the partial answer.
 	// - Headers: `Cache-Control: no-store`, `X-Accel-Buffering: no`. A comment line (`: ping`) every 15 s keeps the connection open.
+	// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+	// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+	// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -1598,6 +1640,9 @@ type ClientWithResponsesInterface interface {
 	// - Order of events: zero or more `delta`, then `usage`, then `done`. Or an `error` event at any point.
 	// - Cancel: the client closes the connection. The server stops the model call and keeps the partial answer.
 	// - Headers: `Cache-Control: no-store`, `X-Accel-Buffering: no`. A comment line (`: ping`) every 15 s keeps the connection open.
+	// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+	// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+	// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -1786,6 +1831,7 @@ func (r LlmUpdateAiSettingsResponse) ContentType() string {
 // LlmCreateConversationResponse201Headers the declared response headers of an HTTP 201 response for LlmCreateConversation
 type LlmCreateConversationResponse201Headers struct {
 	Location *string
+	Vary     *string
 }
 
 // LlmCreateConversationResponse401Headers the declared response headers of an HTTP 401 response for LlmCreateConversation
@@ -1873,6 +1919,11 @@ func (r LlmCreateConversationResponse) ContentType() string {
 	return ""
 }
 
+// LlmGetConversationResponse200Headers the declared response headers of an HTTP 200 response for LlmGetConversation
+type LlmGetConversationResponse200Headers struct {
+	Vary *string
+}
+
 // LlmGetConversationResponse401Headers the declared response headers of an HTTP 401 response for LlmGetConversation
 type LlmGetConversationResponse401Headers struct {
 	WWWAuthenticate *string
@@ -1889,6 +1940,8 @@ type LlmGetConversationResponse struct {
 	ApplicationproblemJSON403 *Forbidden
 	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
 	ApplicationproblemJSON404 *NotFound
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *LlmGetConversationResponse200Headers
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *LlmGetConversationResponse401Headers
 }
@@ -1942,6 +1995,11 @@ func (r LlmGetConversationResponse) ContentType() string {
 	return ""
 }
 
+// LlmSendMessageResponse200Headers the declared response headers of an HTTP 200 response for LlmSendMessage
+type LlmSendMessageResponse200Headers struct {
+	Vary *string
+}
+
 // LlmSendMessageResponse401Headers the declared response headers of an HTTP 401 response for LlmSendMessage
 type LlmSendMessageResponse401Headers struct {
 	WWWAuthenticate *string
@@ -1974,6 +2032,8 @@ type LlmSendMessageResponse struct {
 	ApplicationproblemJSON429 *TooManyRequests
 	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
 	ApplicationproblemJSON503 *ModelUnavailable
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *LlmSendMessageResponse200Headers
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *LlmSendMessageResponse401Headers
 	// Headers429 the parsed response headers for an HTTP 429 response
@@ -2178,6 +2238,9 @@ func (c *ClientWithResponses) LlmUpdateAiSettingsWithResponse(ctx context.Contex
 // Creates an empty conversation for the caller in the org of the token.
 // - Without `model` the conversation gets the default model of the org (AI settings).
 // - A `model` the org does not allow: 400 `invalid_request`.
+// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -2195,6 +2258,9 @@ func (c *ClientWithResponses) LlmCreateConversationWithBodyWithResponse(ctx cont
 // Creates an empty conversation for the caller in the org of the token.
 // - Without `model` the conversation gets the default model of the org (AI settings).
 // - A `model` the org does not allow: 400 `invalid_request`.
+// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -2211,6 +2277,9 @@ func (c *ClientWithResponses) LlmCreateConversationWithResponse(ctx context.Cont
 //
 // The conversation with its messages, oldest first.
 // An unknown id and another owner's id both answer 404 with the same body.
+// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: GET` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: GET`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -2231,6 +2300,9 @@ func (c *ClientWithResponses) LlmGetConversationWithResponse(ctx context.Context
 // - Order of events: zero or more `delta`, then `usage`, then `done`. Or an `error` event at any point.
 // - Cancel: the client closes the connection. The server stops the model call and keeps the partial answer.
 // - Headers: `Cache-Control: no-store`, `X-Accel-Buffering: no`. A comment line (`: ping`) every 15 s keeps the connection open.
+// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -2251,6 +2323,9 @@ func (c *ClientWithResponses) LlmSendMessageWithBodyWithResponse(ctx context.Con
 // - Order of events: zero or more `delta`, then `usage`, then `done`. Or an `error` event at any point.
 // - Cancel: the client closes the connection. The server stops the model call and keeps the partial answer.
 // - Headers: `Cache-Control: no-store`, `X-Accel-Buffering: no`. A comment line (`: ping`) every 15 s keeps the connection open.
+// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -2496,6 +2571,13 @@ func ParseLlmCreateConversationResponse(rsp *http.Response) (*LlmCreateConversat
 			}
 			headers.Location = &value
 		}
+		if values := rsp.Header.Values("Vary"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Vary", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.Vary = &value
+		}
 		response.Headers201 = &headers
 	case rsp.StatusCode == 401:
 		var headers LlmCreateConversationResponse401Headers
@@ -2567,6 +2649,16 @@ func ParseLlmGetConversationResponse(rsp *http.Response) (*LlmGetConversationRes
 	}
 
 	switch {
+	case rsp.StatusCode == 200:
+		var headers LlmGetConversationResponse200Headers
+		if values := rsp.Header.Values("Vary"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Vary", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.Vary = &value
+		}
+		response.Headers200 = &headers
 	case rsp.StatusCode == 401:
 		var headers LlmGetConversationResponse401Headers
 		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
@@ -2648,6 +2740,16 @@ func ParseLlmSendMessageResponse(rsp *http.Response) (*LlmSendMessageResponse, e
 	}
 
 	switch {
+	case rsp.StatusCode == 200:
+		var headers LlmSendMessageResponse200Headers
+		if values := rsp.Header.Values("Vary"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Vary", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.Vary = &value
+		}
+		response.Headers200 = &headers
 	case rsp.StatusCode == 401:
 		var headers LlmSendMessageResponse401Headers
 		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
