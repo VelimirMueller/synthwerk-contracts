@@ -212,7 +212,7 @@ func checkEqual(t *testing.T, what string, got, want any) {
 }
 
 func TestAuditEventTypePattern(t *testing.T) {
-	t.Run("AuditEvent.type - every identity event of the catalog - matches the spec pattern", func(t *testing.T) {
+	t.Run("AuditEvent.type - every identity event and every event identity consumes - matches the spec pattern", func(t *testing.T) {
 		raw, err := os.ReadFile("../../openapi/identity/openapi.yaml")
 		if err != nil {
 			t.Fatal(err)
@@ -236,7 +236,8 @@ func TestAuditEventTypePattern(t *testing.T) {
 		re := regexp.MustCompile(spec.Components.Schemas.AuditEvent.Properties.Type.Pattern)
 		n := 0
 		for _, e := range loadCatalog(t) {
-			if e.Producer != "identity" {
+			// identity audits its own org events and the llm AI settings change (#39).
+			if e.Producer != "identity" && !slices.Contains(e.Consumers, "identity") {
 				continue
 			}
 			n++

@@ -32,6 +32,7 @@ type specOp struct {
 type specDoc struct {
 	Paths map[string]struct {
 		Get    specOp `yaml:"get"`
+		Put    specOp `yaml:"put"`
 		Post   specOp `yaml:"post"`
 		Patch  specOp `yaml:"patch"`
 		Delete specOp `yaml:"delete"`

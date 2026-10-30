@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.synthwerk.dev/events/llm/ai_settings.changed.v1.json",
+  "title": "llm.ai_settings.changed.v1",
+  "description": "An owner or admin changed the AI settings of an org (synthwerk#39). It carries the full new state, so a consumer needs no call back. CloudEvents subject and orgid extension: the identity org id. actor: user:<sub> of the owner or admin. No system prompt text: only its length. Identity copies it to the audit list of the org.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "org_id",
+    "version",
+    "changed",
+    "model",
+    "allowed_models",
+    "max_input_chars",
+    "user_tokens_per_day",
+    "system_prompt_chars"
+  ],
+  "properties": {
+    "org_id": {
+      "description": "The identity org id.",
+      "type": "string",
+      "format": "uuid",
+      "maxLength": 36
+    },
+    "version": {
+      "description": "Version of the settings after the change. Goes up by one per change. A consumer drops an event with a version lower than the one it holds.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "changed": {
+      "description": "The settings this change set to a new value.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 6,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "model",
+          "allowed_models",
+          "system_prompt",
+          "max_input_chars",
+          "user_tokens_per_day",
+          "temperature"
+        ]
+      }
+    },
+    "model": {
+      "description": "Default model alias of a new conversation. Never a provider model name.",
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_-]*$"
+    },
+    "allowed_models": {
+      "description": "The model aliases the users of the org may pick.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "maxLength": 64,
+        "pattern": "^[a-z][a-z0-9_-]*$"
+      }
+    },
+    "max_input_chars": {
+      "description": "Max characters of one user message.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8000
+    },
+    "user_tokens_per_day": {
+      "description": "Token cap per user per UTC day, below the plan. 0: the plan limit only.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000000000
+    },
+    "system_prompt_chars": {
+      "description": "Length of the system prompt in characters. 0: the service prompt. Never the text.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4000
+    },
+    "temperature": {
+      "description": "Sampling temperature. Absent: the model default.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2
+    }
+  }
+}

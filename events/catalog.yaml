@@ -39,6 +39,15 @@ events:
     schema: llm/message.completed.v1.schema.json
     example: examples/dev.synthwerk.llm.message.completed.v1.json
 
+  - type: dev.synthwerk.llm.ai_settings.changed.v1
+    nats_subject: evt.llm.ai_settings.changed.v1
+    stream: EVT_LLM
+    producer: llm
+    consumers: [identity]
+    status: draft
+    schema: llm/ai_settings.changed.v1.schema.json
+    example: examples/dev.synthwerk.llm.ai_settings.changed.v1.json
+
   - type: dev.synthwerk.identity.org.created.v1
     nats_subject: evt.identity.org.created.v1
     stream: EVT_IDENTITY

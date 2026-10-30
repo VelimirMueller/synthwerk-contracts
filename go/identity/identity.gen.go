@@ -299,12 +299,12 @@ type AppPage struct {
 	NextCursor *string `json:"next_cursor,omitempty"`
 }
 
-// AuditEvent One org event of identity, as it went to the outbox.
+// AuditEvent One org event, as identity wrote it to its outbox or received it from llm (AI settings, synthwerk#39).
 type AuditEvent struct {
 	// Actor Who did it. `user:<sub>`, `service:<name>` or `system` (a change from Zitadel).
 	Actor string `json:"actor"`
 
-	// Data The event data. Its schema is the event schema in `events/identity`.
+	// Data The event data. Its schema is the event schema in `events/identity` or `events/llm`.
 	Data map[string]interface{} `json:"data"`
 
 	// Id The CloudEvents id.
@@ -1258,10 +1258,11 @@ type ClientInterface interface {
 
 	// IdentityListAuditEvents List the audit events of an org
 	//
-	// The admin actions of the org, newest first. Each item is an event identity wrote to its outbox for the org, kept after the outbox row is gone.
+	// The admin actions of the org, newest first. Each item is an event identity wrote to its outbox for the org, kept after the outbox row is gone, or an AI settings change of llm that identity received from `EVT_LLM` (synthwerk#39).
 	// - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` gets 403. An `operator` gets 403.
-	// - Event types: `org.created`, `member.invited`, `member.role_changed`, `member.deactivated`, `member.reactivated`, `app.created`, `org.entitlements_changed`, and later org events of identity. Clients must accept types they do not know.
-	// - `data` is the event data, as its schema in `events/identity` says. No email, no personal name.
+	// - Event types: `org.created`, `member.invited`, `member.role_changed`, `member.deactivated`, `member.reactivated`, `app.created`, `org.entitlements_changed`, `dev.synthwerk.llm.ai_settings.changed.v1`, and later org events. Clients must accept types they do not know.
+	// - `data` is the event data, as its schema in `events/identity` or `events/llm` says. No email, no personal name, no system prompt text.
+	// - An llm event shows a few seconds after the change: identity reads it from the bus.
 	// - Cursor paging, max 100 per page.
 	//
 	// Corresponds with GET /v1/orgs/{orgId}/audit-events (the `IdentityListAuditEvents` operationId).
@@ -1735,10 +1736,11 @@ func (c *Client) IdentityUpdateApp(ctx context.Context, orgId OrgId, appId AppId
 
 // IdentityListAuditEvents List the audit events of an org
 //
-// The admin actions of the org, newest first. Each item is an event identity wrote to its outbox for the org, kept after the outbox row is gone.
+// The admin actions of the org, newest first. Each item is an event identity wrote to its outbox for the org, kept after the outbox row is gone, or an AI settings change of llm that identity received from `EVT_LLM` (synthwerk#39).
 // - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` gets 403. An `operator` gets 403.
-// - Event types: `org.created`, `member.invited`, `member.role_changed`, `member.deactivated`, `member.reactivated`, `app.created`, `org.entitlements_changed`, and later org events of identity. Clients must accept types they do not know.
-// - `data` is the event data, as its schema in `events/identity` says. No email, no personal name.
+// - Event types: `org.created`, `member.invited`, `member.role_changed`, `member.deactivated`, `member.reactivated`, `app.created`, `org.entitlements_changed`, `dev.synthwerk.llm.ai_settings.changed.v1`, and later org events. Clients must accept types they do not know.
+// - `data` is the event data, as its schema in `events/identity` or `events/llm` says. No email, no personal name, no system prompt text.
+// - An llm event shows a few seconds after the change: identity reads it from the bus.
 // - Cursor paging, max 100 per page.
 //
 // Corresponds with GET /v1/orgs/{orgId}/audit-events (the `IdentityListAuditEvents` operationId).
@@ -3292,10 +3294,11 @@ type ClientWithResponsesInterface interface {
 
 	// IdentityListAuditEventsWithResponse List the audit events of an org
 	//
-	// The admin actions of the org, newest first. Each item is an event identity wrote to its outbox for the org, kept after the outbox row is gone.
+	// The admin actions of the org, newest first. Each item is an event identity wrote to its outbox for the org, kept after the outbox row is gone, or an AI settings change of llm that identity received from `EVT_LLM` (synthwerk#39).
 	// - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` gets 403. An `operator` gets 403.
-	// - Event types: `org.created`, `member.invited`, `member.role_changed`, `member.deactivated`, `member.reactivated`, `app.created`, `org.entitlements_changed`, and later org events of identity. Clients must accept types they do not know.
-	// - `data` is the event data, as its schema in `events/identity` says. No email, no personal name.
+	// - Event types: `org.created`, `member.invited`, `member.role_changed`, `member.deactivated`, `member.reactivated`, `app.created`, `org.entitlements_changed`, `dev.synthwerk.llm.ai_settings.changed.v1`, and later org events. Clients must accept types they do not know.
+	// - `data` is the event data, as its schema in `events/identity` or `events/llm` says. No email, no personal name, no system prompt text.
+	// - An llm event shows a few seconds after the change: identity reads it from the bus.
 	// - Cursor paging, max 100 per page.
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -5419,10 +5422,11 @@ func (c *ClientWithResponses) IdentityUpdateAppWithResponse(ctx context.Context,
 
 // IdentityListAuditEventsWithResponse List the audit events of an org
 //
-// The admin actions of the org, newest first. Each item is an event identity wrote to its outbox for the org, kept after the outbox row is gone.
+// The admin actions of the org, newest first. Each item is an event identity wrote to its outbox for the org, kept after the outbox row is gone, or an AI settings change of llm that identity received from `EVT_LLM` (synthwerk#39).
 // - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` gets 403. An `operator` gets 403.
-// - Event types: `org.created`, `member.invited`, `member.role_changed`, `member.deactivated`, `member.reactivated`, `app.created`, `org.entitlements_changed`, and later org events of identity. Clients must accept types they do not know.
-// - `data` is the event data, as its schema in `events/identity` says. No email, no personal name.
+// - Event types: `org.created`, `member.invited`, `member.role_changed`, `member.deactivated`, `member.reactivated`, `app.created`, `org.entitlements_changed`, `dev.synthwerk.llm.ai_settings.changed.v1`, and later org events. Clients must accept types they do not know.
+// - `data` is the event data, as its schema in `events/identity` or `events/llm` says. No email, no personal name, no system prompt text.
+// - An llm event shows a few seconds after the change: identity reads it from the bus.
 // - Cursor paging, max 100 per page.
 //
 // Returns a wrapper object for the known response body format(s).
