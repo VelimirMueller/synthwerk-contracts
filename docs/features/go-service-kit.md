@@ -8,7 +8,7 @@ paths: ["go/kit/**", "go/examples/**"]
 api: ["GET /healthz", "GET /readyz"]
 events: ["dev.synthwerk.pulse.target.status_changed.v1"]
 mcp: []
-updated: 2026-10-29
+updated: 2026-10-30
 ---
 
 # Go service kit
@@ -28,7 +28,7 @@ updated: 2026-10-29
 | `kit/cloudevents` | Builds and checks CloudEvents 1.0.2 events: UUIDv7 id, `source`, `orgid`, `traceparent`, NATS subject from the type. |
 | `kit/outbox` | Outbox table, `Enqueue` in the caller's transaction, the relay to JetStream with `Nats-Msg-Id` = event id, and `Cleanup` of old published rows. |
 | `kit/env` | Reads `SYNTHWERK_<SERVICE>_*` and `SYNTHWERK_PLATFORM_ENV` (D-40). |
-| `kit/auth` | Verifies Zitadel access tokens against the issuer JWKS (D-20, D-23). Maps claims to a `Principal` (subject, org, roles, scopes). HTTP middleware and `RequireRole`, `RequireOrg`, `RequireScope`, `RequireMFA`. |
+| `kit/auth` | Verifies Zitadel access tokens against the issuer JWKS (D-20, D-23). `MultiVerifier` adds more issuers (widget tokens, #30). Maps claims to a `Principal` (subject, org, roles, scopes, issuer). HTTP middleware and `RequireRole`, `RequireOrg`, `RequireScope`, `RequireMFA`, `RequireIssuer`. |
 | `kit/auth/authtest` | Fake issuer for tests: serves discovery and a JWKS over `httptest`, mints signed tokens. |
 
 - `/readyz` answers 503 `down` until `MarkStarted`. Then it runs every check in parallel, each with its own timeout (default 300 ms, all within 900 ms).
@@ -37,6 +37,8 @@ updated: 2026-10-29
 - A crash after the publish and before the commit leaves the row unpublished. The next run publishes it again with the same `Nats-Msg-Id`. JetStream drops the copy, so a consumer gets the event once.
 - `relay.Run` deletes published rows older than `Config.Retention` (default 7 days), at start and then every `Config.CleanupInterval` (default 1 h). The age counts from `published_at`.
 - The clean-up never deletes an unpublished row, however old. `outbox.Cleanup(ctx, db, retention)` runs the same delete once.
+- `auth.MultiVerifier` trusts more than one issuer. It picks the `Verifier` by the exact `iss`; that `Verifier` checks the token with its own JWKS and audiences. An unknown `iss` is refused before any key fetch.
+- `Principal.Issuer` names the issuer of the token. `RequireIssuer` answers 403 for a token of another issuer, for example a widget token on an admin route.
 - `auth.Verifier` allows RS256 and ES256 only. It checks `iss`, `aud` (any of a list), `exp` (required), `nbf` and `iat` with 30 s leeway (max 60 s).
 - The JWKS cache refreshes after 15 min, and at once on an unknown `kid`, at most once per 10 s. When a refresh fails, the last good keys stay in use.
 - `ZitadelMapper` keeps a role only when the roles claim grants it in the token's org. `operator` counts only when granted in `PlatformOrgID`. A token without `sub` or org id is refused.
@@ -120,6 +122,8 @@ updated: 2026-10-29
 - `tests/unit/kit/auth_test.go` — `Verify - unknown kid - refreshes JWKS once, then rejects`
 - `tests/unit/kit/auth_test.go` — `Verify - key rotated after the first fetch - refreshes once, then accepts`
 - `tests/unit/kit/auth_test.go` — `RequireRole - member on an admin route - 403`
+- `tests/unit/kit/auth_test.go` — `MultiVerifier - iss of one issuer, key of the other - rejects`
+- `tests/unit/kit/auth_test.go` — `RequireIssuer - widget token on a user route - 403`
 - `tests/unit/kit/auth_test.go` — `RequireMFA - amr pwd only - 403`
 - `tests/unit/kit/auth_test.go` — `RequireMFA - enrolment flag true, amr pwd only - 403`
 - `tests/unit/kit/auth_test.go` — `Map - Zitadel v4.20.0 access token - org roles and client id`
@@ -137,4 +141,5 @@ updated: 2026-10-29
 | 2026-10-28 | `kit/auth`: `RequireMFA` stays fail closed; an enrolment flag never counts as MFA (#28, D-47 limitation). |
 | 2026-10-23 | `kit/auth`: Zitadel v4.20.0 token shape (`client_id`, `aud`, org scope), `RequireMFA` (SW-M2-0.5). |
 | 2026-10-23 | D-44: `kit/cloudevents` adds `WithOrg`/`OrgID`; `WithTenant`/`TenantID` deprecated, still working. |
+| 2026-10-30 | `kit/auth`: `MultiVerifier`, `Principal.Issuer`, `RequireIssuer`; `Middleware` takes a `TokenVerifier` (#30 widget tokens in llm). |
 | 2026-10-29 | `kit/outbox`: the relay deletes published rows after a retention (default 7 days); unpublished rows stay (#3). |

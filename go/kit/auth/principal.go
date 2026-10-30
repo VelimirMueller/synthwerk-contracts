@@ -26,6 +26,9 @@ type Principal struct {
 	// Scopes are the AI scopes (synthwerk:scope), not roles. Do not mix the two.
 	// Empty for Zitadel tokens today: no Action sets the claim.
 	Scopes []string
+	// Issuer is the "iss" of the token. Set by Verify. With a MultiVerifier it tells
+	// a Zitadel user token from a widget token of synthwerk-identity.
+	Issuer string
 	// ClientID is the app that got the token (client_id, else azp).
 	ClientID string
 	// AMR are the authentication methods ("amr"), for example ["user", "mfa"] after a

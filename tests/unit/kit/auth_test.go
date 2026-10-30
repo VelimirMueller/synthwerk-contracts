@@ -356,3 +356,152 @@ func TestMiddleware(t *testing.T) {
 		}
 	})
 }
+
+func TestMultiVerifier(t *testing.T) {
+	zitadel := authtest.NewIssuer(t)
+	widget := authtest.NewIssuer(t)
+	widget.Rotate(t, jose.ES256)
+	zcfg := zitadel.Config()
+	zcfg.Audiences = []string{"project-1"}
+	zv := newVerifier(t, zcfg)
+	wv := newVerifier(t, widget.Config())
+	mv, err := auth.NewMultiVerifier(zv, wv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stranger := authtest.NewIssuer(t)
+
+	tests := []struct {
+		name   string
+		token  func(t *testing.T) string
+		issuer string
+		reason error
+	}{
+		{"MultiVerifier - user token of the first issuer - principal", func(t *testing.T) string {
+			return zitadel.Mint(t, map[string]any{"aud": []string{"project-1"}})
+		}, zitadel.URL(), nil},
+		{"MultiVerifier - widget token of the second issuer - principal", func(t *testing.T) string {
+			return widget.MintType(t, "at+jwt", map[string]any{auth.ClaimOrigin: "https://shop.example"})
+		}, widget.URL(), nil},
+		{"MultiVerifier - audience of the other issuer - rejects", func(t *testing.T) string {
+			return widget.Mint(t, map[string]any{"aud": []string{"project-1"}})
+		}, "", auth.ErrAudience},
+		{"MultiVerifier - unknown issuer - rejects", func(t *testing.T) string {
+			return stranger.Mint(t, nil)
+		}, "", auth.ErrIssuer},
+		{"MultiVerifier - no iss - rejects", func(t *testing.T) string {
+			return widget.Mint(t, map[string]any{"iss": nil})
+		}, "", auth.ErrIssuer},
+		{"MultiVerifier - iss of one issuer, key of the other - rejects", func(t *testing.T) string {
+			return widget.Mint(t, map[string]any{"iss": zitadel.URL(), "aud": []string{"project-1"}})
+		}, "", auth.ErrUnknownKey},
+		{"MultiVerifier - not three parts - rejects", func(_ *testing.T) string {
+			return "a.b"
+		}, "", auth.ErrMalformed},
+		{"MultiVerifier - payload not base64 - rejects", func(_ *testing.T) string {
+			return "e30.%%%.sig"
+		}, "", auth.ErrMalformed},
+		{"MultiVerifier - empty token - rejects", func(_ *testing.T) string {
+			return ""
+		}, "", auth.ErrMalformed},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p, err := mv.Verify(t.Context(), tc.token(t))
+			if tc.reason == nil {
+				if err != nil {
+					t.Fatalf("Verify: %v", err)
+				}
+				if p.Issuer != tc.issuer {
+					t.Fatalf("issuer %q, want %q", p.Issuer, tc.issuer)
+				}
+				return
+			}
+			if !errors.Is(err, auth.ErrUnauthenticated) || !errors.Is(err, tc.reason) {
+				t.Fatalf("error %v, want %v", err, tc.reason)
+			}
+		})
+	}
+
+	t.Run("MultiVerifier - Ready with every key set - nil", func(t *testing.T) {
+		if err := mv.Ready(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("MultiVerifier - Ready with one key set down - error", func(t *testing.T) {
+		down := newVerifier(t, auth.Config{Issuer: "http://127.0.0.1:1", Audiences: []string{"a"}, JWKSURL: "http://127.0.0.1:1/keys"})
+		m, err := auth.NewMultiVerifier(zv, down)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := m.Ready(t.Context()); !errors.Is(err, auth.ErrUnavailable) {
+			t.Fatalf("Ready error %v, want ErrUnavailable", err)
+		}
+	})
+	t.Run("NewMultiVerifier - no verifier - error", func(t *testing.T) {
+		if _, err := auth.NewMultiVerifier(); err == nil {
+			t.Fatal("want an error")
+		}
+	})
+	t.Run("NewMultiVerifier - nil verifier - error", func(t *testing.T) {
+		if _, err := auth.NewMultiVerifier(zv, nil); err == nil {
+			t.Fatal("want an error")
+		}
+	})
+	t.Run("NewMultiVerifier - same issuer twice - error", func(t *testing.T) {
+		if _, err := auth.NewMultiVerifier(zv, newVerifier(t, zitadel.Config())); err == nil {
+			t.Fatal("want an error")
+		}
+	})
+	t.Run("Verifier.Issuer - configured issuer", func(t *testing.T) {
+		if zv.Issuer() != zitadel.URL() {
+			t.Fatalf("Issuer %q", zv.Issuer())
+		}
+	})
+}
+
+func TestRequireIssuer(t *testing.T) {
+	zitadel := authtest.NewIssuer(t)
+	widget := authtest.NewIssuer(t)
+	mv, err := auth.NewMultiVerifier(newVerifier(t, zitadel.Config()), newVerifier(t, widget.Config()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	api := http.NewServeMux()
+	api.Handle("GET /v1/chat", ok)
+	api.Handle("GET /v1/settings", auth.RequireIssuer(zitadel.URL())(ok))
+	handler := auth.Middleware(mv, api)
+
+	user := zitadel.Mint(t, nil)
+	wtok := widget.Mint(t, map[string]any{auth.ClaimOrigin: "https://shop.example"})
+	tests := []struct {
+		name   string
+		path   string
+		token  string
+		status int
+	}{
+		{"RequireIssuer - user token on a user route - 204", "/v1/settings", user, http.StatusNoContent},
+		{"RequireIssuer - widget token on a user route - 403", "/v1/settings", wtok, http.StatusForbidden},
+		{"Middleware - widget token on an open route - 204", "/v1/chat", wtok, http.StatusNoContent},
+		{"Middleware - user token on an open route - 204", "/v1/chat", user, http.StatusNoContent},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, tc.path, nil)
+			req.Header.Set("Authorization", "Bearer "+tc.token)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != tc.status {
+				t.Fatalf("status %d, want %d (%s)", rec.Code, tc.status, rec.Body)
+			}
+		})
+	}
+	t.Run("RequireIssuer - no Middleware in front - 401", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		auth.RequireIssuer(zitadel.URL())(ok).ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("status %d, want 401", rec.Code)
+		}
+	})
+}

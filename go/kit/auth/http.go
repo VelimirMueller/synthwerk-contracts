@@ -22,7 +22,8 @@ const ProblemContentType = "application/problem+json"
 // Middleware verifies the Bearer token of each request and puts the Principal in the
 // request context. No token or a refused token: 401. Key set not loadable: 503.
 // The body is constant text: it never names the reason or echoes the token.
-func Middleware(v *Verifier, next http.Handler) http.Handler {
+// v is a *Verifier (one issuer) or a *MultiVerifier (more issuers).
+func Middleware(v TokenVerifier, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		raw, ok := bearer(r)
 		if !ok {
@@ -48,6 +49,15 @@ func Middleware(v *Verifier, next http.Handler) http.Handler {
 func RequireRole(roles ...string) func(http.Handler) http.Handler {
 	return require(func(_ *http.Request, p *Principal) bool {
 		return slices.ContainsFunc(roles, p.HasRole)
+	})
+}
+
+// RequireIssuer lets a request through when the token came from one of issuers
+// (Principal.Issuer). No Principal: 401. Else 403. Use it to keep a route that a
+// MultiVerifier guards to user tokens, for example to refuse widget tokens.
+func RequireIssuer(issuers ...string) func(http.Handler) http.Handler {
+	return require(func(_ *http.Request, p *Principal) bool {
+		return p.Issuer != "" && slices.Contains(issuers, p.Issuer)
 	})
 }
 
