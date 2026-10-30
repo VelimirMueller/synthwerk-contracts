@@ -15,7 +15,7 @@
     "typecheck": "pnpm --filter @synthwerk/contracts typecheck"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.15",
+    "@biomejs/biome": "2.6.2",
     "@stoplight/spectral-cli": "6.17.0"
   }
 }
