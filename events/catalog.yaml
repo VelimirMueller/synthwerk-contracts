@@ -137,3 +137,30 @@ events:
     status: draft
     schema: identity/user.deleted.v1.schema.json
     example: examples/dev.synthwerk.identity.user.deleted.v1.json
+
+  - type: dev.synthwerk.studio.page.created.v1
+    nats_subject: evt.studio.page.created.v1
+    stream: EVT_STUDIO
+    producer: studio
+    consumers: [identity]
+    status: draft
+    schema: studio/page.created.v1.schema.json
+    example: examples/dev.synthwerk.studio.page.created.v1.json
+
+  - type: dev.synthwerk.studio.page.published.v1
+    nats_subject: evt.studio.page.published.v1
+    stream: EVT_STUDIO
+    producer: studio
+    consumers: [identity]
+    status: draft
+    schema: studio/page.published.v1.schema.json
+    example: examples/dev.synthwerk.studio.page.published.v1.json
+
+  - type: dev.synthwerk.studio.page.rolled_back.v1
+    nats_subject: evt.studio.page.rolled_back.v1
+    stream: EVT_STUDIO
+    producer: studio
+    consumers: [identity]
+    status: draft
+    schema: studio/page.rolled_back.v1.schema.json
+    example: examples/dev.synthwerk.studio.page.rolled_back.v1.json

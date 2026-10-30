@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Synthwerk identity
-  version: 0.7.1
+  version: 0.8.0
   summary: The caller, orgs and roles. The M2 stubs of synthwerk-identity.
   description: |
     The org contract of synthwerk-identity (M2 spec #29, D-44).
@@ -18,7 +18,7 @@ info:
     - Identity enforces `apps_per_org`: a create past the limit gets 403 `app_limit_reached` (#38).
     - Widget settings of an app: set with `updateApp`, read without a token from an allowed origin: `GET /v1/apps/{appId}/widget-settings` (#38).
     - Invite, deactivate and reactivate members (#37). A deactivated member keeps the row but has no org role in tokens.
-    - The audit list of an org: every org event identity writes, newest first (#37), and the AI settings changes of llm (#39). Owner and admin only.
+    - The audit list of an org: every org event identity writes, newest first (#37), the AI settings changes of llm (#39) and the page builder changes of studio (#106). Owner and admin only.
   license:
     name: MIT
     identifier: MIT
@@ -661,11 +661,11 @@ paths:
       operationId: identity.listAuditEvents
       summary: List the audit events of an org
       description: |
-        The admin actions of the org, newest first. Each item is an event identity wrote to its outbox for the org, kept after the outbox row is gone, or an AI settings change of llm that identity received from `EVT_LLM` (synthwerk#39).
+        The admin actions of the org, newest first. Each item is an event identity wrote to its outbox for the org, kept after the outbox row is gone, an AI settings change of llm that identity received from `EVT_LLM` (synthwerk#39), or a page builder change of studio that identity received from `EVT_STUDIO` (synthwerk#106).
         - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` gets 403. An `operator` gets 403.
-        - Event types: `org.created`, `member.invited`, `member.role_changed`, `member.deactivated`, `member.reactivated`, `app.created`, `org.entitlements_changed`, `dev.synthwerk.llm.ai_settings.changed.v1`, and later org events. Clients must accept types they do not know.
-        - `data` is the event data, as its schema in `events/identity` or `events/llm` says. No email, no personal name, no system prompt text.
-        - An llm event shows a few seconds after the change: identity reads it from the bus.
+        - Event types: `org.created`, `member.invited`, `member.role_changed`, `member.deactivated`, `member.reactivated`, `app.created`, `org.entitlements_changed`, `dev.synthwerk.llm.ai_settings.changed.v1`, `dev.synthwerk.studio.page.created.v1`, `dev.synthwerk.studio.page.published.v1`, `dev.synthwerk.studio.page.rolled_back.v1`, and later org events. Clients must accept types they do not know.
+        - `data` is the event data, as its schema in `events/identity`, `events/llm` or `events/studio` says. No email, no personal name, no system prompt text, no page content.
+        - An llm or studio event shows a few seconds after the change: identity reads it from the bus.
         - Cursor paging, max 100 per page.
       tags: [audit]
       security:
@@ -1481,7 +1481,7 @@ components:
       type: object
       additionalProperties: false
       required: [id, type, time, actor, data]
-      description: One org event, as identity wrote it to its outbox or received it from llm (AI settings, synthwerk#39).
+      description: One org event, as identity wrote it to its outbox or received it from llm (AI settings, synthwerk#39) or studio (page builder, synthwerk#106).
       properties:
         id:
           type: string
@@ -1510,7 +1510,7 @@ components:
           type: object
           additionalProperties: true
           maxProperties: 32
-          description: The event data. Its schema is the event schema in `events/identity` or `events/llm`.
+          description: The event data. Its schema is the event schema in `events/identity`, `events/llm` or `events/studio`.
     AuditEventPage:
       type: object
       additionalProperties: false

@@ -35,7 +35,7 @@ updated: 2026-10-30
 - A repeat invite of an email with a pending invitation answers 202 with that invitation, unchanged, for every email.
 - `DELETE /v1/orgs/{orgId}/invitations/{invitationId}` revokes a pending invitation (owner or admin) and emits `dev.synthwerk.identity.member.invite_revoked.v1`. A Zitadel user identity made for it is deleted.
 - `POST /v1/orgs/{orgId}/members/{userId}:deactivate` and `:reactivate` switch the Zitadel user grant off and on. The member keeps the row and the role.
-- `GET /v1/orgs/{orgId}/audit-events` lists the org events identity wrote and the llm AI settings changes (synthwerk#39), newest first (owner or admin only, no operator). `data` is the event data.
+- `GET /v1/orgs/{orgId}/audit-events` lists the org events identity wrote, the llm AI settings changes (synthwerk#39) and the studio page builder changes (synthwerk#106), newest first (owner or admin only, no operator). `data` is the event data.
 - `GET|POST /v1/orgs/{orgId}/apps` and `GET|PATCH|DELETE /v1/orgs/{orgId}/apps/{appId}` manage the apps of an org. Read: any active member or operator. Write: owner or admin.
 - Creating an app emits `dev.synthwerk.identity.app.created.v1`. Update and delete emit no event yet.
 - A create past `apps_per_org` gets 403 `app_limit_reached` (#38).
@@ -177,3 +177,4 @@ updated: 2026-10-30
 | 2026-10-30 | The audit list also shows `dev.synthwerk.llm.ai_settings.changed.v1`, which identity reads from `EVT_LLM` (synthwerk#39). Spec 0.6.0. |
 | 2026-10-30 | `DELETE /v1/me` reads the recent sign-in from a fresh ID token in the optional header `X-Synthwerk-Id-Token`; kit/auth adds `IDTokenVerifier` (synthwerk#41). Spec 0.7.0. |
 | 2026-10-30 | The five routes that write to Zitadel also list 503 `upstream_unavailable` with `Retry-After`: identity answers it until it knows the Zitadel project id (synthwerk#37). Spec 0.7.1. |
+| 2026-10-30 | The audit list also shows `dev.synthwerk.studio.page.created.v1`, `page.published.v1` and `page.rolled_back.v1`, which identity reads from `EVT_STUDIO` (synthwerk#106). Spec 0.8.0. |
