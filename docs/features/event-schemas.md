@@ -6,9 +6,9 @@ epic: E1
 owner: contracts
 paths: ["events/**"]
 api: []
-events: ["dev.synthwerk.pulse.target.status_changed.v1", "dev.synthwerk.llm.toolcall.executed.v1", "dev.synthwerk.llm.toolcall.executed.v2", "dev.synthwerk.llm.message.completed.v1", "dev.synthwerk.identity.org.created.v1", "dev.synthwerk.identity.user.created.v1", "dev.synthwerk.identity.member.role_changed.v1", "dev.synthwerk.identity.app.created.v1", "dev.synthwerk.identity.org.entitlements_changed.v1", "dev.synthwerk.identity.member.invited.v1", "dev.synthwerk.identity.member.invite_revoked.v1", "dev.synthwerk.identity.member.deactivated.v1", "dev.synthwerk.identity.member.reactivated.v1"]
+events: ["dev.synthwerk.pulse.target.status_changed.v1", "dev.synthwerk.llm.toolcall.executed.v1", "dev.synthwerk.llm.toolcall.executed.v2", "dev.synthwerk.llm.message.completed.v1", "dev.synthwerk.identity.org.created.v1", "dev.synthwerk.identity.user.created.v1", "dev.synthwerk.identity.member.role_changed.v1", "dev.synthwerk.identity.app.created.v1", "dev.synthwerk.identity.org.entitlements_changed.v1", "dev.synthwerk.identity.member.invited.v1", "dev.synthwerk.identity.member.invite_revoked.v1", "dev.synthwerk.identity.member.deactivated.v1", "dev.synthwerk.identity.member.reactivated.v1", "dev.synthwerk.identity.user.deleted.v1"]
 mcp: []
-updated: 2026-10-29
+updated: 2026-10-30
 ---
 
 # Event schemas
@@ -58,6 +58,7 @@ updated: 2026-10-29
 | `dev.synthwerk.identity.member.invite_revoked.v1` | An owner or admin revoked a pending invitation. `org_id`, `invitation_id`, `role`. |
 | `dev.synthwerk.identity.member.deactivated.v1` | A member was deactivated. `org_id`, `user_sub`, `role`. |
 | `dev.synthwerk.identity.member.reactivated.v1` | A member was reactivated. `org_id`, `user_sub`, `role`. |
+| `dev.synthwerk.identity.user.deleted.v1` | A user deleted the own account. `user_sub` and `deleted_orgs`. Consumers delete the user's rows; a repeat is harmless. |
 
 ## Errors
 
@@ -83,3 +84,4 @@ updated: 2026-10-29
 | 2026-10-29 | Add `identity.app.created.v1` (synthwerk#30). |
 | 2026-10-29 | Add `identity.org.entitlements_changed.v1` (synthwerk#31). |
 | 2026-10-30 | Add `identity.member.invited.v1`, `member.invite_revoked.v1`, `member.deactivated.v1`, `member.reactivated.v1` (synthwerk#37). |
+| 2026-10-30 | Add `identity.user.deleted.v1` (synthwerk#41). |

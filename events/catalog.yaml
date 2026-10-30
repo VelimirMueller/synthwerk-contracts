@@ -119,3 +119,12 @@ events:
     status: draft
     schema: identity/member.reactivated.v1.schema.json
     example: examples/dev.synthwerk.identity.member.reactivated.v1.json
+
+  - type: dev.synthwerk.identity.user.deleted.v1
+    nats_subject: evt.identity.user.deleted.v1
+    stream: EVT_IDENTITY
+    producer: identity
+    consumers: [llm]
+    status: draft
+    schema: identity/user.deleted.v1.schema.json
+    example: examples/dev.synthwerk.identity.user.deleted.v1.json

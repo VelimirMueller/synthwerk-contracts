@@ -18,6 +18,21 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AccountDeletionStatus.
+const (
+	AccountDeletionStatusAccepted AccountDeletionStatus = "accepted"
+)
+
+// Valid indicates whether the value is a known member of the AccountDeletionStatus enum.
+func (e AccountDeletionStatus) Valid() bool {
+	switch e {
+	case AccountDeletionStatusAccepted:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for MemberStatus.
 const (
 	MemberStatusActive      MemberStatus = "active"
@@ -75,6 +90,39 @@ func (e Role) Valid() bool {
 	case RoleOperator:
 		return true
 	case RoleOwner:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ServiceExportStatus.
+const (
+	ServiceExportStatusOk          ServiceExportStatus = "ok"
+	ServiceExportStatusUnavailable ServiceExportStatus = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the ServiceExportStatus enum.
+func (e ServiceExportStatus) Valid() bool {
+	switch e {
+	case ServiceExportStatusOk:
+		return true
+	case ServiceExportStatusUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UserExportFormatVersion.
+const (
+	UserExportFormatVersionN1 UserExportFormatVersion = 1
+)
+
+// Valid indicates whether the value is a known member of the UserExportFormatVersion enum.
+func (e UserExportFormatVersion) Valid() bool {
+	switch e {
+	case UserExportFormatVersionN1:
 		return true
 	default:
 		return false
@@ -198,6 +246,24 @@ func (e WidgetTokenTokenType) Valid() bool {
 	}
 }
 
+// AccountDeletion The answer to `DELETE /v1/me`.
+type AccountDeletion struct {
+	// DeletedOrgIds Orgs that closed with the account, because the caller was their only member.
+	DeletedOrgIds []openapi_types.UUID `json:"deleted_org_ids"`
+
+	// RequestedAt When identity took the first delete request of this user.
+	RequestedAt time.Time `json:"requested_at"`
+
+	// Status `accepted`: identity deleted its rows and published the fact. The Zitadel user is removed next, with retries.
+	Status AccountDeletionStatus `json:"status"`
+
+	// UserId Subject id (token `sub`) of the deleted user.
+	UserId string `json:"user_id"`
+}
+
+// AccountDeletionStatus `accepted`: identity deleted its rows and published the fact. The Zitadel user is removed next, with retries.
+type AccountDeletionStatus string
+
 // App defines model for App.
 type App struct {
 	// AllowedOrigins Origins that may get a widget token for this app. Canonical form.
@@ -308,6 +374,36 @@ type Entitlements struct {
 	Version int64 `json:"version"`
 }
 
+// ExportMembership defines model for ExportMembership.
+type ExportMembership struct {
+	JoinedAt time.Time          `json:"joined_at"`
+	OrgId    openapi_types.UUID `json:"org_id"`
+	OrgName  string             `json:"org_name"`
+	OrgSlug  string             `json:"org_slug"`
+
+	// Role An org role. `operator` is never an org role.
+	Role      OrgRole   `json:"role"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// ExportMfaEvidence The newest sign-in with MFA that the MFA gate stored. Absent when there is none. It holds no session token.
+type ExportMfaEvidence struct {
+	Amr       []string  `json:"amr"`
+	CheckedAt time.Time `json:"checked_at"`
+
+	// SessionId Zitadel session id. Not a credential.
+	SessionId string `json:"session_id"`
+}
+
+// IdentityExport The rows identity keeps about the user.
+type IdentityExport struct {
+	// Memberships Every org membership of the user, by org name.
+	Memberships []ExportMembership `json:"memberships"`
+
+	// MfaEvidence The newest sign-in with MFA that the MFA gate stored. Absent when there is none. It holds no session token.
+	MfaEvidence *ExportMfaEvidence `json:"mfa_evidence,omitempty"`
+}
+
 // Invitation A pending invitation. It never says whether the email has an account.
 type Invitation struct {
 	CreatedAt time.Time `json:"created_at"`
@@ -410,7 +506,7 @@ type OrgRole string
 // | `forbidden` | 403 | Role does not allow the call. |
 // | `not_found` | 404 | Unknown org or member, or no membership. |
 // | `slug_taken` | 409 | Another org has the slug. |
-// | `last_owner` | 409 | The org would lose its last owner. |
+// | `last_owner` | 409 | The org would lose its last owner (role change or account delete). |
 // | `own_role` | 409 | The caller tried to change their own role. |
 // | `own_membership` | 409 | The caller tried to deactivate their own membership. |
 // | `member_exists` | 409 | The email is an active or deactivated member of this org. |
@@ -418,6 +514,7 @@ type OrgRole string
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type Problem struct {
 	// Code Stable machine code, for example `not_found`.
 	Code string `json:"code"`
@@ -443,6 +540,21 @@ type Problem struct {
 // - `operator`: platform role. It is never an org membership.
 type Role string
 
+// ServiceExport defines model for ServiceExport.
+type ServiceExport struct {
+	// Data The service's own export, unchanged. Its schema is in the service's spec, for example `LlmExport` in `openapi/llm`.
+	Data *map[string]interface{} `json:"data,omitempty"`
+
+	// Service Service name, for example `llm`.
+	Service string `json:"service"`
+
+	// Status `unavailable`: the service did not answer in time, or answered with an error. `data` is absent.
+	Status ServiceExportStatus `json:"status"`
+}
+
+// ServiceExportStatus `unavailable`: the service did not answer in time, or answered with an error. `data` is absent.
+type ServiceExportStatus string
+
 // UpdateAppRequest At least one field. A field that is absent keeps its value.
 type UpdateAppRequest struct {
 	// AllowedOrigins Replaces the whole list. Two entries with the same canonical form are refused (400).
@@ -455,6 +567,28 @@ type UpdateAppRequest struct {
 	// - A new app gets the defaults: `bottom-right`, `default`, `system`, `auto`, `flagship`, empty greeting.
 	WidgetSettings *WidgetSettings `json:"widget_settings,omitempty"`
 }
+
+// UserExport Everything Synthwerk keeps about one user. Machine-readable (GDPR Art. 20).
+type UserExport struct {
+	// Complete False when at least one service in `services` has `status` `unavailable`.
+	Complete   bool      `json:"complete"`
+	ExportedAt time.Time `json:"exported_at"`
+
+	// FormatVersion Version of this document format. A new field keeps 1; a removed or renamed field gives 2.
+	FormatVersion UserExportFormatVersion `json:"format_version"`
+
+	// Identity The rows identity keeps about the user.
+	Identity IdentityExport `json:"identity"`
+
+	// Services One entry per service that keeps user rows. Order by `service`.
+	Services []ServiceExport `json:"services"`
+
+	// Subject Token `sub` of the caller.
+	Subject string `json:"subject"`
+}
+
+// UserExportFormatVersion Version of this document format. A new field keeps 1; a removed or renamed field gives 2.
+type UserExportFormatVersion int
 
 // WidgetSettings How the widget of an app looks (synthwerk#38). The studio sets them; the widget loads them (widgets#34).
 // - An attribute on `<synthwerk-chat>` wins over the stored value.
@@ -540,7 +674,7 @@ type UserId = string
 // | `forbidden` | 403 | Role does not allow the call. |
 // | `not_found` | 404 | Unknown org or member, or no membership. |
 // | `slug_taken` | 409 | Another org has the slug. |
-// | `last_owner` | 409 | The org would lose its last owner. |
+// | `last_owner` | 409 | The org would lose its last owner (role change or account delete). |
 // | `own_role` | 409 | The caller tried to change their own role. |
 // | `own_membership` | 409 | The caller tried to deactivate their own membership. |
 // | `member_exists` | 409 | The email is an active or deactivated member of this org. |
@@ -548,6 +682,7 @@ type UserId = string
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type Conflict = Problem
 
 // CreateAppForbidden RFC 9457 problem details with the stable Synthwerk `code`.
@@ -560,7 +695,7 @@ type Conflict = Problem
 // | `forbidden` | 403 | Role does not allow the call. |
 // | `not_found` | 404 | Unknown org or member, or no membership. |
 // | `slug_taken` | 409 | Another org has the slug. |
-// | `last_owner` | 409 | The org would lose its last owner. |
+// | `last_owner` | 409 | The org would lose its last owner (role change or account delete). |
 // | `own_role` | 409 | The caller tried to change their own role. |
 // | `own_membership` | 409 | The caller tried to deactivate their own membership. |
 // | `member_exists` | 409 | The email is an active or deactivated member of this org. |
@@ -568,6 +703,7 @@ type Conflict = Problem
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type CreateAppForbidden = Problem
 
 // Forbidden RFC 9457 problem details with the stable Synthwerk `code`.
@@ -580,7 +716,7 @@ type CreateAppForbidden = Problem
 // | `forbidden` | 403 | Role does not allow the call. |
 // | `not_found` | 404 | Unknown org or member, or no membership. |
 // | `slug_taken` | 409 | Another org has the slug. |
-// | `last_owner` | 409 | The org would lose its last owner. |
+// | `last_owner` | 409 | The org would lose its last owner (role change or account delete). |
 // | `own_role` | 409 | The caller tried to change their own role. |
 // | `own_membership` | 409 | The caller tried to deactivate their own membership. |
 // | `member_exists` | 409 | The email is an active or deactivated member of this org. |
@@ -588,6 +724,7 @@ type CreateAppForbidden = Problem
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type Forbidden = Problem
 
 // InvalidRequest RFC 9457 problem details with the stable Synthwerk `code`.
@@ -600,7 +737,7 @@ type Forbidden = Problem
 // | `forbidden` | 403 | Role does not allow the call. |
 // | `not_found` | 404 | Unknown org or member, or no membership. |
 // | `slug_taken` | 409 | Another org has the slug. |
-// | `last_owner` | 409 | The org would lose its last owner. |
+// | `last_owner` | 409 | The org would lose its last owner (role change or account delete). |
 // | `own_role` | 409 | The caller tried to change their own role. |
 // | `own_membership` | 409 | The caller tried to deactivate their own membership. |
 // | `member_exists` | 409 | The email is an active or deactivated member of this org. |
@@ -608,7 +745,29 @@ type Forbidden = Problem
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type InvalidRequest = Problem
+
+// LastOwner RFC 9457 problem details with the stable Synthwerk `code`.
+// Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
+//
+// | Code | Status | Cause |
+// |---|---|---|
+// | `invalid_request` | 400 | Body or parameter not valid. |
+// | `unauthenticated` | 401 | Token missing or not valid. |
+// | `forbidden` | 403 | Role does not allow the call. |
+// | `not_found` | 404 | Unknown org or member, or no membership. |
+// | `slug_taken` | 409 | Another org has the slug. |
+// | `last_owner` | 409 | The org would lose its last owner (role change or account delete). |
+// | `own_role` | 409 | The caller tried to change their own role. |
+// | `own_membership` | 409 | The caller tried to deactivate their own membership. |
+// | `member_exists` | 409 | The email is an active or deactivated member of this org. |
+// | `rate_limited` | 429 | Too many invites. Retry after `Retry-After` seconds. |
+// | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
+// | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
+// | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
+type LastOwner = Problem
 
 // MemberConflict RFC 9457 problem details with the stable Synthwerk `code`.
 // Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
@@ -620,7 +779,7 @@ type InvalidRequest = Problem
 // | `forbidden` | 403 | Role does not allow the call. |
 // | `not_found` | 404 | Unknown org or member, or no membership. |
 // | `slug_taken` | 409 | Another org has the slug. |
-// | `last_owner` | 409 | The org would lose its last owner. |
+// | `last_owner` | 409 | The org would lose its last owner (role change or account delete). |
 // | `own_role` | 409 | The caller tried to change their own role. |
 // | `own_membership` | 409 | The caller tried to deactivate their own membership. |
 // | `member_exists` | 409 | The email is an active or deactivated member of this org. |
@@ -628,6 +787,7 @@ type InvalidRequest = Problem
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type MemberConflict = Problem
 
 // NotFound RFC 9457 problem details with the stable Synthwerk `code`.
@@ -640,7 +800,7 @@ type MemberConflict = Problem
 // | `forbidden` | 403 | Role does not allow the call. |
 // | `not_found` | 404 | Unknown org or member, or no membership. |
 // | `slug_taken` | 409 | Another org has the slug. |
-// | `last_owner` | 409 | The org would lose its last owner. |
+// | `last_owner` | 409 | The org would lose its last owner (role change or account delete). |
 // | `own_role` | 409 | The caller tried to change their own role. |
 // | `own_membership` | 409 | The caller tried to deactivate their own membership. |
 // | `member_exists` | 409 | The email is an active or deactivated member of this org. |
@@ -648,6 +808,7 @@ type MemberConflict = Problem
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type NotFound = Problem
 
 // OriginNotAllowed RFC 9457 problem details with the stable Synthwerk `code`.
@@ -660,7 +821,7 @@ type NotFound = Problem
 // | `forbidden` | 403 | Role does not allow the call. |
 // | `not_found` | 404 | Unknown org or member, or no membership. |
 // | `slug_taken` | 409 | Another org has the slug. |
-// | `last_owner` | 409 | The org would lose its last owner. |
+// | `last_owner` | 409 | The org would lose its last owner (role change or account delete). |
 // | `own_role` | 409 | The caller tried to change their own role. |
 // | `own_membership` | 409 | The caller tried to deactivate their own membership. |
 // | `member_exists` | 409 | The email is an active or deactivated member of this org. |
@@ -668,6 +829,7 @@ type NotFound = Problem
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type OriginNotAllowed = Problem
 
 // RateLimited RFC 9457 problem details with the stable Synthwerk `code`.
@@ -680,7 +842,7 @@ type OriginNotAllowed = Problem
 // | `forbidden` | 403 | Role does not allow the call. |
 // | `not_found` | 404 | Unknown org or member, or no membership. |
 // | `slug_taken` | 409 | Another org has the slug. |
-// | `last_owner` | 409 | The org would lose its last owner. |
+// | `last_owner` | 409 | The org would lose its last owner (role change or account delete). |
 // | `own_role` | 409 | The caller tried to change their own role. |
 // | `own_membership` | 409 | The caller tried to deactivate their own membership. |
 // | `member_exists` | 409 | The email is an active or deactivated member of this org. |
@@ -688,7 +850,29 @@ type OriginNotAllowed = Problem
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type RateLimited = Problem
+
+// RecentMFARequired RFC 9457 problem details with the stable Synthwerk `code`.
+// Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
+//
+// | Code | Status | Cause |
+// |---|---|---|
+// | `invalid_request` | 400 | Body or parameter not valid. |
+// | `unauthenticated` | 401 | Token missing or not valid. |
+// | `forbidden` | 403 | Role does not allow the call. |
+// | `not_found` | 404 | Unknown org or member, or no membership. |
+// | `slug_taken` | 409 | Another org has the slug. |
+// | `last_owner` | 409 | The org would lose its last owner (role change or account delete). |
+// | `own_role` | 409 | The caller tried to change their own role. |
+// | `own_membership` | 409 | The caller tried to deactivate their own membership. |
+// | `member_exists` | 409 | The email is an active or deactivated member of this org. |
+// | `rate_limited` | 429 | Too many invites. Retry after `Retry-After` seconds. |
+// | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
+// | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
+// | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
+type RecentMFARequired = Problem
 
 // RoleConflict RFC 9457 problem details with the stable Synthwerk `code`.
 // Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
@@ -700,7 +884,7 @@ type RateLimited = Problem
 // | `forbidden` | 403 | Role does not allow the call. |
 // | `not_found` | 404 | Unknown org or member, or no membership. |
 // | `slug_taken` | 409 | Another org has the slug. |
-// | `last_owner` | 409 | The org would lose its last owner. |
+// | `last_owner` | 409 | The org would lose its last owner (role change or account delete). |
 // | `own_role` | 409 | The caller tried to change their own role. |
 // | `own_membership` | 409 | The caller tried to deactivate their own membership. |
 // | `member_exists` | 409 | The email is an active or deactivated member of this org. |
@@ -708,6 +892,7 @@ type RateLimited = Problem
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type RoleConflict = Problem
 
 // Unauthenticated RFC 9457 problem details with the stable Synthwerk `code`.
@@ -720,7 +905,7 @@ type RoleConflict = Problem
 // | `forbidden` | 403 | Role does not allow the call. |
 // | `not_found` | 404 | Unknown org or member, or no membership. |
 // | `slug_taken` | 409 | Another org has the slug. |
-// | `last_owner` | 409 | The org would lose its last owner. |
+// | `last_owner` | 409 | The org would lose its last owner (role change or account delete). |
 // | `own_role` | 409 | The caller tried to change their own role. |
 // | `own_membership` | 409 | The caller tried to deactivate their own membership. |
 // | `member_exists` | 409 | The email is an active or deactivated member of this org. |
@@ -728,6 +913,7 @@ type RoleConflict = Problem
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type Unauthenticated = Problem
 
 // UpstreamUnavailable RFC 9457 problem details with the stable Synthwerk `code`.
@@ -740,7 +926,7 @@ type Unauthenticated = Problem
 // | `forbidden` | 403 | Role does not allow the call. |
 // | `not_found` | 404 | Unknown org or member, or no membership. |
 // | `slug_taken` | 409 | Another org has the slug. |
-// | `last_owner` | 409 | The org would lose its last owner. |
+// | `last_owner` | 409 | The org would lose its last owner (role change or account delete). |
 // | `own_role` | 409 | The caller tried to change their own role. |
 // | `own_membership` | 409 | The caller tried to deactivate their own membership. |
 // | `member_exists` | 409 | The email is an active or deactivated member of this org. |
@@ -748,6 +934,7 @@ type Unauthenticated = Problem
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type UpstreamUnavailable = Problem
 
 // IdentityGetWidgetSettingsParams defines parameters for IdentityGetWidgetSettings.
@@ -923,6 +1110,19 @@ type ClientInterface interface {
 	// Corresponds with POST /v1/apps/{appId}/widget-tokens (the `IdentityCreateWidgetToken` operationId).
 	IdentityCreateWidgetToken(ctx context.Context, appId AppId, params *IdentityCreateWidgetTokenParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// IdentityDeleteMe Delete the own account
+	//
+	// Deletes the caller's account (synthwerk#41). Emits `dev.synthwerk.identity.user.deleted.v1`; the other services delete the user's rows when they get it.
+	// - Needs a recent sign-in with MFA: the token has `amr` `mfa` and the user's newest gated sign-in is at most 15 minutes old (identity setting, default 15 minutes). Else 403 `recent_mfa_required`: sign in again, then retry.
+	// - Last owner rule: an org with other members must keep an owner. When the caller is its only owner, the answer is 409 `last_owner` and nothing changes. Make another member `owner` first.
+	// - An org where the caller is the only member closes with the account. Identity deletes it with its apps and entitlements. `deleted_org_ids` lists these orgs.
+	// - Identity deletes its own rows of the user in one transaction with the event. The Zitadel user is removed after the answer, with retries. A token issued before stays valid until it expires.
+	// - An `operator` gets 403 `forbidden`: platform users are never removed through this route.
+	// - A repeat while the old token is still valid answers 202 again, with the first `requested_at` and an empty `deleted_org_ids`. It changes nothing.
+	//
+	// Corresponds with DELETE /v1/me (the `IdentityDeleteMe` operationId).
+	IdentityDeleteMe(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// IdentityGetMe Get the caller
 	//
 	// The subject, the org and the roles of the token.
@@ -938,6 +1138,17 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/me/entitlements (the `IdentityGetMyEntitlements` operationId).
 	IdentityGetMyEntitlements(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IdentityExportMe Export the own data
+	//
+	// All data Synthwerk keeps about the caller, as one JSON document (synthwerk#41, GDPR Art. 15 and 20).
+	// - `identity`: the memberships in every org and the newest MFA evidence.
+	// - `services`: identity asks every service that keeps user rows (today: llm) with the caller's token and puts each answer here unchanged. A service that does not answer has `status` `unavailable`, and `complete` is false. Retry later for a full export.
+	// - Profile data (email, name, passkeys) lives in Zitadel. The user reads it in the Zitadel account console.
+	// - Any signed-in user may call it. Operators too: it shows only the caller's own data.
+	//
+	// Corresponds with GET /v1/me/export (the `IdentityExportMe` operationId).
+	IdentityExportMe(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// IdentityListOrgs List orgs
 	//
@@ -1226,6 +1437,29 @@ func (c *Client) IdentityCreateWidgetToken(ctx context.Context, appId AppId, par
 	return c.Client.Do(req)
 }
 
+// IdentityDeleteMe Delete the own account
+//
+// Deletes the caller's account (synthwerk#41). Emits `dev.synthwerk.identity.user.deleted.v1`; the other services delete the user's rows when they get it.
+// - Needs a recent sign-in with MFA: the token has `amr` `mfa` and the user's newest gated sign-in is at most 15 minutes old (identity setting, default 15 minutes). Else 403 `recent_mfa_required`: sign in again, then retry.
+// - Last owner rule: an org with other members must keep an owner. When the caller is its only owner, the answer is 409 `last_owner` and nothing changes. Make another member `owner` first.
+// - An org where the caller is the only member closes with the account. Identity deletes it with its apps and entitlements. `deleted_org_ids` lists these orgs.
+// - Identity deletes its own rows of the user in one transaction with the event. The Zitadel user is removed after the answer, with retries. A token issued before stays valid until it expires.
+// - An `operator` gets 403 `forbidden`: platform users are never removed through this route.
+// - A repeat while the old token is still valid answers 202 again, with the first `requested_at` and an empty `deleted_org_ids`. It changes nothing.
+//
+// Corresponds with DELETE /v1/me (the `IdentityDeleteMe` operationId).
+func (c *Client) IdentityDeleteMe(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIdentityDeleteMeRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // IdentityGetMe Get the caller
 //
 // The subject, the org and the roles of the token.
@@ -1252,6 +1486,27 @@ func (c *Client) IdentityGetMe(ctx context.Context, reqEditors ...RequestEditorF
 // Corresponds with GET /v1/me/entitlements (the `IdentityGetMyEntitlements` operationId).
 func (c *Client) IdentityGetMyEntitlements(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewIdentityGetMyEntitlementsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// IdentityExportMe Export the own data
+//
+// All data Synthwerk keeps about the caller, as one JSON document (synthwerk#41, GDPR Art. 15 and 20).
+// - `identity`: the memberships in every org and the newest MFA evidence.
+// - `services`: identity asks every service that keeps user rows (today: llm) with the caller's token and puts each answer here unchanged. A service that does not answer has `status` `unavailable`, and `complete` is false. Retry later for a full export.
+// - Profile data (email, name, passkeys) lives in Zitadel. The user reads it in the Zitadel account console.
+// - Any signed-in user may call it. Operators too: it shows only the caller's own data.
+//
+// Corresponds with GET /v1/me/export (the `IdentityExportMe` operationId).
+func (c *Client) IdentityExportMe(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIdentityExportMeRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -1815,6 +2070,33 @@ func NewIdentityCreateWidgetTokenRequest(server string, appId AppId, params *Ide
 	return req, nil
 }
 
+// NewIdentityDeleteMeRequest constructs an http.Request for the IdentityDeleteMe method
+func NewIdentityDeleteMeRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/me")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewIdentityGetMeRequest constructs an http.Request for the IdentityGetMe method
 func NewIdentityGetMeRequest(server string) (*http.Request, error) {
 	var err error
@@ -1852,6 +2134,33 @@ func NewIdentityGetMyEntitlementsRequest(server string) (*http.Request, error) {
 	}
 
 	operationPath := fmt.Sprintf("/v1/me/entitlements")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewIdentityExportMeRequest constructs an http.Request for the IdentityExportMe method
+func NewIdentityExportMeRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/me/export")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2817,6 +3126,21 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/apps/{appId}/widget-tokens (the `IdentityCreateWidgetToken` operationId).
 	IdentityCreateWidgetTokenWithResponse(ctx context.Context, appId AppId, params *IdentityCreateWidgetTokenParams, reqEditors ...RequestEditorFn) (*IdentityCreateWidgetTokenResponse, error)
 
+	// IdentityDeleteMeWithResponse Delete the own account
+	//
+	// Deletes the caller's account (synthwerk#41). Emits `dev.synthwerk.identity.user.deleted.v1`; the other services delete the user's rows when they get it.
+	// - Needs a recent sign-in with MFA: the token has `amr` `mfa` and the user's newest gated sign-in is at most 15 minutes old (identity setting, default 15 minutes). Else 403 `recent_mfa_required`: sign in again, then retry.
+	// - Last owner rule: an org with other members must keep an owner. When the caller is its only owner, the answer is 409 `last_owner` and nothing changes. Make another member `owner` first.
+	// - An org where the caller is the only member closes with the account. Identity deletes it with its apps and entitlements. `deleted_org_ids` lists these orgs.
+	// - Identity deletes its own rows of the user in one transaction with the event. The Zitadel user is removed after the answer, with retries. A token issued before stays valid until it expires.
+	// - An `operator` gets 403 `forbidden`: platform users are never removed through this route.
+	// - A repeat while the old token is still valid answers 202 again, with the first `requested_at` and an empty `deleted_org_ids`. It changes nothing.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/me (the `IdentityDeleteMe` operationId).
+	IdentityDeleteMeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*IdentityDeleteMeResponse, error)
+
 	// IdentityGetMeWithResponse Get the caller
 	//
 	// The subject, the org and the roles of the token.
@@ -2836,6 +3160,19 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/me/entitlements (the `IdentityGetMyEntitlements` operationId).
 	IdentityGetMyEntitlementsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*IdentityGetMyEntitlementsResponse, error)
+
+	// IdentityExportMeWithResponse Export the own data
+	//
+	// All data Synthwerk keeps about the caller, as one JSON document (synthwerk#41, GDPR Art. 15 and 20).
+	// - `identity`: the memberships in every org and the newest MFA evidence.
+	// - `services`: identity asks every service that keeps user rows (today: llm) with the caller's token and puts each answer here unchanged. A service that does not answer has `status` `unavailable`, and `complete` is false. Retry later for a full export.
+	// - Profile data (email, name, passkeys) lives in Zitadel. The user reads it in the Zitadel account console.
+	// - Any signed-in user may call it. Operators too: it shows only the caller's own data.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/me/export (the `IdentityExportMe` operationId).
+	IdentityExportMeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*IdentityExportMeResponse, error)
 
 	// IdentityListOrgsWithResponse List orgs
 	//
@@ -3257,6 +3594,75 @@ func (r IdentityCreateWidgetTokenResponse) ContentType() string {
 	return ""
 }
 
+// IdentityDeleteMeResponse401Headers the declared response headers of an HTTP 401 response for IdentityDeleteMe
+type IdentityDeleteMeResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type IdentityDeleteMeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *AccountDeletion
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Unauthenticated
+	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
+	ApplicationproblemJSON403 *RecentMFARequired
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *LastOwner
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *IdentityDeleteMeResponse401Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r IdentityDeleteMeResponse) GetJSON202() *AccountDeletion {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r IdentityDeleteMeResponse) GetApplicationproblemJSON401() *Unauthenticated {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
+func (r IdentityDeleteMeResponse) GetApplicationproblemJSON403() *RecentMFARequired {
+	return r.ApplicationproblemJSON403
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r IdentityDeleteMeResponse) GetApplicationproblemJSON409() *LastOwner {
+	return r.ApplicationproblemJSON409
+}
+
+// GetBody returns the raw response body bytes
+func (r IdentityDeleteMeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r IdentityDeleteMeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IdentityDeleteMeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IdentityDeleteMeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // IdentityGetMeResponse401Headers the declared response headers of an HTTP 401 response for IdentityGetMe
 type IdentityGetMeResponse401Headers struct {
 	WWWAuthenticate *string
@@ -3368,6 +3774,68 @@ func (r IdentityGetMyEntitlementsResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r IdentityGetMyEntitlementsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// IdentityExportMeResponse200Headers the declared response headers of an HTTP 200 response for IdentityExportMe
+type IdentityExportMeResponse200Headers struct {
+	ContentDisposition *string
+}
+
+// IdentityExportMeResponse401Headers the declared response headers of an HTTP 401 response for IdentityExportMe
+type IdentityExportMeResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type IdentityExportMeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *UserExport
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Unauthenticated
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *IdentityExportMeResponse200Headers
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *IdentityExportMeResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r IdentityExportMeResponse) GetJSON200() *UserExport {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r IdentityExportMeResponse) GetApplicationproblemJSON401() *Unauthenticated {
+	return r.ApplicationproblemJSON401
+}
+
+// GetBody returns the raw response body bytes
+func (r IdentityExportMeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r IdentityExportMeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IdentityExportMeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IdentityExportMeResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -4695,6 +5163,27 @@ func (c *ClientWithResponses) IdentityCreateWidgetTokenWithResponse(ctx context.
 	return ParseIdentityCreateWidgetTokenResponse(rsp)
 }
 
+// IdentityDeleteMeWithResponse Delete the own account
+//
+// Deletes the caller's account (synthwerk#41). Emits `dev.synthwerk.identity.user.deleted.v1`; the other services delete the user's rows when they get it.
+// - Needs a recent sign-in with MFA: the token has `amr` `mfa` and the user's newest gated sign-in is at most 15 minutes old (identity setting, default 15 minutes). Else 403 `recent_mfa_required`: sign in again, then retry.
+// - Last owner rule: an org with other members must keep an owner. When the caller is its only owner, the answer is 409 `last_owner` and nothing changes. Make another member `owner` first.
+// - An org where the caller is the only member closes with the account. Identity deletes it with its apps and entitlements. `deleted_org_ids` lists these orgs.
+// - Identity deletes its own rows of the user in one transaction with the event. The Zitadel user is removed after the answer, with retries. A token issued before stays valid until it expires.
+// - An `operator` gets 403 `forbidden`: platform users are never removed through this route.
+// - A repeat while the old token is still valid answers 202 again, with the first `requested_at` and an empty `deleted_org_ids`. It changes nothing.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/me (the `IdentityDeleteMe` operationId).
+func (c *ClientWithResponses) IdentityDeleteMeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*IdentityDeleteMeResponse, error) {
+	rsp, err := c.IdentityDeleteMe(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIdentityDeleteMeResponse(rsp)
+}
+
 // IdentityGetMeWithResponse Get the caller
 //
 // The subject, the org and the roles of the token.
@@ -4725,6 +5214,25 @@ func (c *ClientWithResponses) IdentityGetMyEntitlementsWithResponse(ctx context.
 		return nil, err
 	}
 	return ParseIdentityGetMyEntitlementsResponse(rsp)
+}
+
+// IdentityExportMeWithResponse Export the own data
+//
+// All data Synthwerk keeps about the caller, as one JSON document (synthwerk#41, GDPR Art. 15 and 20).
+// - `identity`: the memberships in every org and the newest MFA evidence.
+// - `services`: identity asks every service that keeps user rows (today: llm) with the caller's token and puts each answer here unchanged. A service that does not answer has `status` `unavailable`, and `complete` is false. Retry later for a full export.
+// - Profile data (email, name, passkeys) lives in Zitadel. The user reads it in the Zitadel account console.
+// - Any signed-in user may call it. Operators too: it shows only the caller's own data.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/me/export (the `IdentityExportMe` operationId).
+func (c *ClientWithResponses) IdentityExportMeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*IdentityExportMeResponse, error) {
+	rsp, err := c.IdentityExportMe(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIdentityExportMeResponse(rsp)
 }
 
 // IdentityListOrgsWithResponse List orgs
@@ -5293,6 +5801,66 @@ func ParseIdentityCreateWidgetTokenResponse(rsp *http.Response) (*IdentityCreate
 	return response, nil
 }
 
+// ParseIdentityDeleteMeResponse parses an HTTP response from a IdentityDeleteMeWithResponse call
+func ParseIdentityDeleteMeResponse(rsp *http.Response) (*IdentityDeleteMeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IdentityDeleteMeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest AccountDeletion
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthenticated
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest RecentMFARequired
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest LastOwner
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers IdentityDeleteMeResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseIdentityGetMeResponse parses an HTTP response from a IdentityGetMeWithResponse call
 func ParseIdentityGetMeResponse(rsp *http.Response) (*IdentityGetMeResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -5379,6 +5947,62 @@ func ParseIdentityGetMyEntitlementsResponse(rsp *http.Response) (*IdentityGetMyE
 	switch {
 	case rsp.StatusCode == 401:
 		var headers IdentityGetMyEntitlementsResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseIdentityExportMeResponse parses an HTTP response from a IdentityExportMeWithResponse call
+func ParseIdentityExportMeResponse(rsp *http.Response) (*IdentityExportMeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IdentityExportMeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest UserExport
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthenticated
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers IdentityExportMeResponse200Headers
+		if values := rsp.Header.Values("Content-Disposition"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Disposition", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentDisposition = &value
+		}
+		response.Headers200 = &headers
+	case rsp.StatusCode == 401:
+		var headers IdentityExportMeResponse401Headers
 		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {

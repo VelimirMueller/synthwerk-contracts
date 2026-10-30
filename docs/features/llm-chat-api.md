@@ -5,10 +5,10 @@ status: planned
 epic: E3
 owner: contracts
 paths: ["openapi/llm/**", "codegen/oapi-codegen.llm.yaml", "events/llm/message.completed.v1.schema.json"]
-api: ["POST /v1/conversations", "GET /v1/conversations/{id}", "POST /v1/conversations/{id}/messages"]
+api: ["POST /v1/conversations", "GET /v1/conversations/{id}", "POST /v1/conversations/{id}/messages", "GET /v1/me/export"]
 events: ["dev.synthwerk.llm.message.completed.v1"]
 mcp: []
-updated: 2026-10-29
+updated: 2026-10-30
 ---
 
 # LLM chat API
@@ -23,6 +23,7 @@ updated: 2026-10-29
 - `POST /v1/conversations` creates an empty conversation for the caller.
 - `GET /v1/conversations/{id}` returns the conversation with its messages, oldest first.
 - `POST /v1/conversations/{id}/messages` stores the user message and streams the answer.
+- `GET /v1/me/export` returns every conversation, message and own quota row of the caller, in every org (`LlmExport`, synthwerk#41). Identity embeds it in its own export.
 - The org and the owner come from the verified token. They are never body fields.
 - After each answer the service emits `dev.synthwerk.llm.message.completed.v1`. It holds metadata only.
 - Go: package `github.com/VelimirMueller/synthwerk-contracts/go/llm`. TS: `createLlmClient` and `StreamEvent` in `@synthwerk/contracts`.
@@ -116,6 +117,7 @@ A send over quota answers `429` before any model call (synthwerk#33):
 - `tests/contract/llm_test.go` — `Problem - each 429 example - decodes strictly to a Problem with its code`
 - `tests/contract/llm_test.go` — `Problem - quota_exhausted - names scope, unit, limit and reset`
 - `tests/contract/llm_test.go` — `Problem - quota member - only in the problem schema, optional`
+- `tests/contract/identity_account_test.go` — `LLM ExportMe - spec example - conversations, messages with tokens, own quota rows`; `LLM ExportMe - widget token - 403 forbidden`
 - `tests/contract/events_test.go` — `Catalog - each entry - names, schema $id and example match`
 
 ## Changes
@@ -125,3 +127,4 @@ A send over quota answers `429` before any model call (synthwerk#33):
 | 2026-10-23 | First version: conversations, stream events, problem codes, `message.completed` event. |
 | 2026-10-23 | `message.completed` carries the org id in the `orgid` extension. `tenantid` is deprecated (D-44). |
 | 2026-10-29 | `quota_exhausted` is sent (synthwerk#33). New optional problem member `quota` (`QuotaExceeded`). Spec version 0.2.0. |
+| 2026-10-30 | Add `GET /v1/me/export` and `LlmExport` (synthwerk#41). llm consumes `dev.synthwerk.identity.user.deleted.v1`. Spec version 0.3.0. |

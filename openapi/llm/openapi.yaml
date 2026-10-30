@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Synthwerk LLM gateway
-  version: 0.2.0
+  version: 0.3.0
   summary: Conversations and streamed answers. The M2 chat slice of synthwerk-llm.
   description: |
     The chat contract of synthwerk-llm (M2 spec #32, D-44).
@@ -10,6 +10,7 @@ info:
     - Send a message, get the answer as Server-Sent Events: `delta`, `usage`, `done`, or `error`.
     - Errors are RFC 9457 `application/problem+json` with a stable `code`.
     - Stream protocol: `docs/features/llm-chat-api.md`.
+    - Own data (synthwerk#41): `GET /v1/me/export` returns every row llm keeps about the caller, in every org. Identity calls it with the caller's token for `GET /v1/me/export` of identity. llm deletes the rows when it gets `dev.synthwerk.identity.user.deleted.v1`.
   license:
     name: MIT
     identifier: MIT
@@ -19,9 +20,57 @@ info:
 tags:
   - name: conversations
     description: Conversations and their messages.
+  - name: me
+    description: The caller's own data.
 security:
   - bearer: []
 paths:
+  /v1/me/export:
+    get:
+      operationId: llm.exportMe
+      summary: Export the own data
+      description: |
+        Every conversation, message and quota row of the caller, in every org (synthwerk#41).
+        - The owner comes from the token `sub` only. Rows of other users never appear, also not the shared org row of a quota.
+        - Every conversation llm still keeps is in it, also one marked deleted.
+        - Any signed-in user may call it with the Zitadel access token. A widget token (claim `synthwerk:origin`) gets 403: the export is for the user, not for an embedded widget.
+      tags: [me]
+      security:
+        - bearer: []
+      responses:
+        "200":
+          description: The export.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LlmExport"
+              example:
+                conversations:
+                  - id: 6f1c2d3e-4a5b-4c6d-8e7f-9a0b1c2d3e4f
+                    org_id: "396370208765350663"
+                    model: default
+                    created_at: "2026-10-23T09:00:00Z"
+                    messages:
+                      - id: 0199f3b0-1a2b-7c3d-8e4f-5a6b7c8d9e0f
+                        role: user
+                        content: What does pulse check?
+                        status: completed
+                        created_at: "2026-10-23T09:00:05Z"
+                      - id: 0199f3b0-1a2c-7c3d-8e4f-5a6b7c8d9e10
+                        role: assistant
+                        content: Pulse reads /readyz of every service.
+                        status: completed
+                        tokens_in: 12
+                        tokens_out: 9
+                        created_at: "2026-10-23T09:00:05Z"
+                quota_usage:
+                  - org_id: "396370208765350663"
+                    window_start: "2026-10-23"
+                    used: 21
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /v1/conversations:
     post:
       operationId: llm.createConversation
@@ -511,6 +560,103 @@ components:
           const: error
         data:
           $ref: "#/components/schemas/Problem"
+    LlmExport:
+      type: object
+      additionalProperties: false
+      required: [conversations, quota_usage]
+      description: Every row llm keeps about one user. Identity embeds it in `UserExport` as the `data` of service `llm`.
+      properties:
+        conversations:
+          type: array
+          maxItems: 100000
+          description: Conversations of the user in every org, oldest first.
+          items:
+            $ref: "#/components/schemas/ExportConversation"
+        quota_usage:
+          type: array
+          maxItems: 100000
+          description: The user's own token use per org and UTC day, oldest first. Never the shared org row.
+          items:
+            $ref: "#/components/schemas/ExportQuotaUsage"
+    ExportConversation:
+      type: object
+      additionalProperties: false
+      required: [id, org_id, model, created_at, messages]
+      properties:
+        id:
+          type: string
+          format: uuid
+          maxLength: 36
+        org_id:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: "^[A-Za-z0-9_-]+$"
+          description: The org of the token that created the conversation (Zitadel org id).
+        model:
+          $ref: "#/components/schemas/ModelAlias"
+        created_at:
+          type: string
+          format: date-time
+          maxLength: 40
+        messages:
+          type: array
+          maxItems: 100000
+          description: Messages, oldest first.
+          items:
+            $ref: "#/components/schemas/ExportMessage"
+    ExportMessage:
+      type: object
+      additionalProperties: false
+      required: [id, role, content, status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          maxLength: 36
+        role:
+          $ref: "#/components/schemas/MessageRole"
+        content:
+          type: string
+          maxLength: 100000
+          description: Plain text. Never HTML.
+        status:
+          $ref: "#/components/schemas/MessageStatus"
+        tokens_in:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Input tokens of the answer. Only on assistant messages that finished.
+        tokens_out:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Output tokens of the answer. Only on assistant messages that finished.
+        created_at:
+          type: string
+          format: date-time
+          maxLength: 40
+    ExportQuotaUsage:
+      type: object
+      additionalProperties: false
+      required: [org_id, window_start, used]
+      properties:
+        org_id:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: "^[A-Za-z0-9_-]+$"
+          description: Zitadel org id.
+        window_start:
+          type: string
+          format: date
+          maxLength: 10
+          description: The UTC day.
+        used:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Tokens the user used in the org that day.
     Problem:
       type: object
       additionalProperties: false
