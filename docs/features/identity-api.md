@@ -36,14 +36,14 @@ updated: 2026-10-30
 - `DELETE /v1/orgs/{orgId}/invitations/{invitationId}` revokes a pending invitation (owner or admin) and emits `dev.synthwerk.identity.member.invite_revoked.v1`. A Zitadel user identity made for it is deleted.
 - `POST /v1/orgs/{orgId}/members/{userId}:deactivate` and `:reactivate` switch the Zitadel user grant off and on. The member keeps the row and the role.
 - `GET /v1/orgs/{orgId}/audit-events` lists the org events identity wrote, newest first (owner or admin only, no operator). `data` is the event data.
-- `GET|POST /v1/orgs/{orgId}/apps` and `GET|PATCH|DELETE /v1/orgs/{orgId}/apps/{appId}` manage the apps of an org. Read: any member or operator. Write: owner or admin.
+- `GET|POST /v1/orgs/{orgId}/apps` and `GET|PATCH|DELETE /v1/orgs/{orgId}/apps/{appId}` manage the apps of an org. Read: any active member or operator. Write: owner or admin.
 - Creating an app emits `dev.synthwerk.identity.app.created.v1`. Update and delete emit no event yet.
 - A create past `apps_per_org` gets 403 `app_limit_reached` (#38).
 - `updateApp` also sets the widget settings: position, theme, mode, language, accent group, greeting. New settings replace the old ones as a whole.
 - `GET /v1/apps/{appId}/widget-settings` returns the widget settings without a token, only to an `Origin` in the allow-list. It is the one public route of the spec; the Spectral rule `synthwerk-security` lists it.
 - `POST /v1/apps/{appId}/widget-tokens` issues a widget token to a signed-in member of the app's org, only when the `Origin` header is in the allow-list.
 - `GET /v1/me/entitlements` returns the plan and the limits of the token's org. A service that acts for a user forwards the caller's token (llm quotas).
-- `GET /v1/orgs/{orgId}/entitlements` returns the plan and the limits of one org (any org role, or operator).
+- `GET /v1/orgs/{orgId}/entitlements` returns the plan and the limits of one org (any org role with an active membership, or operator).
 - A new org gets the plan `free`. Every change of a plan or its limits emits `dev.synthwerk.identity.org.entitlements_changed.v1` with the full new state (#31).
 - `GET /v1/me/export` returns every row Synthwerk keeps about the caller: the identity rows, plus the export of each service that keeps user rows (today llm), asked with the caller's token (#41).
 - `DELETE /v1/me` deletes the caller's account. It needs a sign-in with MFA in the last 15 minutes. It emits `dev.synthwerk.identity.user.deleted.v1`; the other services delete the user's rows when they get it (#41).
@@ -171,3 +171,4 @@ updated: 2026-10-30
 | 2026-10-30 | Add widget settings (`updateApp`, `GET /v1/apps/{appId}/widget-settings`) and 403 `app_limit_reached` on `createApp` (synthwerk#38). Spec 0.3.0. |
 | 2026-10-30 | Add invite, deactivate and reactivate members, the member `status`, the invite rate limit, pending invitations and their revoke, the audit list and `member.invited.v1`, `member.invite_revoked.v1`, `member.deactivated.v1` and `member.reactivated.v1` (synthwerk#37). Spec 0.4.0. |
 | 2026-10-30 | Add `GET /v1/me/export`, `DELETE /v1/me`, problem code `recent_mfa_required` and `user.deleted.v1` (synthwerk#41). Spec 0.5.0. |
+| 2026-10-30 | Org routes, entitlements and the widget token need an active stored membership; a deactivated or invited member gets 404 (synthwerk#37 security review). Wording only. Spec 0.5.1. |

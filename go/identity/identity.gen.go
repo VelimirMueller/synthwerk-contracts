@@ -1099,7 +1099,7 @@ type ClientInterface interface {
 	//
 	// Issues a short-lived widget token for the signed-in caller, bound to the app and to the request origin.
 	// - The Bearer token is the Zitadel access token of the signed-in user. A widget token never gets a new widget token.
-	// - The caller must be a member of the app's org (token and stored membership). Else 404, same as an unknown app.
+	// - The caller must be an active member of the app's org (token and stored membership). A deactivated or invited member gets 404, same as an unknown app.
 	// - The `Origin` header must equal one entry of the allow-list: same scheme, host and port. No prefix, suffix or wildcard match. Else 403 `origin_not_allowed`.
 	// - The token is a JWT (`typ` `at+jwt`, `alg` `ES256`), signed by identity. It lives 15 minutes or less (`expires_in`).
 	// - Claims: `iss` (identity), `aud`, `sub` (the user), `urn:zitadel:iam:user:resourceowner:id` (the Zitadel org), `client_id` (the app id), `synthwerk:origin` (the canonical origin), `iat`, `nbf`, `exp`, `jti`. No roles: a widget token is never an admin token.
@@ -1132,9 +1132,9 @@ type ClientInterface interface {
 
 	// IdentityGetMyEntitlements Get the entitlements of the caller's org
 	//
-	// The plan and the limits of the org the token acts in. Any org role may read it.
+	// The plan and the limits of the org the token acts in. Any org role may read it. The stored membership must be active.
 	// - A service that acts for a user (for example llm for quotas) forwards the caller's token. It needs no org id of its own.
-	// - An unknown org, or a token without an org role, answers 404.
+	// - An unknown org, a token without an org role, or a deactivated or invited member answers 404.
 	//
 	// Corresponds with GET /v1/me/entitlements (the `IdentityGetMyEntitlements` operationId).
 	IdentityGetMyEntitlements(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1177,14 +1177,14 @@ type ClientInterface interface {
 
 	// IdentityGetOrg Get an org
 	//
-	// Org detail. Needs a membership in the org, or the role `operator`.
+	// Org detail. Needs an active membership in the org, or the role `operator`. A deactivated or invited member gets 404, same as an unknown org.
 	//
 	// Corresponds with GET /v1/orgs/{orgId} (the `IdentityGetOrg` operationId).
 	IdentityGetOrg(ctx context.Context, orgId OrgId, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// IdentityListApps List apps
 	//
-	// Apps of the org, oldest first. Needs a membership in the org, or the role `operator`. Cursor paging, max 100 per page.
+	// Apps of the org, oldest first. Needs an active membership in the org, or the role `operator`. A deactivated or invited member gets 404. Cursor paging, max 100 per page.
 	//
 	// Corresponds with GET /v1/orgs/{orgId}/apps (the `IdentityListApps` operationId).
 	IdentityListApps(ctx context.Context, orgId OrgId, params *IdentityListAppsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1227,7 +1227,7 @@ type ClientInterface interface {
 
 	// IdentityGetApp Get an app
 	//
-	// One app with its origin allow-list. Needs a membership in the org, or the role `operator`.
+	// One app with its origin allow-list. Needs an active membership in the org, or the role `operator`. A deactivated or invited member gets 404.
 	//
 	// Corresponds with GET /v1/orgs/{orgId}/apps/{appId} (the `IdentityGetApp` operationId).
 	IdentityGetApp(ctx context.Context, orgId OrgId, appId AppId, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1269,7 +1269,7 @@ type ClientInterface interface {
 
 	// IdentityGetOrgEntitlements Get the entitlements of an org
 	//
-	// The plan and the limits of the org. Needs an org role in the org (any role), or the role `operator`.
+	// The plan and the limits of the org. Needs an org role in the org (any role) and an active membership, or the role `operator`. A deactivated or invited member gets 404.
 	//
 	// Corresponds with GET /v1/orgs/{orgId}/entitlements (the `IdentityGetOrgEntitlements` operationId).
 	IdentityGetOrgEntitlements(ctx context.Context, orgId OrgId, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1416,7 +1416,7 @@ func (c *Client) IdentityGetWidgetSettings(ctx context.Context, appId AppId, par
 //
 // Issues a short-lived widget token for the signed-in caller, bound to the app and to the request origin.
 // - The Bearer token is the Zitadel access token of the signed-in user. A widget token never gets a new widget token.
-// - The caller must be a member of the app's org (token and stored membership). Else 404, same as an unknown app.
+// - The caller must be an active member of the app's org (token and stored membership). A deactivated or invited member gets 404, same as an unknown app.
 // - The `Origin` header must equal one entry of the allow-list: same scheme, host and port. No prefix, suffix or wildcard match. Else 403 `origin_not_allowed`.
 // - The token is a JWT (`typ` `at+jwt`, `alg` `ES256`), signed by identity. It lives 15 minutes or less (`expires_in`).
 // - Claims: `iss` (identity), `aud`, `sub` (the user), `urn:zitadel:iam:user:resourceowner:id` (the Zitadel org), `client_id` (the app id), `synthwerk:origin` (the canonical origin), `iat`, `nbf`, `exp`, `jti`. No roles: a widget token is never an admin token.
@@ -1479,9 +1479,9 @@ func (c *Client) IdentityGetMe(ctx context.Context, reqEditors ...RequestEditorF
 
 // IdentityGetMyEntitlements Get the entitlements of the caller's org
 //
-// The plan and the limits of the org the token acts in. Any org role may read it.
+// The plan and the limits of the org the token acts in. Any org role may read it. The stored membership must be active.
 // - A service that acts for a user (for example llm for quotas) forwards the caller's token. It needs no org id of its own.
-// - An unknown org, or a token without an org role, answers 404.
+// - An unknown org, a token without an org role, or a deactivated or invited member answers 404.
 //
 // Corresponds with GET /v1/me/entitlements (the `IdentityGetMyEntitlements` operationId).
 func (c *Client) IdentityGetMyEntitlements(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -1574,7 +1574,7 @@ func (c *Client) IdentityCreateOrg(ctx context.Context, body IdentityCreateOrgJS
 
 // IdentityGetOrg Get an org
 //
-// Org detail. Needs a membership in the org, or the role `operator`.
+// Org detail. Needs an active membership in the org, or the role `operator`. A deactivated or invited member gets 404, same as an unknown org.
 //
 // Corresponds with GET /v1/orgs/{orgId} (the `IdentityGetOrg` operationId).
 func (c *Client) IdentityGetOrg(ctx context.Context, orgId OrgId, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -1591,7 +1591,7 @@ func (c *Client) IdentityGetOrg(ctx context.Context, orgId OrgId, reqEditors ...
 
 // IdentityListApps List apps
 //
-// Apps of the org, oldest first. Needs a membership in the org, or the role `operator`. Cursor paging, max 100 per page.
+// Apps of the org, oldest first. Needs an active membership in the org, or the role `operator`. A deactivated or invited member gets 404. Cursor paging, max 100 per page.
 //
 // Corresponds with GET /v1/orgs/{orgId}/apps (the `IdentityListApps` operationId).
 func (c *Client) IdentityListApps(ctx context.Context, orgId OrgId, params *IdentityListAppsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -1674,7 +1674,7 @@ func (c *Client) IdentityDeleteApp(ctx context.Context, orgId OrgId, appId AppId
 
 // IdentityGetApp Get an app
 //
-// One app with its origin allow-list. Needs a membership in the org, or the role `operator`.
+// One app with its origin allow-list. Needs an active membership in the org, or the role `operator`. A deactivated or invited member gets 404.
 //
 // Corresponds with GET /v1/orgs/{orgId}/apps/{appId} (the `IdentityGetApp` operationId).
 func (c *Client) IdentityGetApp(ctx context.Context, orgId OrgId, appId AppId, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -1756,7 +1756,7 @@ func (c *Client) IdentityListAuditEvents(ctx context.Context, orgId OrgId, param
 
 // IdentityGetOrgEntitlements Get the entitlements of an org
 //
-// The plan and the limits of the org. Needs an org role in the org (any role), or the role `operator`.
+// The plan and the limits of the org. Needs an org role in the org (any role) and an active membership, or the role `operator`. A deactivated or invited member gets 404.
 //
 // Corresponds with GET /v1/orgs/{orgId}/entitlements (the `IdentityGetOrgEntitlements` operationId).
 func (c *Client) IdentityGetOrgEntitlements(ctx context.Context, orgId OrgId, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -3113,7 +3113,7 @@ type ClientWithResponsesInterface interface {
 	//
 	// Issues a short-lived widget token for the signed-in caller, bound to the app and to the request origin.
 	// - The Bearer token is the Zitadel access token of the signed-in user. A widget token never gets a new widget token.
-	// - The caller must be a member of the app's org (token and stored membership). Else 404, same as an unknown app.
+	// - The caller must be an active member of the app's org (token and stored membership). A deactivated or invited member gets 404, same as an unknown app.
 	// - The `Origin` header must equal one entry of the allow-list: same scheme, host and port. No prefix, suffix or wildcard match. Else 403 `origin_not_allowed`.
 	// - The token is a JWT (`typ` `at+jwt`, `alg` `ES256`), signed by identity. It lives 15 minutes or less (`expires_in`).
 	// - Claims: `iss` (identity), `aud`, `sub` (the user), `urn:zitadel:iam:user:resourceowner:id` (the Zitadel org), `client_id` (the app id), `synthwerk:origin` (the canonical origin), `iat`, `nbf`, `exp`, `jti`. No roles: a widget token is never an admin token.
@@ -3152,9 +3152,9 @@ type ClientWithResponsesInterface interface {
 
 	// IdentityGetMyEntitlementsWithResponse Get the entitlements of the caller's org
 	//
-	// The plan and the limits of the org the token acts in. Any org role may read it.
+	// The plan and the limits of the org the token acts in. Any org role may read it. The stored membership must be active.
 	// - A service that acts for a user (for example llm for quotas) forwards the caller's token. It needs no org id of its own.
-	// - An unknown org, or a token without an org role, answers 404.
+	// - An unknown org, a token without an org role, or a deactivated or invited member answers 404.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -3203,7 +3203,7 @@ type ClientWithResponsesInterface interface {
 
 	// IdentityGetOrgWithResponse Get an org
 	//
-	// Org detail. Needs a membership in the org, or the role `operator`.
+	// Org detail. Needs an active membership in the org, or the role `operator`. A deactivated or invited member gets 404, same as an unknown org.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -3212,7 +3212,7 @@ type ClientWithResponsesInterface interface {
 
 	// IdentityListAppsWithResponse List apps
 	//
-	// Apps of the org, oldest first. Needs a membership in the org, or the role `operator`. Cursor paging, max 100 per page.
+	// Apps of the org, oldest first. Needs an active membership in the org, or the role `operator`. A deactivated or invited member gets 404. Cursor paging, max 100 per page.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -3259,7 +3259,7 @@ type ClientWithResponsesInterface interface {
 
 	// IdentityGetAppWithResponse Get an app
 	//
-	// One app with its origin allow-list. Needs a membership in the org, or the role `operator`.
+	// One app with its origin allow-list. Needs an active membership in the org, or the role `operator`. A deactivated or invited member gets 404.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -3305,7 +3305,7 @@ type ClientWithResponsesInterface interface {
 
 	// IdentityGetOrgEntitlementsWithResponse Get the entitlements of an org
 	//
-	// The plan and the limits of the org. Needs an org role in the org (any role), or the role `operator`.
+	// The plan and the limits of the org. Needs an org role in the org (any role) and an active membership, or the role `operator`. A deactivated or invited member gets 404.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -5144,7 +5144,7 @@ func (c *ClientWithResponses) IdentityGetWidgetSettingsWithResponse(ctx context.
 //
 // Issues a short-lived widget token for the signed-in caller, bound to the app and to the request origin.
 // - The Bearer token is the Zitadel access token of the signed-in user. A widget token never gets a new widget token.
-// - The caller must be a member of the app's org (token and stored membership). Else 404, same as an unknown app.
+// - The caller must be an active member of the app's org (token and stored membership). A deactivated or invited member gets 404, same as an unknown app.
 // - The `Origin` header must equal one entry of the allow-list: same scheme, host and port. No prefix, suffix or wildcard match. Else 403 `origin_not_allowed`.
 // - The token is a JWT (`typ` `at+jwt`, `alg` `ES256`), signed by identity. It lives 15 minutes or less (`expires_in`).
 // - Claims: `iss` (identity), `aud`, `sub` (the user), `urn:zitadel:iam:user:resourceowner:id` (the Zitadel org), `client_id` (the app id), `synthwerk:origin` (the canonical origin), `iat`, `nbf`, `exp`, `jti`. No roles: a widget token is never an admin token.
@@ -5201,9 +5201,9 @@ func (c *ClientWithResponses) IdentityGetMeWithResponse(ctx context.Context, req
 
 // IdentityGetMyEntitlementsWithResponse Get the entitlements of the caller's org
 //
-// The plan and the limits of the org the token acts in. Any org role may read it.
+// The plan and the limits of the org the token acts in. Any org role may read it. The stored membership must be active.
 // - A service that acts for a user (for example llm for quotas) forwards the caller's token. It needs no org id of its own.
-// - An unknown org, or a token without an org role, answers 404.
+// - An unknown org, a token without an org role, or a deactivated or invited member answers 404.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -5282,7 +5282,7 @@ func (c *ClientWithResponses) IdentityCreateOrgWithResponse(ctx context.Context,
 
 // IdentityGetOrgWithResponse Get an org
 //
-// Org detail. Needs a membership in the org, or the role `operator`.
+// Org detail. Needs an active membership in the org, or the role `operator`. A deactivated or invited member gets 404, same as an unknown org.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -5297,7 +5297,7 @@ func (c *ClientWithResponses) IdentityGetOrgWithResponse(ctx context.Context, or
 
 // IdentityListAppsWithResponse List apps
 //
-// Apps of the org, oldest first. Needs a membership in the org, or the role `operator`. Cursor paging, max 100 per page.
+// Apps of the org, oldest first. Needs an active membership in the org, or the role `operator`. A deactivated or invited member gets 404. Cursor paging, max 100 per page.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -5368,7 +5368,7 @@ func (c *ClientWithResponses) IdentityDeleteAppWithResponse(ctx context.Context,
 
 // IdentityGetAppWithResponse Get an app
 //
-// One app with its origin allow-list. Needs a membership in the org, or the role `operator`.
+// One app with its origin allow-list. Needs an active membership in the org, or the role `operator`. A deactivated or invited member gets 404.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -5438,7 +5438,7 @@ func (c *ClientWithResponses) IdentityListAuditEventsWithResponse(ctx context.Co
 
 // IdentityGetOrgEntitlementsWithResponse Get the entitlements of an org
 //
-// The plan and the limits of the org. Needs an org role in the org (any role), or the role `operator`.
+// The plan and the limits of the org. Needs an org role in the org (any role) and an active membership, or the role `operator`. A deactivated or invited member gets 404.
 //
 // Returns a wrapper object for the known response body format(s).
 //

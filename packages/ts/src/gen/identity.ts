@@ -67,9 +67,9 @@ export interface paths {
         };
         /**
          * Get the entitlements of the caller's org
-         * @description The plan and the limits of the org the token acts in. Any org role may read it.
+         * @description The plan and the limits of the org the token acts in. Any org role may read it. The stored membership must be active.
          *     - A service that acts for a user (for example llm for quotas) forwards the caller's token. It needs no org id of its own.
-         *     - An unknown org, or a token without an org role, answers 404.
+         *     - An unknown org, a token without an org role, or a deactivated or invited member answers 404.
          */
         get: operations["identity.getMyEntitlements"];
         put?: never;
@@ -116,7 +116,7 @@ export interface paths {
         };
         /**
          * Get an org
-         * @description Org detail. Needs a membership in the org, or the role `operator`.
+         * @description Org detail. Needs an active membership in the org, or the role `operator`. A deactivated or invited member gets 404, same as an unknown org.
          */
         get: operations["identity.getOrg"];
         put?: never;
@@ -139,7 +139,7 @@ export interface paths {
         };
         /**
          * Get the entitlements of an org
-         * @description The plan and the limits of the org. Needs an org role in the org (any role), or the role `operator`.
+         * @description The plan and the limits of the org. Needs an org role in the org (any role) and an active membership, or the role `operator`. A deactivated or invited member gets 404.
          */
         get: operations["identity.getOrgEntitlements"];
         put?: never;
@@ -369,7 +369,7 @@ export interface paths {
         };
         /**
          * List apps
-         * @description Apps of the org, oldest first. Needs a membership in the org, or the role `operator`. Cursor paging, max 100 per page.
+         * @description Apps of the org, oldest first. Needs an active membership in the org, or the role `operator`. A deactivated or invited member gets 404. Cursor paging, max 100 per page.
          */
         get: operations["identity.listApps"];
         put?: never;
@@ -402,7 +402,7 @@ export interface paths {
         };
         /**
          * Get an app
-         * @description One app with its origin allow-list. Needs a membership in the org, or the role `operator`.
+         * @description One app with its origin allow-list. Needs an active membership in the org, or the role `operator`. A deactivated or invited member gets 404.
          */
         get: operations["identity.getApp"];
         put?: never;
@@ -471,7 +471,7 @@ export interface paths {
          * Issue a widget token
          * @description Issues a short-lived widget token for the signed-in caller, bound to the app and to the request origin.
          *     - The Bearer token is the Zitadel access token of the signed-in user. A widget token never gets a new widget token.
-         *     - The caller must be a member of the app's org (token and stored membership). Else 404, same as an unknown app.
+         *     - The caller must be an active member of the app's org (token and stored membership). A deactivated or invited member gets 404, same as an unknown app.
          *     - The `Origin` header must equal one entry of the allow-list: same scheme, host and port. No prefix, suffix or wildcard match. Else 403 `origin_not_allowed`.
          *     - The token is a JWT (`typ` `at+jwt`, `alg` `ES256`), signed by identity. It lives 15 minutes or less (`expires_in`).
          *     - Claims: `iss` (identity), `aud`, `sub` (the user), `urn:zitadel:iam:user:resourceowner:id` (the Zitadel org), `client_id` (the app id), `synthwerk:origin` (the canonical origin), `iat`, `nbf`, `exp`, `jti`. No roles: a widget token is never an admin token.
