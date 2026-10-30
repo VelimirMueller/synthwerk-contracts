@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.synthwerk.dev/events/studio/page.rolled_back.v1.json",
+  "title": "studio.page.rolled_back.v1",
+  "description": "A studio owner or admin made an older published version of a builder page live again (synthwerk#46, #106). The draft did not change. CloudEvents subject: the page id. The orgid extension and data.org_id hold the identity org id. actor: user:<sub> of the owner or admin. No page content: no title, no section text. Identity copies it to the audit list of the org.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["org_id", "page_id", "slug", "locale", "version", "previous_version"],
+  "properties": {
+    "org_id": {
+      "description": "The identity org id.",
+      "type": "string",
+      "format": "uuid",
+      "maxLength": 36
+    },
+    "page_id": {
+      "description": "The builder page id.",
+      "type": "string",
+      "format": "uuid",
+      "maxLength": 36
+    },
+    "slug": {
+      "description": "URL slug of the page. Never free text.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"
+    },
+    "locale": {
+      "description": "Language of the page.",
+      "enum": ["de", "en"]
+    },
+    "version": {
+      "description": "The older version that is live now.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "previous_version": {
+      "description": "The live version before the roll back. null: nothing was live, for example after an unpublish (synthwerk#108). The builder has no unpublish yet.",
+      "type": ["integer", "null"],
+      "minimum": 1
+    }
+  }
+}
