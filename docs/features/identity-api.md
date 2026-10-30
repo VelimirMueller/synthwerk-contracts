@@ -5,8 +5,8 @@ status: planned
 epic: E2
 owner: contracts
 paths: ["openapi/identity/**", "codegen/oapi-codegen.identity.yaml", "events/identity/**"]
-api: ["GET /v1/me", "GET /v1/orgs", "POST /v1/orgs", "GET /v1/orgs/{orgId}", "GET /v1/orgs/{orgId}/members", "PATCH /v1/orgs/{orgId}/members/{userId}", "GET /v1/orgs/{orgId}/apps", "POST /v1/orgs/{orgId}/apps", "GET /v1/orgs/{orgId}/apps/{appId}", "PATCH /v1/orgs/{orgId}/apps/{appId}", "DELETE /v1/orgs/{orgId}/apps/{appId}", "POST /v1/apps/{appId}/widget-tokens", "GET /v1/apps/{appId}/widget-settings", "GET /v1/me/entitlements", "GET /v1/orgs/{orgId}/entitlements"]
-events: ["dev.synthwerk.identity.org.created.v1", "dev.synthwerk.identity.user.created.v1", "dev.synthwerk.identity.member.role_changed.v1", "dev.synthwerk.identity.app.created.v1", "dev.synthwerk.identity.org.entitlements_changed.v1"]
+api: ["GET /v1/me", "GET /v1/orgs", "POST /v1/orgs", "GET /v1/orgs/{orgId}", "GET /v1/orgs/{orgId}/members", "POST /v1/orgs/{orgId}/members", "PATCH /v1/orgs/{orgId}/members/{userId}", "POST /v1/orgs/{orgId}/members/{userId}:deactivate", "POST /v1/orgs/{orgId}/members/{userId}:reactivate", "GET /v1/orgs/{orgId}/invitations", "GET /v1/orgs/{orgId}/audit-events", "GET /v1/orgs/{orgId}/apps", "POST /v1/orgs/{orgId}/apps", "GET /v1/orgs/{orgId}/apps/{appId}", "PATCH /v1/orgs/{orgId}/apps/{appId}", "DELETE /v1/orgs/{orgId}/apps/{appId}", "POST /v1/apps/{appId}/widget-tokens", "GET /v1/apps/{appId}/widget-settings", "GET /v1/me/entitlements", "GET /v1/orgs/{orgId}/entitlements"]
+events: ["dev.synthwerk.identity.org.created.v1", "dev.synthwerk.identity.user.created.v1", "dev.synthwerk.identity.member.role_changed.v1", "dev.synthwerk.identity.app.created.v1", "dev.synthwerk.identity.org.entitlements_changed.v1", "dev.synthwerk.identity.member.invited.v1", "dev.synthwerk.identity.member.invite_revoked.v1", "dev.synthwerk.identity.member.deactivated.v1", "dev.synthwerk.identity.member.reactivated.v1"]
 mcp: []
 updated: 2026-10-30
 ---
@@ -29,6 +29,13 @@ updated: 2026-10-30
 - `GET /v1/orgs/{orgId}/members` lists the members and their org roles (caller: owner, admin or operator).
 - `PATCH /v1/orgs/{orgId}/members/{userId}` changes the org role of a member (owner or admin; a member gets 403).
 - A role change emits `dev.synthwerk.identity.member.role_changed.v1`.
+- `POST /v1/orgs/{orgId}/members` invites by email (owner or admin) and answers 202 with the pending invitation. For a new email, Zitadel creates the user and sends the invite mail.
+- A user of another org gets the same answer, the same pending invitation and the same audit event, but is never added (not supported yet). The API does not show which emails have an account.
+- `GET /v1/orgs/{orgId}/invitations` lists pending invitations with the typed email (owner or admin). The invitee moves to `listMembers` at the first sign-in to the org.
+- A repeat invite of an email with a pending invitation answers 202 with that invitation, unchanged, for every email.
+- `DELETE /v1/orgs/{orgId}/invitations/{invitationId}` revokes a pending invitation (owner or admin) and emits `dev.synthwerk.identity.member.invite_revoked.v1`. A Zitadel user identity made for it is deleted.
+- `POST /v1/orgs/{orgId}/members/{userId}:deactivate` and `:reactivate` switch the Zitadel user grant off and on. The member keeps the row and the role.
+- `GET /v1/orgs/{orgId}/audit-events` lists the org events identity wrote, newest first (owner or admin only, no operator). `data` is the event data.
 - `GET|POST /v1/orgs/{orgId}/apps` and `GET|PATCH|DELETE /v1/orgs/{orgId}/apps/{appId}` manage the apps of an org. Read: any member or operator. Write: owner or admin.
 - Creating an app emits `dev.synthwerk.identity.app.created.v1`. Update and delete emit no event yet.
 - A create past `apps_per_org` gets 403 `app_limit_reached` (#38).
@@ -60,6 +67,10 @@ updated: 2026-10-30
 | Role change | owner and admin set `admin` or `member`; only owner grants `owner` or changes an owner |
 | Last owner | Keeps the role: 409 `last_owner` |
 | Own role | Never changed by the caller: 409 `own_role` |
+| Invite | owner or admin; only owner invites an `owner`; the email is an active or deactivated member: 409 `member_exists`; a pending invitation for the email: 202 with that invitation; per caller and per org rate limit: 429 `rate_limited` with `Retry-After` |
+| Deactivate | owner or admin; only owner deactivates or reactivates an owner; never the own membership (409 `own_membership`); the last active owner stays (409 `last_owner`) |
+| Member status | `active` or `deactivated`. A deactivated member has no org role in tokens and fails every stored-role check |
+| Audit list | owner or admin, stored membership active; operator 403; newest first; clients accept unknown event types |
 | Operator | Read only on any org; a role change gets 403 |
 | Entitlement limits | `0` means no limit. A day is a UTC day. `version` goes up by one on every change |
 | Plan name | `free` today. Clients read `limits`, never the plan name, and accept unknown plans |
@@ -83,6 +94,10 @@ updated: 2026-10-30
 | `dev.synthwerk.identity.member.role_changed.v1` | The org role of a member changed. `old_role` and `new_role`, no email. |
 | `dev.synthwerk.identity.app.created.v1` | An owner or admin created an app. `app_id`, `org_id`, `name`; no origins. |
 | `dev.synthwerk.identity.org.entitlements_changed.v1` | The plan or the limits of an org changed. Full new state, `version`, `reason`. |
+| `dev.synthwerk.identity.member.invited.v1` | An owner or admin invited an email. `invitation_id` and `role`, no email, no subject id. Same for every email outside the org. |
+| `dev.synthwerk.identity.member.invite_revoked.v1` | An owner or admin revoked a pending invitation. `invitation_id` and `role`, no email. |
+| `dev.synthwerk.identity.member.deactivated.v1` | An owner or admin deactivated a member. `user_sub` and the kept `role`. |
+| `dev.synthwerk.identity.member.reactivated.v1` | An owner or admin reactivated a member. `user_sub` and `role`. |
 
 ## Errors
 
@@ -97,7 +112,10 @@ updated: 2026-10-30
 | 409 | `slug_taken` | Another org has the slug. |
 | 409 | `last_owner` | The org would lose its last owner. |
 | 409 | `own_role` | The caller tried to change their own role. |
-| 502 | `upstream_unavailable` | Zitadel did not take the role change. Nothing changed. |
+| 409 | `own_membership` | The caller tried to deactivate their own membership. |
+| 409 | `member_exists` | The invited email is an active or deactivated member of this org. |
+| 429 | `rate_limited` | Too many invites from the caller or for the org. |
+| 502 | `upstream_unavailable` | Zitadel did not take the change. Nothing changed. |
 
 ## Tests
 
@@ -112,6 +130,13 @@ updated: 2026-10-30
 - `tests/contract/identity_test.go` — `WidgetSettings - enums - only token themes and accent groups`
 - `tests/contract/identity_cors_test.go` — `CORS answer <route> - Vary and Cache-Control documented`
 - `tests/contract/identity_test.go` — `OrgRole - enum - operator is never an org role`
+- `tests/contract/identity_test.go` — `InviteMember - spec example - 202 with the pending invitation`
+- `tests/contract/identity_test.go` — `ListInvitations - spec example - pending invitations`
+- `tests/contract/identity_test.go` — `InviteMember - too many invites - 429 problem with code rate_limited`
+- `tests/contract/identity_test.go` — `InviteMember - email is a user already - 409 problem with code member_exists`
+- `tests/contract/identity_test.go` — `DeactivateMember - spec example - member with the new status` (and `ReactivateMember`)
+- `tests/contract/identity_test.go` — `ListAuditEvents - spec example - newest first, event data, next cursor`
+- `tests/contract/identity_test.go` — `MemberStatus - enum - active and deactivated only`
 - `tests/contract/identity_test.go` — `ListApps - spec example - one page of apps with origins`
 - `tests/contract/identity_test.go` — `CreateApp - spec example - app with the canonical allow-list`
 - `tests/contract/identity_test.go` — `UpdateApp - spec example - app with the new allow-list`
@@ -133,3 +158,4 @@ updated: 2026-10-30
 | 2026-10-29 | Add apps with an origin allow-list, the widget token and `app.created.v1` (synthwerk#30). |
 | 2026-10-29 | Add entitlements: `GET /v1/me/entitlements`, `GET /v1/orgs/{orgId}/entitlements` and `org.entitlements_changed.v1` (synthwerk#31). Spec 0.2.0. |
 | 2026-10-30 | Add widget settings (`updateApp`, `GET /v1/apps/{appId}/widget-settings`) and 403 `app_limit_reached` on `createApp` (synthwerk#38). Spec 0.3.0. |
+| 2026-10-30 | Add invite, deactivate and reactivate members, the member `status`, the invite rate limit, pending invitations and their revoke, the audit list and `member.invited.v1`, `member.invite_revoked.v1`, `member.deactivated.v1` and `member.reactivated.v1` (synthwerk#37). Spec 0.4.0. |

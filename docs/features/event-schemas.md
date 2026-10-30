@@ -6,7 +6,7 @@ epic: E1
 owner: contracts
 paths: ["events/**"]
 api: []
-events: ["dev.synthwerk.pulse.target.status_changed.v1", "dev.synthwerk.llm.toolcall.executed.v1", "dev.synthwerk.llm.toolcall.executed.v2", "dev.synthwerk.llm.message.completed.v1", "dev.synthwerk.identity.org.created.v1", "dev.synthwerk.identity.user.created.v1", "dev.synthwerk.identity.member.role_changed.v1", "dev.synthwerk.identity.app.created.v1", "dev.synthwerk.identity.org.entitlements_changed.v1"]
+events: ["dev.synthwerk.pulse.target.status_changed.v1", "dev.synthwerk.llm.toolcall.executed.v1", "dev.synthwerk.llm.toolcall.executed.v2", "dev.synthwerk.llm.message.completed.v1", "dev.synthwerk.identity.org.created.v1", "dev.synthwerk.identity.user.created.v1", "dev.synthwerk.identity.member.role_changed.v1", "dev.synthwerk.identity.app.created.v1", "dev.synthwerk.identity.org.entitlements_changed.v1", "dev.synthwerk.identity.member.invited.v1", "dev.synthwerk.identity.member.invite_revoked.v1", "dev.synthwerk.identity.member.deactivated.v1", "dev.synthwerk.identity.member.reactivated.v1"]
 mcp: []
 updated: 2026-10-29
 ---
@@ -54,6 +54,10 @@ updated: 2026-10-29
 | `dev.synthwerk.identity.member.role_changed.v1` | The org role of a member changed. `org_id`, `user_sub`, `old_role`, `new_role`; never `operator`. |
 | `dev.synthwerk.identity.app.created.v1` | An org created an app. `app_id`, `org_id`, `name`; no origins. |
 | `dev.synthwerk.identity.org.entitlements_changed.v1` | The plan or the limits of an org changed. Full state: `plan`, `limits`, `version`, `reason`. |
+| `dev.synthwerk.identity.member.invited.v1` | An owner or admin invited an email. `org_id`, `invitation_id`, `role`; no email, no subject id. |
+| `dev.synthwerk.identity.member.invite_revoked.v1` | An owner or admin revoked a pending invitation. `org_id`, `invitation_id`, `role`. |
+| `dev.synthwerk.identity.member.deactivated.v1` | A member was deactivated. `org_id`, `user_sub`, `role`. |
+| `dev.synthwerk.identity.member.reactivated.v1` | A member was reactivated. `org_id`, `user_sub`, `role`. |
 
 ## Errors
 
@@ -78,3 +82,4 @@ updated: 2026-10-29
 | 2026-10-28 | Add `identity.member.role_changed.v1` (synthwerk#29). |
 | 2026-10-29 | Add `identity.app.created.v1` (synthwerk#30). |
 | 2026-10-29 | Add `identity.org.entitlements_changed.v1` (synthwerk#31). |
+| 2026-10-30 | Add `identity.member.invited.v1`, `member.invite_revoked.v1`, `member.deactivated.v1`, `member.reactivated.v1` (synthwerk#37). |

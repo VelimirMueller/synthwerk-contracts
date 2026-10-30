@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.synthwerk.dev/events/identity/member.invite_revoked.v1.json",
+  "title": "identity.member.invite_revoked.v1",
+  "description": "An owner or admin revoked a pending invitation (synthwerk#37). Written for every revoke, also for an email of a user of another org. CloudEvents subject: the invitation id. The orgid extension holds org_id. actor: user:<sub> of the owner or admin. No email, no subject id of the invitee.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["org_id", "invitation_id", "role"],
+  "properties": {
+    "org_id": {
+      "type": "string",
+      "format": "uuid",
+      "maxLength": 36
+    },
+    "invitation_id": {
+      "description": "Id of the revoked invitation.",
+      "type": "string",
+      "format": "uuid",
+      "maxLength": 36
+    },
+    "role": {
+      "description": "Org role of the revoked invitation.",
+      "enum": ["owner", "admin", "member"]
+    }
+  }
+}

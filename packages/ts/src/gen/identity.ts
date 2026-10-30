@@ -128,11 +128,24 @@ export interface paths {
         };
         /**
          * List members
-         * @description Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. The stored membership must also be `owner` or `admin`, so a token issued before a demotion gets 403. Cursor paging, max 100 per page.
+         * @description Members of the org, their org roles and their status. Deactivated members are listed too. An invitee is listed after the first sign-in to the org; pending invitations are in `listInvitations`. Needs the role `owner` or `admin` in the org, or `operator`. The stored membership must also be an active `owner` or `admin`, so a token issued before a demotion or a deactivation gets 403. Cursor paging, max 100 per page.
          */
         get: operations["identity.listMembers"];
         put?: never;
-        post?: never;
+        /**
+         * Invite a member
+         * @description Creates a pending invitation. Emits `dev.synthwerk.identity.member.invited.v1` with the invitation id.
+         *     - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
+         *     - Only an `owner` invites an `owner`.
+         *     - A new email: identity also creates the Zitadel user and its user grant, and Zitadel sends the invite mail (Mailpit in local, Resend in dev and prd).
+         *     - An email of a user of another org: adding users of another org is not supported yet. The invitation stays pending and is never accepted.
+         *     - Both cases look the same: the same 202 answer, the same pending item in `listInvitations`, the same audit event, and no item in `listMembers`. The API does not show which emails have an account.
+         *     - The invitee shows in `listMembers` after the first sign-in to the org. Then the invitation is no longer pending.
+         *     - The email has a pending invitation in the org already: 202 with that invitation, unchanged. Zitadel is not called again and no event is written. To change its role, revoke it and invite again.
+         *     - The email is an active or deactivated member of this org: 409 `member_exists`.
+         *     - Rate limit per caller and per org: 429 `rate_limited` with `Retry-After`.
+         */
+        post: operations["identity.inviteMember"];
         delete?: never;
         options?: never;
         head?: never;
@@ -167,6 +180,147 @@ export interface paths {
          *     - The same role again answers 200 and emits nothing.
          */
         patch: operations["identity.changeMemberRole"];
+        trace?: never;
+    };
+    "/v1/orgs/{orgId}/members/{userId}:deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+                /** @description Subject id (token `sub`) of the member. */
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deactivate a member
+         * @description Deactivates the Zitadel user grant of the member. The member keeps the row and the role, but the next token has no org role in this org. Emits `dev.synthwerk.identity.member.deactivated.v1`.
+         *     - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+         *     - Only an `owner` deactivates an `owner`. The last active owner stays active (409 `last_owner`).
+         *     - Nobody deactivates their own membership (409 `own_membership`).
+         *     - A token issued before the change keeps working at other services until it expires. Identity checks the stored status at once.
+         *     - A member that is deactivated already answers 200 and emits nothing.
+         */
+        post: operations["identity.deactivateMember"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{orgId}/members/{userId}:reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+                /** @description Subject id (token `sub`) of the member. */
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reactivate a member
+         * @description Reactivates the Zitadel user grant of a deactivated member, with the role it had. Emits `dev.synthwerk.identity.member.reactivated.v1`.
+         *     - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+         *     - Only an `owner` reactivates an `owner`.
+         *     - A member that is active already answers 200 and emits nothing.
+         */
+        post: operations["identity.reactivateMember"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{orgId}/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List pending invitations
+         * @description Pending invitations of the org, newest first. An invitation stops being pending when the invitee signs in to the org or an admin revokes it.
+         *     - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` or an `operator` gets 403.
+         *     - It holds the email the admin typed. It never says whether the email has an account.
+         *     - Cursor paging, max 100 per page.
+         */
+        get: operations["identity.listInvitations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{orgId}/invitations/{invitationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+                /** @description Id of the invitation. */
+                invitationId: components["parameters"]["InvitationId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a pending invitation
+         * @description Revokes a pending invitation. Emits `dev.synthwerk.identity.member.invite_revoked.v1` with the invitation id.
+         *     - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` or an `operator` gets 403.
+         *     - Only an `owner` revokes an invitation for the role `owner`.
+         *     - When identity created a Zitadel user for the invitation, identity deletes that user. The invitee cannot sign in to the org.
+         *     - The invitee does not become a member later: a revoked invitation is never accepted.
+         *     - An invitation that is not pending (accepted, revoked or unknown): 404.
+         */
+        delete: operations["identity.revokeInvitation"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{orgId}/audit-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List the audit events of an org
+         * @description The admin actions of the org, newest first. Each item is an event identity wrote to its outbox for the org, kept after the outbox row is gone.
+         *     - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` gets 403. An `operator` gets 403.
+         *     - Event types: `org.created`, `member.invited`, `member.role_changed`, `member.deactivated`, `member.reactivated`, `app.created`, `org.entitlements_changed`, and later org events of identity. Clients must accept types they do not know.
+         *     - `data` is the event data, as its schema in `events/identity` says. No email, no personal name.
+         *     - Cursor paging, max 100 per page.
+         */
+        get: operations["identity.listAuditEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/orgs/{orgId}/apps": {
@@ -362,15 +516,75 @@ export interface components {
          * @enum {string}
          */
         OrgRole: "owner" | "admin" | "member";
+        /**
+         * @description - `active`: the Zitadel user grant is active. Tokens carry the org role.
+         *     - `deactivated`: the grant is deactivated. The member keeps the row and the role, but tokens carry no org role.
+         * @enum {string}
+         */
+        MemberStatus: "active" | "deactivated";
         Member: {
             /** @description Subject id (token `sub`). Never an email. */
             user_id: string;
             role: components["schemas"]["OrgRole"];
+            status: components["schemas"]["MemberStatus"];
             /** Format: date-time */
             updated_at: string;
         };
         MemberPage: {
             items: components["schemas"]["Member"][];
+            /** @description Cursor of the next page. Absent on the last page. */
+            next_cursor?: string;
+        };
+        InviteMemberRequest: {
+            /**
+             * Format: email
+             * @description Where Zitadel sends the invite mail. Identity passes it to Zitadel and stores it nowhere.
+             */
+            email: string;
+            role: components["schemas"]["OrgRole"];
+        };
+        /** @description A pending invitation. It never says whether the email has an account. */
+        Invitation: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: email
+             * @description The email the admin typed. Only owners and admins of the org see it.
+             */
+            email: string;
+            role: components["schemas"]["OrgRole"];
+            /** @description Subject id of the owner or admin who invited. */
+            invited_by: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        InvitationPage: {
+            items: components["schemas"]["Invitation"][];
+            /** @description Cursor of the next page. Absent on the last page. */
+            next_cursor?: string;
+        };
+        /** @description One org event of identity, as it went to the outbox. */
+        AuditEvent: {
+            /**
+             * Format: uuid
+             * @description The CloudEvents id.
+             */
+            id: string;
+            /** @description The CloudEvents type. Clients must accept types they do not know. */
+            type: string;
+            /** Format: date-time */
+            time: string;
+            /** @description Who did it. `user:<sub>`, `service:<name>` or `system` (a change from Zitadel). */
+            actor: string;
+            /** @description The CloudEvents subject, the id of the main entity. Absent when the event has none. */
+            subject?: string;
+            /** @description The event data. Its schema is the event schema in `events/identity`. */
+            data: {
+                [key: string]: unknown;
+            };
+        };
+        AuditEventPage: {
+            items: components["schemas"]["AuditEvent"][];
             /** @description Cursor of the next page. Absent on the last page. */
             next_cursor?: string;
         };
@@ -495,6 +709,9 @@ export interface components {
          *     | `slug_taken` | 409 | Another org has the slug. |
          *     | `last_owner` | 409 | The org would lose its last owner. |
          *     | `own_role` | 409 | The caller tried to change their own role. |
+         *     | `own_membership` | 409 | The caller tried to deactivate their own membership. |
+         *     | `member_exists` | 409 | The email is an active or deactivated member of this org. |
+         *     | `rate_limited` | 429 | Too many invites. Retry after `Retry-After` seconds. |
          *     | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
          *     | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
          *     | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
@@ -650,6 +867,47 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /**
+         * @description The member change breaks an org rule.
+         *     - `member_exists`: the email is an active or deactivated member of this org.
+         *     - `last_owner`: the org would lose its last active owner.
+         *     - `own_membership`: the caller tried to deactivate their own membership.
+         */
+        MemberConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://schemas.synthwerk.dev/problems/member_exists",
+                 *       "title": "Member exists",
+                 *       "status": 409,
+                 *       "code": "member_exists"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Too many invites from this caller or for this org. Code `rate_limited`. Retry after the seconds in `Retry-After`. */
+        RateLimited: {
+            headers: {
+                /** @description Seconds until the next invite is allowed. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://schemas.synthwerk.dev/problems/rate_limited",
+                 *       "title": "Rate limited",
+                 *       "status": 429,
+                 *       "code": "rate_limited"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description The `Origin` header is missing, not valid, or not in the allow-list of the app. Code `origin_not_allowed`. The body never lists the allowed origins. */
         OriginNotAllowed: {
             headers: {
@@ -694,6 +952,8 @@ export interface components {
         OrgId: string;
         /** @description Subject id (token `sub`) of the member. */
         UserId: string;
+        /** @description Id of the invitation. */
+        InvitationId: string;
         /** @description App id. */
         AppId: string;
     };
@@ -957,11 +1217,13 @@ export interface operations {
                      *         {
                      *           "user_id": "283746192837461928",
                      *           "role": "owner",
+                     *           "status": "active",
                      *           "updated_at": "2026-10-23T08:30:00Z"
                      *         },
                      *         {
                      *           "user_id": "396370217707541255",
                      *           "role": "member",
+                     *           "status": "deactivated",
                      *           "updated_at": "2026-10-28T09:00:00Z"
                      *         }
                      *       ]
@@ -974,6 +1236,55 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    "identity.inviteMember": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "email": "ada@example.com",
+                 *       "role": "member"
+                 *     }
+                 */
+                "application/json": components["schemas"]["InviteMemberRequest"];
+            };
+        };
+        responses: {
+            /** @description The pending invitation. The same answer for every email outside the org. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "019a3c1e-7a1b-7c2d-8e3f-4a5b6c7d8e9f",
+                     *       "email": "ada@example.com",
+                     *       "role": "member",
+                     *       "invited_by": "283746192837461928",
+                     *       "created_at": "2026-10-30T09:00:00Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Invitation"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["MemberConflict"];
+            429: components["responses"]["RateLimited"];
+            502: components["responses"]["UpstreamUnavailable"];
         };
     };
     "identity.changeMemberRole": {
@@ -1009,6 +1320,7 @@ export interface operations {
                      * @example {
                      *       "user_id": "396370217707541255",
                      *       "role": "admin",
+                     *       "status": "active",
                      *       "updated_at": "2026-10-28T09:15:00Z"
                      *     }
                      */
@@ -1021,6 +1333,218 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["RoleConflict"];
             502: components["responses"]["UpstreamUnavailable"];
+        };
+    };
+    "identity.deactivateMember": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+                /** @description Subject id (token `sub`) of the member. */
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The member with the new status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "user_id": "396370217707541255",
+                     *       "role": "member",
+                     *       "status": "deactivated",
+                     *       "updated_at": "2026-10-30T09:30:00Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Member"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["MemberConflict"];
+            502: components["responses"]["UpstreamUnavailable"];
+        };
+    };
+    "identity.reactivateMember": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+                /** @description Subject id (token `sub`) of the member. */
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The member with the new status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "user_id": "396370217707541255",
+                     *       "role": "member",
+                     *       "status": "active",
+                     *       "updated_at": "2026-10-30T09:30:00Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Member"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["MemberConflict"];
+            502: components["responses"]["UpstreamUnavailable"];
+        };
+    };
+    "identity.listInvitations": {
+        parameters: {
+            query?: {
+                /** @description Page size. */
+                limit?: number;
+                /** @description The `next_cursor` of the previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of pending invitations. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": "019a3c1e-7a1b-7c2d-8e3f-4a5b6c7d8e9f",
+                     *           "email": "ada@example.com",
+                     *           "role": "member",
+                     *           "invited_by": "283746192837461928",
+                     *           "created_at": "2026-10-30T09:00:00Z"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["InvitationPage"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "identity.revokeInvitation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+                /** @description Id of the invitation. */
+                invitationId: components["parameters"]["InvitationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Invitation revoked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            502: components["responses"]["UpstreamUnavailable"];
+        };
+    };
+    "identity.listAuditEvents": {
+        parameters: {
+            query?: {
+                /** @description Page size. */
+                limit?: number;
+                /** @description The `next_cursor` of the previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Org id. */
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of audit events, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": "019a3c20-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+                     *           "type": "dev.synthwerk.identity.member.role_changed.v1",
+                     *           "time": "2026-10-30T09:15:00Z",
+                     *           "actor": "user:283746192837461928",
+                     *           "subject": "396370217707541255",
+                     *           "data": {
+                     *             "org_id": "0199f3a0-5b6c-7d8e-9f0a-1b2c3d4e5f60",
+                     *             "user_sub": "396370217707541255",
+                     *             "old_role": "member",
+                     *             "new_role": "admin"
+                     *           }
+                     *         },
+                     *         {
+                     *           "id": "019a3c1f-0a1b-7c2d-8e3f-4a5b6c7d8e9f",
+                     *           "type": "dev.synthwerk.identity.member.invited.v1",
+                     *           "time": "2026-10-30T09:00:00Z",
+                     *           "actor": "user:283746192837461928",
+                     *           "subject": "019a3c1e-7a1b-7c2d-8e3f-4a5b6c7d8e9f",
+                     *           "data": {
+                     *             "org_id": "0199f3a0-5b6c-7d8e-9f0a-1b2c3d4e5f60",
+                     *             "invitation_id": "019a3c1e-7a1b-7c2d-8e3f-4a5b6c7d8e9f",
+                     *             "role": "member"
+                     *           }
+                     *         }
+                     *       ],
+                     *       "next_cursor": "MTI"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AuditEventPage"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     "identity.listApps": {
