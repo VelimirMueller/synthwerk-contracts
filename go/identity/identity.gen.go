@@ -514,6 +514,7 @@ type OrgRole string
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `upstream_unavailable` | 503 | The Zitadel setup is not finished (no project id yet). Nothing changed. Retry after `Retry-After` seconds. |
 // | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type Problem struct {
 	// Code Stable machine code, for example `not_found`.
@@ -682,6 +683,7 @@ type UserId = string
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `upstream_unavailable` | 503 | The Zitadel setup is not finished (no project id yet). Nothing changed. Retry after `Retry-After` seconds. |
 // | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type Conflict = Problem
 
@@ -703,6 +705,7 @@ type Conflict = Problem
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `upstream_unavailable` | 503 | The Zitadel setup is not finished (no project id yet). Nothing changed. Retry after `Retry-After` seconds. |
 // | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type CreateAppForbidden = Problem
 
@@ -724,6 +727,7 @@ type CreateAppForbidden = Problem
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `upstream_unavailable` | 503 | The Zitadel setup is not finished (no project id yet). Nothing changed. Retry after `Retry-After` seconds. |
 // | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type Forbidden = Problem
 
@@ -745,6 +749,7 @@ type Forbidden = Problem
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `upstream_unavailable` | 503 | The Zitadel setup is not finished (no project id yet). Nothing changed. Retry after `Retry-After` seconds. |
 // | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type InvalidRequest = Problem
 
@@ -766,6 +771,7 @@ type InvalidRequest = Problem
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `upstream_unavailable` | 503 | The Zitadel setup is not finished (no project id yet). Nothing changed. Retry after `Retry-After` seconds. |
 // | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type LastOwner = Problem
 
@@ -787,6 +793,7 @@ type LastOwner = Problem
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `upstream_unavailable` | 503 | The Zitadel setup is not finished (no project id yet). Nothing changed. Retry after `Retry-After` seconds. |
 // | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type MemberConflict = Problem
 
@@ -808,6 +815,7 @@ type MemberConflict = Problem
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `upstream_unavailable` | 503 | The Zitadel setup is not finished (no project id yet). Nothing changed. Retry after `Retry-After` seconds. |
 // | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type NotFound = Problem
 
@@ -829,6 +837,7 @@ type NotFound = Problem
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `upstream_unavailable` | 503 | The Zitadel setup is not finished (no project id yet). Nothing changed. Retry after `Retry-After` seconds. |
 // | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type OriginNotAllowed = Problem
 
@@ -850,6 +859,7 @@ type OriginNotAllowed = Problem
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `upstream_unavailable` | 503 | The Zitadel setup is not finished (no project id yet). Nothing changed. Retry after `Retry-After` seconds. |
 // | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type RateLimited = Problem
 
@@ -871,6 +881,7 @@ type RateLimited = Problem
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `upstream_unavailable` | 503 | The Zitadel setup is not finished (no project id yet). Nothing changed. Retry after `Retry-After` seconds. |
 // | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type RecentMFARequired = Problem
 
@@ -892,6 +903,7 @@ type RecentMFARequired = Problem
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `upstream_unavailable` | 503 | The Zitadel setup is not finished (no project id yet). Nothing changed. Retry after `Retry-After` seconds. |
 // | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type RoleConflict = Problem
 
@@ -913,6 +925,7 @@ type RoleConflict = Problem
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `upstream_unavailable` | 503 | The Zitadel setup is not finished (no project id yet). Nothing changed. Retry after `Retry-After` seconds. |
 // | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type Unauthenticated = Problem
 
@@ -934,8 +947,31 @@ type Unauthenticated = Problem
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `upstream_unavailable` | 503 | The Zitadel setup is not finished (no project id yet). Nothing changed. Retry after `Retry-After` seconds. |
 // | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
 type UpstreamUnavailable = Problem
+
+// ZitadelNotReady RFC 9457 problem details with the stable Synthwerk `code`.
+// Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
+//
+// | Code | Status | Cause |
+// |---|---|---|
+// | `invalid_request` | 400 | Body or parameter not valid. |
+// | `unauthenticated` | 401 | Token missing or not valid. |
+// | `forbidden` | 403 | Role does not allow the call. |
+// | `not_found` | 404 | Unknown org or member, or no membership. |
+// | `slug_taken` | 409 | Another org has the slug. |
+// | `last_owner` | 409 | The org would lose its last owner (role change or account delete). |
+// | `own_role` | 409 | The caller tried to change their own role. |
+// | `own_membership` | 409 | The caller tried to deactivate their own membership. |
+// | `member_exists` | 409 | The email is an active or deactivated member of this org. |
+// | `rate_limited` | 429 | Too many invites. Retry after `Retry-After` seconds. |
+// | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
+// | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
+// | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+// | `upstream_unavailable` | 503 | The Zitadel setup is not finished (no project id yet). Nothing changed. Retry after `Retry-After` seconds. |
+// | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
+type ZitadelNotReady = Problem
 
 // IdentityGetWidgetSettingsParams defines parameters for IdentityGetWidgetSettings.
 type IdentityGetWidgetSettingsParams struct {
@@ -4647,6 +4683,11 @@ type IdentityRevokeInvitationResponse401Headers struct {
 	WWWAuthenticate *string
 }
 
+// IdentityRevokeInvitationResponse503Headers the declared response headers of an HTTP 503 response for IdentityRevokeInvitation
+type IdentityRevokeInvitationResponse503Headers struct {
+	RetryAfter *int
+}
+
 type IdentityRevokeInvitationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -4658,8 +4699,12 @@ type IdentityRevokeInvitationResponse struct {
 	ApplicationproblemJSON404 *NotFound
 	// ApplicationproblemJSON502 the response for an HTTP 502 `application/problem+json` response
 	ApplicationproblemJSON502 *UpstreamUnavailable
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *ZitadelNotReady
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *IdentityRevokeInvitationResponse401Headers
+	// Headers503 the parsed response headers for an HTTP 503 response
+	Headers503 *IdentityRevokeInvitationResponse503Headers
 }
 
 // GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
@@ -4680,6 +4725,11 @@ func (r IdentityRevokeInvitationResponse) GetApplicationproblemJSON404() *NotFou
 // GetApplicationproblemJSON502 returns the response for an HTTP 502 `application/problem+json` response
 func (r IdentityRevokeInvitationResponse) GetApplicationproblemJSON502() *UpstreamUnavailable {
 	return r.ApplicationproblemJSON502
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r IdentityRevokeInvitationResponse) GetApplicationproblemJSON503() *ZitadelNotReady {
+	return r.ApplicationproblemJSON503
 }
 
 // GetBody returns the raw response body bytes
@@ -4797,6 +4847,11 @@ type IdentityInviteMemberResponse429Headers struct {
 	RetryAfter *int
 }
 
+// IdentityInviteMemberResponse503Headers the declared response headers of an HTTP 503 response for IdentityInviteMember
+type IdentityInviteMemberResponse503Headers struct {
+	RetryAfter *int
+}
+
 type IdentityInviteMemberResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -4816,10 +4871,14 @@ type IdentityInviteMemberResponse struct {
 	ApplicationproblemJSON429 *RateLimited
 	// ApplicationproblemJSON502 the response for an HTTP 502 `application/problem+json` response
 	ApplicationproblemJSON502 *UpstreamUnavailable
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *ZitadelNotReady
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *IdentityInviteMemberResponse401Headers
 	// Headers429 the parsed response headers for an HTTP 429 response
 	Headers429 *IdentityInviteMemberResponse429Headers
+	// Headers503 the parsed response headers for an HTTP 503 response
+	Headers503 *IdentityInviteMemberResponse503Headers
 }
 
 // GetJSON202 returns the response for an HTTP 202 `application/json` response
@@ -4862,6 +4921,11 @@ func (r IdentityInviteMemberResponse) GetApplicationproblemJSON502() *UpstreamUn
 	return r.ApplicationproblemJSON502
 }
 
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r IdentityInviteMemberResponse) GetApplicationproblemJSON503() *ZitadelNotReady {
+	return r.ApplicationproblemJSON503
+}
+
 // GetBody returns the raw response body bytes
 func (r IdentityInviteMemberResponse) GetBody() []byte {
 	return r.Body
@@ -4896,6 +4960,11 @@ type IdentityChangeMemberRoleResponse401Headers struct {
 	WWWAuthenticate *string
 }
 
+// IdentityChangeMemberRoleResponse503Headers the declared response headers of an HTTP 503 response for IdentityChangeMemberRole
+type IdentityChangeMemberRoleResponse503Headers struct {
+	RetryAfter *int
+}
+
 type IdentityChangeMemberRoleResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -4913,8 +4982,12 @@ type IdentityChangeMemberRoleResponse struct {
 	ApplicationproblemJSON409 *RoleConflict
 	// ApplicationproblemJSON502 the response for an HTTP 502 `application/problem+json` response
 	ApplicationproblemJSON502 *UpstreamUnavailable
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *ZitadelNotReady
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *IdentityChangeMemberRoleResponse401Headers
+	// Headers503 the parsed response headers for an HTTP 503 response
+	Headers503 *IdentityChangeMemberRoleResponse503Headers
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
@@ -4952,6 +5025,11 @@ func (r IdentityChangeMemberRoleResponse) GetApplicationproblemJSON502() *Upstre
 	return r.ApplicationproblemJSON502
 }
 
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r IdentityChangeMemberRoleResponse) GetApplicationproblemJSON503() *ZitadelNotReady {
+	return r.ApplicationproblemJSON503
+}
+
 // GetBody returns the raw response body bytes
 func (r IdentityChangeMemberRoleResponse) GetBody() []byte {
 	return r.Body
@@ -4986,6 +5064,11 @@ type IdentityDeactivateMemberResponse401Headers struct {
 	WWWAuthenticate *string
 }
 
+// IdentityDeactivateMemberResponse503Headers the declared response headers of an HTTP 503 response for IdentityDeactivateMember
+type IdentityDeactivateMemberResponse503Headers struct {
+	RetryAfter *int
+}
+
 type IdentityDeactivateMemberResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -5001,8 +5084,12 @@ type IdentityDeactivateMemberResponse struct {
 	ApplicationproblemJSON409 *MemberConflict
 	// ApplicationproblemJSON502 the response for an HTTP 502 `application/problem+json` response
 	ApplicationproblemJSON502 *UpstreamUnavailable
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *ZitadelNotReady
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *IdentityDeactivateMemberResponse401Headers
+	// Headers503 the parsed response headers for an HTTP 503 response
+	Headers503 *IdentityDeactivateMemberResponse503Headers
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
@@ -5033,6 +5120,11 @@ func (r IdentityDeactivateMemberResponse) GetApplicationproblemJSON409() *Member
 // GetApplicationproblemJSON502 returns the response for an HTTP 502 `application/problem+json` response
 func (r IdentityDeactivateMemberResponse) GetApplicationproblemJSON502() *UpstreamUnavailable {
 	return r.ApplicationproblemJSON502
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r IdentityDeactivateMemberResponse) GetApplicationproblemJSON503() *ZitadelNotReady {
+	return r.ApplicationproblemJSON503
 }
 
 // GetBody returns the raw response body bytes
@@ -5069,6 +5161,11 @@ type IdentityReactivateMemberResponse401Headers struct {
 	WWWAuthenticate *string
 }
 
+// IdentityReactivateMemberResponse503Headers the declared response headers of an HTTP 503 response for IdentityReactivateMember
+type IdentityReactivateMemberResponse503Headers struct {
+	RetryAfter *int
+}
+
 type IdentityReactivateMemberResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -5084,8 +5181,12 @@ type IdentityReactivateMemberResponse struct {
 	ApplicationproblemJSON409 *MemberConflict
 	// ApplicationproblemJSON502 the response for an HTTP 502 `application/problem+json` response
 	ApplicationproblemJSON502 *UpstreamUnavailable
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *ZitadelNotReady
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *IdentityReactivateMemberResponse401Headers
+	// Headers503 the parsed response headers for an HTTP 503 response
+	Headers503 *IdentityReactivateMemberResponse503Headers
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
@@ -5116,6 +5217,11 @@ func (r IdentityReactivateMemberResponse) GetApplicationproblemJSON409() *Member
 // GetApplicationproblemJSON502 returns the response for an HTTP 502 `application/problem+json` response
 func (r IdentityReactivateMemberResponse) GetApplicationproblemJSON502() *UpstreamUnavailable {
 	return r.ApplicationproblemJSON502
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r IdentityReactivateMemberResponse) GetApplicationproblemJSON503() *ZitadelNotReady {
+	return r.ApplicationproblemJSON503
 }
 
 // GetBody returns the raw response body bytes
@@ -6773,6 +6879,13 @@ func ParseIdentityRevokeInvitationResponse(rsp *http.Response) (*IdentityRevokeI
 		}
 		response.ApplicationproblemJSON502 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ZitadelNotReady
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
 	}
 
 	switch {
@@ -6786,6 +6899,16 @@ func ParseIdentityRevokeInvitationResponse(rsp *http.Response) (*IdentityRevokeI
 			headers.WWWAuthenticate = &value
 		}
 		response.Headers401 = &headers
+	case rsp.StatusCode == 503:
+		var headers IdentityRevokeInvitationResponse503Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		response.Headers503 = &headers
 	}
 
 	return response, nil
@@ -6928,6 +7051,13 @@ func ParseIdentityInviteMemberResponse(rsp *http.Response) (*IdentityInviteMembe
 		}
 		response.ApplicationproblemJSON502 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ZitadelNotReady
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
 	}
 
 	switch {
@@ -6951,6 +7081,16 @@ func ParseIdentityInviteMemberResponse(rsp *http.Response) (*IdentityInviteMembe
 			headers.RetryAfter = &value
 		}
 		response.Headers429 = &headers
+	case rsp.StatusCode == 503:
+		var headers IdentityInviteMemberResponse503Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		response.Headers503 = &headers
 	}
 
 	return response, nil
@@ -7019,6 +7159,13 @@ func ParseIdentityChangeMemberRoleResponse(rsp *http.Response) (*IdentityChangeM
 		}
 		response.ApplicationproblemJSON502 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ZitadelNotReady
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
 	}
 
 	switch {
@@ -7032,6 +7179,16 @@ func ParseIdentityChangeMemberRoleResponse(rsp *http.Response) (*IdentityChangeM
 			headers.WWWAuthenticate = &value
 		}
 		response.Headers401 = &headers
+	case rsp.StatusCode == 503:
+		var headers IdentityChangeMemberRoleResponse503Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		response.Headers503 = &headers
 	}
 
 	return response, nil
@@ -7093,6 +7250,13 @@ func ParseIdentityDeactivateMemberResponse(rsp *http.Response) (*IdentityDeactiv
 		}
 		response.ApplicationproblemJSON502 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ZitadelNotReady
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
 	}
 
 	switch {
@@ -7106,6 +7270,16 @@ func ParseIdentityDeactivateMemberResponse(rsp *http.Response) (*IdentityDeactiv
 			headers.WWWAuthenticate = &value
 		}
 		response.Headers401 = &headers
+	case rsp.StatusCode == 503:
+		var headers IdentityDeactivateMemberResponse503Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		response.Headers503 = &headers
 	}
 
 	return response, nil
@@ -7167,6 +7341,13 @@ func ParseIdentityReactivateMemberResponse(rsp *http.Response) (*IdentityReactiv
 		}
 		response.ApplicationproblemJSON502 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ZitadelNotReady
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
 	}
 
 	switch {
@@ -7180,6 +7361,16 @@ func ParseIdentityReactivateMemberResponse(rsp *http.Response) (*IdentityReactiv
 			headers.WWWAuthenticate = &value
 		}
 		response.Headers401 = &headers
+	case rsp.StatusCode == 503:
+		var headers IdentityReactivateMemberResponse503Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		response.Headers503 = &headers
 	}
 
 	return response, nil

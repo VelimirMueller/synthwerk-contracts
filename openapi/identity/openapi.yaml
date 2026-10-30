@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Synthwerk identity
-  version: 0.7.0
+  version: 0.7.1
   summary: The caller, orgs and roles. The M2 stubs of synthwerk-identity.
   description: |
     The org contract of synthwerk-identity (M2 spec #29, D-44).
@@ -438,6 +438,8 @@ paths:
           $ref: "#/components/responses/RateLimited"
         "502":
           $ref: "#/components/responses/UpstreamUnavailable"
+        "503":
+          $ref: "#/components/responses/ZitadelNotReady"
   /v1/orgs/{orgId}/members/{userId}:
     parameters:
       - $ref: "#/components/parameters/OrgId"
@@ -487,6 +489,8 @@ paths:
           $ref: "#/components/responses/RoleConflict"
         "502":
           $ref: "#/components/responses/UpstreamUnavailable"
+        "503":
+          $ref: "#/components/responses/ZitadelNotReady"
   /v1/orgs/{orgId}/members/{userId}:deactivate:
     parameters:
       - $ref: "#/components/parameters/OrgId"
@@ -526,6 +530,8 @@ paths:
           $ref: "#/components/responses/MemberConflict"
         "502":
           $ref: "#/components/responses/UpstreamUnavailable"
+        "503":
+          $ref: "#/components/responses/ZitadelNotReady"
   /v1/orgs/{orgId}/members/{userId}:reactivate:
     parameters:
       - $ref: "#/components/parameters/OrgId"
@@ -563,6 +569,8 @@ paths:
           $ref: "#/components/responses/MemberConflict"
         "502":
           $ref: "#/components/responses/UpstreamUnavailable"
+        "503":
+          $ref: "#/components/responses/ZitadelNotReady"
   /v1/orgs/{orgId}/invitations:
     parameters:
       - $ref: "#/components/parameters/OrgId"
@@ -644,6 +652,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "502":
           $ref: "#/components/responses/UpstreamUnavailable"
+        "503":
+          $ref: "#/components/responses/ZitadelNotReady"
   /v1/orgs/{orgId}/audit-events:
     parameters:
       - $ref: "#/components/parameters/OrgId"
@@ -1268,6 +1278,25 @@ components:
             title: Upstream unavailable
             status: 502
             code: upstream_unavailable
+    ZitadelNotReady:
+      description: The Zitadel setup is not finished, so identity does not know the project id yet. Code `upstream_unavailable`. Nothing changed. Retry after the seconds in `Retry-After`.
+      headers:
+        Retry-After:
+          description: Seconds until the next try.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 86400
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: https://schemas.synthwerk.dev/problems/upstream_unavailable
+            title: Upstream unavailable
+            status: 503
+            code: upstream_unavailable
+            detail: The Zitadel setup is not finished. Retry later.
   schemas:
     Role:
       type: string
@@ -1874,6 +1903,7 @@ components:
         | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
         | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
         | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+        | `upstream_unavailable` | 503 | The Zitadel setup is not finished (no project id yet). Nothing changed. Retry after `Retry-After` seconds. |
         | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
       properties:
         type:

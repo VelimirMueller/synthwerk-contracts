@@ -137,6 +137,40 @@ func TestIdentityContract(t *testing.T) {
 		}
 	})
 
+	t.Run("InviteMember - Zitadel setup not finished - 503 problem with code upstream_unavailable and Retry-After", func(t *testing.T) {
+		body := toJSON(t, spec.Components.Responses["ZitadelNotReady"].Content["application/problem+json"].Example)
+		var p identity.Problem
+		strict(t, body, &p)
+		if p.Code != "upstream_unavailable" || p.Status != http.StatusServiceUnavailable {
+			t.Fatalf("got %+v", p)
+		}
+		client, err := identity.NewClientWithResponses(serveAs(t, http.StatusServiceUnavailable, "application/problem+json", body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := client.IdentityInviteMemberWithResponse(ctx, uuid.MustParse("0199f3a0-5b6c-7d8e-9f0a-1b2c3d4e5f60"),
+			identity.IdentityInviteMemberJSONRequestBody{Email: "new@example.com", Role: identity.OrgRoleMember})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.ApplicationproblemJSON503 == nil || res.ApplicationproblemJSON503.Code != "upstream_unavailable" {
+			t.Fatalf("got status %d, body %+v", res.StatusCode(), res.ApplicationproblemJSON503)
+		}
+		for _, path := range []string{"/v1/orgs/{orgId}/members", "/v1/orgs/{orgId}/members/{userId}", "/v1/orgs/{orgId}/members/{userId}:deactivate",
+			"/v1/orgs/{orgId}/members/{userId}:reactivate", "/v1/orgs/{orgId}/invitations/{invitationId}"} {
+			found := false
+			p := spec.Paths[path]
+			for _, op := range []specOp{p.Post, p.Patch, p.Delete} {
+				if op.Responses["503"].Ref == "#/components/responses/ZitadelNotReady" {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("%s: no 503 ZitadelNotReady", path)
+			}
+		}
+	})
+
 	t.Run("InviteMember - email is a user already - 409 problem with code member_exists", func(t *testing.T) {
 		body := toJSON(t, spec.Components.Responses["MemberConflict"].Content["application/problem+json"].Example)
 		var p identity.Problem
