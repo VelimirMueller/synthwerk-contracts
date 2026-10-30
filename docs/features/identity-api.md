@@ -35,7 +35,7 @@ updated: 2026-10-30
 - A repeat invite of an email with a pending invitation answers 202 with that invitation, unchanged, for every email.
 - `DELETE /v1/orgs/{orgId}/invitations/{invitationId}` revokes a pending invitation (owner or admin) and emits `dev.synthwerk.identity.member.invite_revoked.v1`. A Zitadel user identity made for it is deleted.
 - `POST /v1/orgs/{orgId}/members/{userId}:deactivate` and `:reactivate` switch the Zitadel user grant off and on. The member keeps the row and the role.
-- `GET /v1/orgs/{orgId}/audit-events` lists the org events identity wrote, newest first (owner or admin only, no operator). `data` is the event data.
+- `GET /v1/orgs/{orgId}/audit-events` lists the org events identity wrote and the llm AI settings changes (synthwerk#39), newest first (owner or admin only, no operator). `data` is the event data.
 - `GET|POST /v1/orgs/{orgId}/apps` and `GET|PATCH|DELETE /v1/orgs/{orgId}/apps/{appId}` manage the apps of an org. Read: any active member or operator. Write: owner or admin.
 - Creating an app emits `dev.synthwerk.identity.app.created.v1`. Update and delete emit no event yet.
 - A create past `apps_per_org` gets 403 `app_limit_reached` (#38).
@@ -172,3 +172,4 @@ updated: 2026-10-30
 | 2026-10-30 | Add invite, deactivate and reactivate members, the member `status`, the invite rate limit, pending invitations and their revoke, the audit list and `member.invited.v1`, `member.invite_revoked.v1`, `member.deactivated.v1` and `member.reactivated.v1` (synthwerk#37). Spec 0.4.0. |
 | 2026-10-30 | Add `GET /v1/me/export`, `DELETE /v1/me`, problem code `recent_mfa_required` and `user.deleted.v1` (synthwerk#41). Spec 0.5.0. |
 | 2026-10-30 | Org routes, entitlements and the widget token need an active stored membership; a deactivated or invited member gets 404 (synthwerk#37 security review). Wording only. Spec 0.5.1. |
+| 2026-10-30 | The audit list also shows `dev.synthwerk.llm.ai_settings.changed.v1`, which identity reads from `EVT_LLM` (synthwerk#39). Spec 0.6.0. |

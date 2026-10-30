@@ -172,6 +172,61 @@ func (e UsageEventEvent) Valid() bool {
 	}
 }
 
+// AiSettings The AI settings of one org (synthwerk#39). llm applies them to every create and send of the org.
+// The schema is closed. A new setting (for example AI tools) comes with a new spec minor version.
+type AiSettings struct {
+	// AllowedModels The aliases the users of the org may pick. Holds `model`. Always a subset of `bounds.models`.
+	AllowedModels []ModelAlias `json:"allowed_models"`
+
+	// Bounds The limits the settings must stay in. The service and the org's plan set them, never the org.
+	Bounds AiSettingsBounds `json:"bounds"`
+
+	// MaxInputChars Max characters of one user message in this org. A longer message gets 413 `input_too_large`.
+	MaxInputChars int32 `json:"max_input_chars"`
+
+	// Model Model alias, for example `default`. Never a provider model name.
+	Model ModelAlias `json:"model"`
+
+	// SystemPrompt The system prompt of the org. Plain text, never HTML. Line breaks and tabs are allowed; other control characters are refused.
+	// Empty: the system prompt of the service.
+	SystemPrompt AiSystemPrompt `json:"system_prompt"`
+
+	// Temperature Sampling temperature of the model. Absent means the model default.
+	Temperature *float32 `json:"temperature,omitempty"`
+
+	// UpdatedAt Time of the last saved change. Absent with `version` 0.
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+
+	// UserTokensPerDay Tokens one user may use in this org per UTC day, below the plan. `0`: the plan limit only.
+	// The smaller of this cap and the plan limit applies.
+	UserTokensPerDay int64 `json:"user_tokens_per_day"`
+
+	// Version Goes up by one on every saved change. `0` means the org never saved settings and gets the defaults.
+	Version int64 `json:"version"`
+}
+
+// AiSettingsBounds The limits the settings must stay in. The service and the org's plan set them, never the org.
+type AiSettingsBounds struct {
+	// MaxInputChars The input limit of the service.
+	MaxInputChars int32 `json:"max_input_chars"`
+
+	// Models Every model alias of the service (the operator's allow-list).
+	Models []ModelAlias `json:"models"`
+
+	// SystemPromptMaxChars Max characters of `system_prompt`.
+	SystemPromptMaxChars int32 `json:"system_prompt_max_chars"`
+
+	// TemperatureMax Max `temperature`.
+	TemperatureMax float32 `json:"temperature_max"`
+
+	// UserTokensPerDay Tokens per user per UTC day of the org's plan (identity entitlements). `0` means no limit.
+	UserTokensPerDay int64 `json:"user_tokens_per_day"`
+}
+
+// AiSystemPrompt The system prompt of the org. Plain text, never HTML. Line breaks and tabs are allowed; other control characters are refused.
+// Empty: the system prompt of the service.
+type AiSystemPrompt = string
+
 // Conversation defines model for Conversation.
 type Conversation struct {
 	CreatedAt time.Time          `json:"created_at"`
@@ -238,12 +293,14 @@ type ErrorEvent struct {
 	// |---|---|---|
 	// | `invalid_request` | 400 | Body or parameter not valid. |
 	// | `unauthenticated` | 401 | Token missing or not valid. |
-	// | `forbidden` | 403 | Scope or origin does not allow the call. |
+	// | `forbidden` | 403 | Scope, role or origin does not allow the call. |
 	// | `not_found` | 404 | Unknown id or another owner's id. |
+	// | `version_conflict` | 409 | The AI settings changed since the caller read them. |
 	// | `input_too_large` | 413 | Message above the input limit. |
 	// | `too_many_streams` | 429 | Owner has the max number of open streams. |
 	// | `quota_exhausted` | 429 | User or org quota used up. `quota` names the scope and the reset. |
 	// | `model_unavailable` | 503 | Provider down or busy. Also as an `error` event mid-stream. |
+	// | `settings_unavailable` | 503 | llm cannot check the membership and the plan for the AI settings now. |
 	Data  Problem         `json:"data"`
 	Event ErrorEventEvent `json:"event"`
 }
@@ -342,12 +399,14 @@ type ModelAlias = string
 // |---|---|---|
 // | `invalid_request` | 400 | Body or parameter not valid. |
 // | `unauthenticated` | 401 | Token missing or not valid. |
-// | `forbidden` | 403 | Scope or origin does not allow the call. |
+// | `forbidden` | 403 | Scope, role or origin does not allow the call. |
 // | `not_found` | 404 | Unknown id or another owner's id. |
+// | `version_conflict` | 409 | The AI settings changed since the caller read them. |
 // | `input_too_large` | 413 | Message above the input limit. |
 // | `too_many_streams` | 429 | Owner has the max number of open streams. |
 // | `quota_exhausted` | 429 | User or org quota used up. `quota` names the scope and the reset. |
 // | `model_unavailable` | 503 | Provider down or busy. Also as an `error` event mid-stream. |
+// | `settings_unavailable` | 503 | llm cannot check the membership and the plan for the AI settings now. |
 type Problem struct {
 	// Code Stable machine code, for example `model_unavailable`.
 	Code string `json:"code"`
@@ -401,7 +460,7 @@ type QuotaExceededUnit string
 
 // SendMessageRequest defines model for SendMessageRequest.
 type SendMessageRequest struct {
-	// Content The user message. Plain text. Above the server limit the answer is 413.
+	// Content The user message. Plain text. Above the input limit of the org (AI settings, at most the server limit) the answer is 413.
 	Content string `json:"content"`
 
 	// Model Model alias, for example `default`. Never a provider model name.
@@ -411,6 +470,24 @@ type SendMessageRequest struct {
 // StreamEvent One Server-Sent Event of the answer stream. `event` is the SSE event name.
 type StreamEvent struct {
 	union json.RawMessage
+}
+
+// UpdateAiSettingsRequest Every AI setting of the org. Absent `temperature` means the model default.
+type UpdateAiSettingsRequest struct {
+	AllowedModels []ModelAlias `json:"allowed_models"`
+	MaxInputChars int32        `json:"max_input_chars"`
+
+	// Model Model alias, for example `default`. Never a provider model name.
+	Model ModelAlias `json:"model"`
+
+	// SystemPrompt The system prompt of the org. Plain text, never HTML. Line breaks and tabs are allowed; other control characters are refused.
+	// Empty: the system prompt of the service.
+	SystemPrompt     AiSystemPrompt `json:"system_prompt"`
+	Temperature      *float32       `json:"temperature,omitempty"`
+	UserTokensPerDay int64          `json:"user_tokens_per_day"`
+
+	// Version The `version` the caller read.
+	Version int64 `json:"version"`
 }
 
 // Usage Token use of this answer, from the provider. Sent once, before `done`.
@@ -442,12 +519,14 @@ type ConversationId = openapi_types.UUID
 // |---|---|---|
 // | `invalid_request` | 400 | Body or parameter not valid. |
 // | `unauthenticated` | 401 | Token missing or not valid. |
-// | `forbidden` | 403 | Scope or origin does not allow the call. |
+// | `forbidden` | 403 | Scope, role or origin does not allow the call. |
 // | `not_found` | 404 | Unknown id or another owner's id. |
+// | `version_conflict` | 409 | The AI settings changed since the caller read them. |
 // | `input_too_large` | 413 | Message above the input limit. |
 // | `too_many_streams` | 429 | Owner has the max number of open streams. |
 // | `quota_exhausted` | 429 | User or org quota used up. `quota` names the scope and the reset. |
 // | `model_unavailable` | 503 | Provider down or busy. Also as an `error` event mid-stream. |
+// | `settings_unavailable` | 503 | llm cannot check the membership and the plan for the AI settings now. |
 type Forbidden = Problem
 
 // InputTooLarge RFC 9457 problem details with the stable Synthwerk `code`.
@@ -457,12 +536,14 @@ type Forbidden = Problem
 // |---|---|---|
 // | `invalid_request` | 400 | Body or parameter not valid. |
 // | `unauthenticated` | 401 | Token missing or not valid. |
-// | `forbidden` | 403 | Scope or origin does not allow the call. |
+// | `forbidden` | 403 | Scope, role or origin does not allow the call. |
 // | `not_found` | 404 | Unknown id or another owner's id. |
+// | `version_conflict` | 409 | The AI settings changed since the caller read them. |
 // | `input_too_large` | 413 | Message above the input limit. |
 // | `too_many_streams` | 429 | Owner has the max number of open streams. |
 // | `quota_exhausted` | 429 | User or org quota used up. `quota` names the scope and the reset. |
 // | `model_unavailable` | 503 | Provider down or busy. Also as an `error` event mid-stream. |
+// | `settings_unavailable` | 503 | llm cannot check the membership and the plan for the AI settings now. |
 type InputTooLarge = Problem
 
 // InvalidRequest RFC 9457 problem details with the stable Synthwerk `code`.
@@ -472,12 +553,14 @@ type InputTooLarge = Problem
 // |---|---|---|
 // | `invalid_request` | 400 | Body or parameter not valid. |
 // | `unauthenticated` | 401 | Token missing or not valid. |
-// | `forbidden` | 403 | Scope or origin does not allow the call. |
+// | `forbidden` | 403 | Scope, role or origin does not allow the call. |
 // | `not_found` | 404 | Unknown id or another owner's id. |
+// | `version_conflict` | 409 | The AI settings changed since the caller read them. |
 // | `input_too_large` | 413 | Message above the input limit. |
 // | `too_many_streams` | 429 | Owner has the max number of open streams. |
 // | `quota_exhausted` | 429 | User or org quota used up. `quota` names the scope and the reset. |
 // | `model_unavailable` | 503 | Provider down or busy. Also as an `error` event mid-stream. |
+// | `settings_unavailable` | 503 | llm cannot check the membership and the plan for the AI settings now. |
 type InvalidRequest = Problem
 
 // ModelUnavailable RFC 9457 problem details with the stable Synthwerk `code`.
@@ -487,12 +570,14 @@ type InvalidRequest = Problem
 // |---|---|---|
 // | `invalid_request` | 400 | Body or parameter not valid. |
 // | `unauthenticated` | 401 | Token missing or not valid. |
-// | `forbidden` | 403 | Scope or origin does not allow the call. |
+// | `forbidden` | 403 | Scope, role or origin does not allow the call. |
 // | `not_found` | 404 | Unknown id or another owner's id. |
+// | `version_conflict` | 409 | The AI settings changed since the caller read them. |
 // | `input_too_large` | 413 | Message above the input limit. |
 // | `too_many_streams` | 429 | Owner has the max number of open streams. |
 // | `quota_exhausted` | 429 | User or org quota used up. `quota` names the scope and the reset. |
 // | `model_unavailable` | 503 | Provider down or busy. Also as an `error` event mid-stream. |
+// | `settings_unavailable` | 503 | llm cannot check the membership and the plan for the AI settings now. |
 type ModelUnavailable = Problem
 
 // NotFound RFC 9457 problem details with the stable Synthwerk `code`.
@@ -502,13 +587,32 @@ type ModelUnavailable = Problem
 // |---|---|---|
 // | `invalid_request` | 400 | Body or parameter not valid. |
 // | `unauthenticated` | 401 | Token missing or not valid. |
-// | `forbidden` | 403 | Scope or origin does not allow the call. |
+// | `forbidden` | 403 | Scope, role or origin does not allow the call. |
 // | `not_found` | 404 | Unknown id or another owner's id. |
+// | `version_conflict` | 409 | The AI settings changed since the caller read them. |
 // | `input_too_large` | 413 | Message above the input limit. |
 // | `too_many_streams` | 429 | Owner has the max number of open streams. |
 // | `quota_exhausted` | 429 | User or org quota used up. `quota` names the scope and the reset. |
 // | `model_unavailable` | 503 | Provider down or busy. Also as an `error` event mid-stream. |
+// | `settings_unavailable` | 503 | llm cannot check the membership and the plan for the AI settings now. |
 type NotFound = Problem
+
+// SettingsUnavailable RFC 9457 problem details with the stable Synthwerk `code`.
+// Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
+//
+// | Code | Status | Cause |
+// |---|---|---|
+// | `invalid_request` | 400 | Body or parameter not valid. |
+// | `unauthenticated` | 401 | Token missing or not valid. |
+// | `forbidden` | 403 | Scope, role or origin does not allow the call. |
+// | `not_found` | 404 | Unknown id or another owner's id. |
+// | `version_conflict` | 409 | The AI settings changed since the caller read them. |
+// | `input_too_large` | 413 | Message above the input limit. |
+// | `too_many_streams` | 429 | Owner has the max number of open streams. |
+// | `quota_exhausted` | 429 | User or org quota used up. `quota` names the scope and the reset. |
+// | `model_unavailable` | 503 | Provider down or busy. Also as an `error` event mid-stream. |
+// | `settings_unavailable` | 503 | llm cannot check the membership and the plan for the AI settings now. |
+type SettingsUnavailable = Problem
 
 // TooManyRequests RFC 9457 problem details with the stable Synthwerk `code`.
 // Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
@@ -517,12 +621,14 @@ type NotFound = Problem
 // |---|---|---|
 // | `invalid_request` | 400 | Body or parameter not valid. |
 // | `unauthenticated` | 401 | Token missing or not valid. |
-// | `forbidden` | 403 | Scope or origin does not allow the call. |
+// | `forbidden` | 403 | Scope, role or origin does not allow the call. |
 // | `not_found` | 404 | Unknown id or another owner's id. |
+// | `version_conflict` | 409 | The AI settings changed since the caller read them. |
 // | `input_too_large` | 413 | Message above the input limit. |
 // | `too_many_streams` | 429 | Owner has the max number of open streams. |
 // | `quota_exhausted` | 429 | User or org quota used up. `quota` names the scope and the reset. |
 // | `model_unavailable` | 503 | Provider down or busy. Also as an `error` event mid-stream. |
+// | `settings_unavailable` | 503 | llm cannot check the membership and the plan for the AI settings now. |
 type TooManyRequests = Problem
 
 // Unauthenticated RFC 9457 problem details with the stable Synthwerk `code`.
@@ -532,13 +638,35 @@ type TooManyRequests = Problem
 // |---|---|---|
 // | `invalid_request` | 400 | Body or parameter not valid. |
 // | `unauthenticated` | 401 | Token missing or not valid. |
-// | `forbidden` | 403 | Scope or origin does not allow the call. |
+// | `forbidden` | 403 | Scope, role or origin does not allow the call. |
 // | `not_found` | 404 | Unknown id or another owner's id. |
+// | `version_conflict` | 409 | The AI settings changed since the caller read them. |
 // | `input_too_large` | 413 | Message above the input limit. |
 // | `too_many_streams` | 429 | Owner has the max number of open streams. |
 // | `quota_exhausted` | 429 | User or org quota used up. `quota` names the scope and the reset. |
 // | `model_unavailable` | 503 | Provider down or busy. Also as an `error` event mid-stream. |
+// | `settings_unavailable` | 503 | llm cannot check the membership and the plan for the AI settings now. |
 type Unauthenticated = Problem
+
+// VersionConflict RFC 9457 problem details with the stable Synthwerk `code`.
+// Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
+//
+// | Code | Status | Cause |
+// |---|---|---|
+// | `invalid_request` | 400 | Body or parameter not valid. |
+// | `unauthenticated` | 401 | Token missing or not valid. |
+// | `forbidden` | 403 | Scope, role or origin does not allow the call. |
+// | `not_found` | 404 | Unknown id or another owner's id. |
+// | `version_conflict` | 409 | The AI settings changed since the caller read them. |
+// | `input_too_large` | 413 | Message above the input limit. |
+// | `too_many_streams` | 429 | Owner has the max number of open streams. |
+// | `quota_exhausted` | 429 | User or org quota used up. `quota` names the scope and the reset. |
+// | `model_unavailable` | 503 | Provider down or busy. Also as an `error` event mid-stream. |
+// | `settings_unavailable` | 503 | llm cannot check the membership and the plan for the AI settings now. |
+type VersionConflict = Problem
+
+// LlmUpdateAiSettingsJSONRequestBody defines body for LlmUpdateAiSettings for application/json ContentType.
+type LlmUpdateAiSettingsJSONRequestBody = UpdateAiSettingsRequest
 
 // LlmCreateConversationJSONRequestBody defines body for LlmCreateConversation for application/json ContentType.
 type LlmCreateConversationJSONRequestBody = CreateConversationRequest
@@ -793,9 +921,56 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 // The interface specification for the client above.
 type ClientInterface interface {
 
+	// LlmGetAiSettings Get the AI settings of the org
+	//
+	// The AI settings of the org the token acts in, and the bounds they must stay in (synthwerk#39).
+	// - Needs the org role `owner` or `admin` in the token and an active stored membership (llm asks identity with the caller's token). A `member`, an `operator` and a widget token get 403.
+	// - An org that never saved settings gets the defaults with `version` 0: the default alias, every alias of the service, the service system prompt, the service input limit, no extra token cap.
+	// - `bounds` holds the aliases of the service, the input limit of the service and the per-user token limit of the org's plan.
+	// - 503 `settings_unavailable`: llm cannot reach identity, or identity is not configured.
+	//
+	// Corresponds with GET /v1/ai-settings (the `LlmGetAiSettings` operationId).
+	LlmGetAiSettings(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// LlmUpdateAiSettingsWithBody Replace the AI settings of the org
+	//
+	// Replaces every AI setting of the token's org in one step (synthwerk#39). Same access rules as `llm.getAiSettings`.
+	// - `version` must be the version the caller read. Another version: 409 `version_conflict`, nothing changes. Read again and retry.
+	// - `model` and every item of `allowed_models` must be an alias of the service (`bounds.models`). `allowed_models` must hold `model`. An org can never pick a model outside the service allow-list.
+	// - `max_input_chars` must be at most `bounds.max_input_chars`. `user_tokens_per_day` must be at most `bounds.user_tokens_per_day` when the plan has a limit.
+	// - `system_prompt` is plain text: line breaks and tabs are allowed, other control characters are refused. Empty means the service prompt.
+	// - A value outside the bounds: 400 `invalid_request`; `detail` names the field.
+	// - An absent `temperature` clears a stored one (the model default again); that is a change.
+	// - A change emits `dev.synthwerk.llm.ai_settings.changed.v1` in the same transaction. The same values again change nothing: same version, no event.
+	// - The next send of every user of the org uses the new values. A conversation whose model is no longer allowed gets 400 on its next send.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /v1/ai-settings (the `LlmUpdateAiSettings` operationId).
+	LlmUpdateAiSettingsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// LlmUpdateAiSettings Replace the AI settings of the org
+	//
+	// Replaces every AI setting of the token's org in one step (synthwerk#39). Same access rules as `llm.getAiSettings`.
+	// - `version` must be the version the caller read. Another version: 409 `version_conflict`, nothing changes. Read again and retry.
+	// - `model` and every item of `allowed_models` must be an alias of the service (`bounds.models`). `allowed_models` must hold `model`. An org can never pick a model outside the service allow-list.
+	// - `max_input_chars` must be at most `bounds.max_input_chars`. `user_tokens_per_day` must be at most `bounds.user_tokens_per_day` when the plan has a limit.
+	// - `system_prompt` is plain text: line breaks and tabs are allowed, other control characters are refused. Empty means the service prompt.
+	// - A value outside the bounds: 400 `invalid_request`; `detail` names the field.
+	// - An absent `temperature` clears a stored one (the model default again); that is a change.
+	// - A change emits `dev.synthwerk.llm.ai_settings.changed.v1` in the same transaction. The same values again change nothing: same version, no event.
+	// - The next send of every user of the org uses the new values. A conversation whose model is no longer allowed gets 400 on its next send.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /v1/ai-settings (the `LlmUpdateAiSettings` operationId).
+	LlmUpdateAiSettings(ctx context.Context, body LlmUpdateAiSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// LlmCreateConversationWithBody Create a conversation
 	//
 	// Creates an empty conversation for the caller in the org of the token.
+	// - Without `model` the conversation gets the default model of the org (AI settings).
+	// - A `model` the org does not allow: 400 `invalid_request`.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -805,6 +980,8 @@ type ClientInterface interface {
 	// LlmCreateConversation Create a conversation
 	//
 	// Creates an empty conversation for the caller in the org of the token.
+	// - Without `model` the conversation gets the default model of the org (AI settings).
+	// - A `model` the org does not allow: 400 `invalid_request`.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -858,9 +1035,86 @@ type ClientInterface interface {
 	LlmExportMe(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
+// LlmGetAiSettings Get the AI settings of the org
+//
+// The AI settings of the org the token acts in, and the bounds they must stay in (synthwerk#39).
+// - Needs the org role `owner` or `admin` in the token and an active stored membership (llm asks identity with the caller's token). A `member`, an `operator` and a widget token get 403.
+// - An org that never saved settings gets the defaults with `version` 0: the default alias, every alias of the service, the service system prompt, the service input limit, no extra token cap.
+// - `bounds` holds the aliases of the service, the input limit of the service and the per-user token limit of the org's plan.
+// - 503 `settings_unavailable`: llm cannot reach identity, or identity is not configured.
+//
+// Corresponds with GET /v1/ai-settings (the `LlmGetAiSettings` operationId).
+func (c *Client) LlmGetAiSettings(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewLlmGetAiSettingsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// LlmUpdateAiSettingsWithBody Replace the AI settings of the org
+//
+// Replaces every AI setting of the token's org in one step (synthwerk#39). Same access rules as `llm.getAiSettings`.
+// - `version` must be the version the caller read. Another version: 409 `version_conflict`, nothing changes. Read again and retry.
+// - `model` and every item of `allowed_models` must be an alias of the service (`bounds.models`). `allowed_models` must hold `model`. An org can never pick a model outside the service allow-list.
+// - `max_input_chars` must be at most `bounds.max_input_chars`. `user_tokens_per_day` must be at most `bounds.user_tokens_per_day` when the plan has a limit.
+// - `system_prompt` is plain text: line breaks and tabs are allowed, other control characters are refused. Empty means the service prompt.
+// - A value outside the bounds: 400 `invalid_request`; `detail` names the field.
+// - An absent `temperature` clears a stored one (the model default again); that is a change.
+// - A change emits `dev.synthwerk.llm.ai_settings.changed.v1` in the same transaction. The same values again change nothing: same version, no event.
+// - The next send of every user of the org uses the new values. A conversation whose model is no longer allowed gets 400 on its next send.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /v1/ai-settings (the `LlmUpdateAiSettings` operationId).
+func (c *Client) LlmUpdateAiSettingsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewLlmUpdateAiSettingsRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// LlmUpdateAiSettings Replace the AI settings of the org
+//
+// Replaces every AI setting of the token's org in one step (synthwerk#39). Same access rules as `llm.getAiSettings`.
+// - `version` must be the version the caller read. Another version: 409 `version_conflict`, nothing changes. Read again and retry.
+// - `model` and every item of `allowed_models` must be an alias of the service (`bounds.models`). `allowed_models` must hold `model`. An org can never pick a model outside the service allow-list.
+// - `max_input_chars` must be at most `bounds.max_input_chars`. `user_tokens_per_day` must be at most `bounds.user_tokens_per_day` when the plan has a limit.
+// - `system_prompt` is plain text: line breaks and tabs are allowed, other control characters are refused. Empty means the service prompt.
+// - A value outside the bounds: 400 `invalid_request`; `detail` names the field.
+// - An absent `temperature` clears a stored one (the model default again); that is a change.
+// - A change emits `dev.synthwerk.llm.ai_settings.changed.v1` in the same transaction. The same values again change nothing: same version, no event.
+// - The next send of every user of the org uses the new values. A conversation whose model is no longer allowed gets 400 on its next send.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /v1/ai-settings (the `LlmUpdateAiSettings` operationId).
+func (c *Client) LlmUpdateAiSettings(ctx context.Context, body LlmUpdateAiSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewLlmUpdateAiSettingsRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // LlmCreateConversationWithBody Create a conversation
 //
 // Creates an empty conversation for the caller in the org of the token.
+// - Without `model` the conversation gets the default model of the org (AI settings).
+// - A `model` the org does not allow: 400 `invalid_request`.
 //
 // Takes any type of body and a specified content type.
 //
@@ -880,6 +1134,8 @@ func (c *Client) LlmCreateConversationWithBody(ctx context.Context, contentType 
 // LlmCreateConversation Create a conversation
 //
 // Creates an empty conversation for the caller in the org of the token.
+// - Without `model` the conversation gets the default model of the org (AI settings).
+// - A `model` the org does not allow: 400 `invalid_request`.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -980,6 +1236,73 @@ func (c *Client) LlmExportMe(ctx context.Context, reqEditors ...RequestEditorFn)
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewLlmGetAiSettingsRequest constructs an http.Request for the LlmGetAiSettings method
+func NewLlmGetAiSettingsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/ai-settings")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewLlmUpdateAiSettingsRequest calls the generic LlmUpdateAiSettings builder with application/json body
+func NewLlmUpdateAiSettingsRequest(server string, body LlmUpdateAiSettingsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewLlmUpdateAiSettingsRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewLlmUpdateAiSettingsRequestWithBody constructs an http.Request for the LlmUpdateAiSettings method, with any body, and a specified content type
+func NewLlmUpdateAiSettingsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/ai-settings")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
 }
 
 // NewLlmCreateConversationRequest calls the generic LlmCreateConversation builder with application/json body
@@ -1174,9 +1497,58 @@ func WithBaseURL(baseURL string) ClientOption {
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
 
+	// LlmGetAiSettingsWithResponse Get the AI settings of the org
+	//
+	// The AI settings of the org the token acts in, and the bounds they must stay in (synthwerk#39).
+	// - Needs the org role `owner` or `admin` in the token and an active stored membership (llm asks identity with the caller's token). A `member`, an `operator` and a widget token get 403.
+	// - An org that never saved settings gets the defaults with `version` 0: the default alias, every alias of the service, the service system prompt, the service input limit, no extra token cap.
+	// - `bounds` holds the aliases of the service, the input limit of the service and the per-user token limit of the org's plan.
+	// - 503 `settings_unavailable`: llm cannot reach identity, or identity is not configured.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/ai-settings (the `LlmGetAiSettings` operationId).
+	LlmGetAiSettingsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*LlmGetAiSettingsResponse, error)
+
+	// LlmUpdateAiSettingsWithBodyWithResponse Replace the AI settings of the org
+	//
+	// Replaces every AI setting of the token's org in one step (synthwerk#39). Same access rules as `llm.getAiSettings`.
+	// - `version` must be the version the caller read. Another version: 409 `version_conflict`, nothing changes. Read again and retry.
+	// - `model` and every item of `allowed_models` must be an alias of the service (`bounds.models`). `allowed_models` must hold `model`. An org can never pick a model outside the service allow-list.
+	// - `max_input_chars` must be at most `bounds.max_input_chars`. `user_tokens_per_day` must be at most `bounds.user_tokens_per_day` when the plan has a limit.
+	// - `system_prompt` is plain text: line breaks and tabs are allowed, other control characters are refused. Empty means the service prompt.
+	// - A value outside the bounds: 400 `invalid_request`; `detail` names the field.
+	// - An absent `temperature` clears a stored one (the model default again); that is a change.
+	// - A change emits `dev.synthwerk.llm.ai_settings.changed.v1` in the same transaction. The same values again change nothing: same version, no event.
+	// - The next send of every user of the org uses the new values. A conversation whose model is no longer allowed gets 400 on its next send.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/ai-settings (the `LlmUpdateAiSettings` operationId).
+	LlmUpdateAiSettingsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*LlmUpdateAiSettingsResponse, error)
+
+	// LlmUpdateAiSettingsWithResponse Replace the AI settings of the org
+	//
+	// Replaces every AI setting of the token's org in one step (synthwerk#39). Same access rules as `llm.getAiSettings`.
+	// - `version` must be the version the caller read. Another version: 409 `version_conflict`, nothing changes. Read again and retry.
+	// - `model` and every item of `allowed_models` must be an alias of the service (`bounds.models`). `allowed_models` must hold `model`. An org can never pick a model outside the service allow-list.
+	// - `max_input_chars` must be at most `bounds.max_input_chars`. `user_tokens_per_day` must be at most `bounds.user_tokens_per_day` when the plan has a limit.
+	// - `system_prompt` is plain text: line breaks and tabs are allowed, other control characters are refused. Empty means the service prompt.
+	// - A value outside the bounds: 400 `invalid_request`; `detail` names the field.
+	// - An absent `temperature` clears a stored one (the model default again); that is a change.
+	// - A change emits `dev.synthwerk.llm.ai_settings.changed.v1` in the same transaction. The same values again change nothing: same version, no event.
+	// - The next send of every user of the org uses the new values. A conversation whose model is no longer allowed gets 400 on its next send.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/ai-settings (the `LlmUpdateAiSettings` operationId).
+	LlmUpdateAiSettingsWithResponse(ctx context.Context, body LlmUpdateAiSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*LlmUpdateAiSettingsResponse, error)
+
 	// LlmCreateConversationWithBodyWithResponse Create a conversation
 	//
 	// Creates an empty conversation for the caller in the org of the token.
+	// - Without `model` the conversation gets the default model of the org (AI settings).
+	// - A `model` the org does not allow: 400 `invalid_request`.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -1186,6 +1558,8 @@ type ClientWithResponsesInterface interface {
 	// LlmCreateConversationWithResponse Create a conversation
 	//
 	// Creates an empty conversation for the caller in the org of the token.
+	// - Without `model` the conversation gets the default model of the org (AI settings).
+	// - A `model` the org does not allow: 400 `invalid_request`.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -1241,6 +1615,172 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/me/export (the `LlmExportMe` operationId).
 	LlmExportMeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*LlmExportMeResponse, error)
+}
+
+// LlmGetAiSettingsResponse401Headers the declared response headers of an HTTP 401 response for LlmGetAiSettings
+type LlmGetAiSettingsResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+// LlmGetAiSettingsResponse503Headers the declared response headers of an HTTP 503 response for LlmGetAiSettings
+type LlmGetAiSettingsResponse503Headers struct {
+	RetryAfter *int
+}
+
+type LlmGetAiSettingsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AiSettings
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Unauthenticated
+	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
+	ApplicationproblemJSON403 *Forbidden
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *SettingsUnavailable
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *LlmGetAiSettingsResponse401Headers
+	// Headers503 the parsed response headers for an HTTP 503 response
+	Headers503 *LlmGetAiSettingsResponse503Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r LlmGetAiSettingsResponse) GetJSON200() *AiSettings {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r LlmGetAiSettingsResponse) GetApplicationproblemJSON401() *Unauthenticated {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
+func (r LlmGetAiSettingsResponse) GetApplicationproblemJSON403() *Forbidden {
+	return r.ApplicationproblemJSON403
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r LlmGetAiSettingsResponse) GetApplicationproblemJSON503() *SettingsUnavailable {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r LlmGetAiSettingsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r LlmGetAiSettingsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r LlmGetAiSettingsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r LlmGetAiSettingsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// LlmUpdateAiSettingsResponse401Headers the declared response headers of an HTTP 401 response for LlmUpdateAiSettings
+type LlmUpdateAiSettingsResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+// LlmUpdateAiSettingsResponse503Headers the declared response headers of an HTTP 503 response for LlmUpdateAiSettings
+type LlmUpdateAiSettingsResponse503Headers struct {
+	RetryAfter *int
+}
+
+type LlmUpdateAiSettingsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AiSettings
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *InvalidRequest
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Unauthenticated
+	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
+	ApplicationproblemJSON403 *Forbidden
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *VersionConflict
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *SettingsUnavailable
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *LlmUpdateAiSettingsResponse401Headers
+	// Headers503 the parsed response headers for an HTTP 503 response
+	Headers503 *LlmUpdateAiSettingsResponse503Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r LlmUpdateAiSettingsResponse) GetJSON200() *AiSettings {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r LlmUpdateAiSettingsResponse) GetApplicationproblemJSON400() *InvalidRequest {
+	return r.ApplicationproblemJSON400
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r LlmUpdateAiSettingsResponse) GetApplicationproblemJSON401() *Unauthenticated {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
+func (r LlmUpdateAiSettingsResponse) GetApplicationproblemJSON403() *Forbidden {
+	return r.ApplicationproblemJSON403
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r LlmUpdateAiSettingsResponse) GetApplicationproblemJSON409() *VersionConflict {
+	return r.ApplicationproblemJSON409
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r LlmUpdateAiSettingsResponse) GetApplicationproblemJSON503() *SettingsUnavailable {
+	return r.ApplicationproblemJSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r LlmUpdateAiSettingsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r LlmUpdateAiSettingsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r LlmUpdateAiSettingsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r LlmUpdateAiSettingsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
 }
 
 // LlmCreateConversationResponse201Headers the declared response headers of an HTTP 201 response for LlmCreateConversation
@@ -1568,9 +2108,76 @@ func (r LlmExportMeResponse) ContentType() string {
 	return ""
 }
 
+// LlmGetAiSettingsWithResponse Get the AI settings of the org
+//
+// The AI settings of the org the token acts in, and the bounds they must stay in (synthwerk#39).
+// - Needs the org role `owner` or `admin` in the token and an active stored membership (llm asks identity with the caller's token). A `member`, an `operator` and a widget token get 403.
+// - An org that never saved settings gets the defaults with `version` 0: the default alias, every alias of the service, the service system prompt, the service input limit, no extra token cap.
+// - `bounds` holds the aliases of the service, the input limit of the service and the per-user token limit of the org's plan.
+// - 503 `settings_unavailable`: llm cannot reach identity, or identity is not configured.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/ai-settings (the `LlmGetAiSettings` operationId).
+func (c *ClientWithResponses) LlmGetAiSettingsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*LlmGetAiSettingsResponse, error) {
+	rsp, err := c.LlmGetAiSettings(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseLlmGetAiSettingsResponse(rsp)
+}
+
+// LlmUpdateAiSettingsWithBodyWithResponse Replace the AI settings of the org
+//
+// Replaces every AI setting of the token's org in one step (synthwerk#39). Same access rules as `llm.getAiSettings`.
+// - `version` must be the version the caller read. Another version: 409 `version_conflict`, nothing changes. Read again and retry.
+// - `model` and every item of `allowed_models` must be an alias of the service (`bounds.models`). `allowed_models` must hold `model`. An org can never pick a model outside the service allow-list.
+// - `max_input_chars` must be at most `bounds.max_input_chars`. `user_tokens_per_day` must be at most `bounds.user_tokens_per_day` when the plan has a limit.
+// - `system_prompt` is plain text: line breaks and tabs are allowed, other control characters are refused. Empty means the service prompt.
+// - A value outside the bounds: 400 `invalid_request`; `detail` names the field.
+// - An absent `temperature` clears a stored one (the model default again); that is a change.
+// - A change emits `dev.synthwerk.llm.ai_settings.changed.v1` in the same transaction. The same values again change nothing: same version, no event.
+// - The next send of every user of the org uses the new values. A conversation whose model is no longer allowed gets 400 on its next send.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/ai-settings (the `LlmUpdateAiSettings` operationId).
+func (c *ClientWithResponses) LlmUpdateAiSettingsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*LlmUpdateAiSettingsResponse, error) {
+	rsp, err := c.LlmUpdateAiSettingsWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseLlmUpdateAiSettingsResponse(rsp)
+}
+
+// LlmUpdateAiSettingsWithResponse Replace the AI settings of the org
+//
+// Replaces every AI setting of the token's org in one step (synthwerk#39). Same access rules as `llm.getAiSettings`.
+// - `version` must be the version the caller read. Another version: 409 `version_conflict`, nothing changes. Read again and retry.
+// - `model` and every item of `allowed_models` must be an alias of the service (`bounds.models`). `allowed_models` must hold `model`. An org can never pick a model outside the service allow-list.
+// - `max_input_chars` must be at most `bounds.max_input_chars`. `user_tokens_per_day` must be at most `bounds.user_tokens_per_day` when the plan has a limit.
+// - `system_prompt` is plain text: line breaks and tabs are allowed, other control characters are refused. Empty means the service prompt.
+// - A value outside the bounds: 400 `invalid_request`; `detail` names the field.
+// - An absent `temperature` clears a stored one (the model default again); that is a change.
+// - A change emits `dev.synthwerk.llm.ai_settings.changed.v1` in the same transaction. The same values again change nothing: same version, no event.
+// - The next send of every user of the org uses the new values. A conversation whose model is no longer allowed gets 400 on its next send.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/ai-settings (the `LlmUpdateAiSettings` operationId).
+func (c *ClientWithResponses) LlmUpdateAiSettingsWithResponse(ctx context.Context, body LlmUpdateAiSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*LlmUpdateAiSettingsResponse, error) {
+	rsp, err := c.LlmUpdateAiSettings(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseLlmUpdateAiSettingsResponse(rsp)
+}
+
 // LlmCreateConversationWithBodyWithResponse Create a conversation
 //
 // Creates an empty conversation for the caller in the org of the token.
+// - Without `model` the conversation gets the default model of the org (AI settings).
+// - A `model` the org does not allow: 400 `invalid_request`.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -1586,6 +2193,8 @@ func (c *ClientWithResponses) LlmCreateConversationWithBodyWithResponse(ctx cont
 // LlmCreateConversationWithResponse Create a conversation
 //
 // Creates an empty conversation for the caller in the org of the token.
+// - Without `model` the conversation gets the default model of the org (AI settings).
+// - A `model` the org does not allow: 400 `invalid_request`.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -1670,6 +2279,160 @@ func (c *ClientWithResponses) LlmExportMeWithResponse(ctx context.Context, reqEd
 		return nil, err
 	}
 	return ParseLlmExportMeResponse(rsp)
+}
+
+// ParseLlmGetAiSettingsResponse parses an HTTP response from a LlmGetAiSettingsWithResponse call
+func ParseLlmGetAiSettingsResponse(rsp *http.Response) (*LlmGetAiSettingsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &LlmGetAiSettingsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AiSettings
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthenticated
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest SettingsUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers LlmGetAiSettingsResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	case rsp.StatusCode == 503:
+		var headers LlmGetAiSettingsResponse503Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		response.Headers503 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseLlmUpdateAiSettingsResponse parses an HTTP response from a LlmUpdateAiSettingsWithResponse call
+func ParseLlmUpdateAiSettingsResponse(rsp *http.Response) (*LlmUpdateAiSettingsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &LlmUpdateAiSettingsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AiSettings
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest InvalidRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthenticated
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest VersionConflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest SettingsUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers LlmUpdateAiSettingsResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	case rsp.StatusCode == 503:
+		var headers LlmUpdateAiSettingsResponse503Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		response.Headers503 = &headers
+	}
+
+	return response, nil
 }
 
 // ParseLlmCreateConversationResponse parses an HTTP response from a LlmCreateConversationWithResponse call

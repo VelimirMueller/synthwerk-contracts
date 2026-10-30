@@ -4,6 +4,42 @@
  */
 
 export interface paths {
+    "/v1/ai-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the AI settings of the org
+         * @description The AI settings of the org the token acts in, and the bounds they must stay in (synthwerk#39).
+         *     - Needs the org role `owner` or `admin` in the token and an active stored membership (llm asks identity with the caller's token). A `member`, an `operator` and a widget token get 403.
+         *     - An org that never saved settings gets the defaults with `version` 0: the default alias, every alias of the service, the service system prompt, the service input limit, no extra token cap.
+         *     - `bounds` holds the aliases of the service, the input limit of the service and the per-user token limit of the org's plan.
+         *     - 503 `settings_unavailable`: llm cannot reach identity, or identity is not configured.
+         */
+        get: operations["llm.getAiSettings"];
+        /**
+         * Replace the AI settings of the org
+         * @description Replaces every AI setting of the token's org in one step (synthwerk#39). Same access rules as `llm.getAiSettings`.
+         *     - `version` must be the version the caller read. Another version: 409 `version_conflict`, nothing changes. Read again and retry.
+         *     - `model` and every item of `allowed_models` must be an alias of the service (`bounds.models`). `allowed_models` must hold `model`. An org can never pick a model outside the service allow-list.
+         *     - `max_input_chars` must be at most `bounds.max_input_chars`. `user_tokens_per_day` must be at most `bounds.user_tokens_per_day` when the plan has a limit.
+         *     - `system_prompt` is plain text: line breaks and tabs are allowed, other control characters are refused. Empty means the service prompt.
+         *     - A value outside the bounds: 400 `invalid_request`; `detail` names the field.
+         *     - An absent `temperature` clears a stored one (the model default again); that is a change.
+         *     - A change emits `dev.synthwerk.llm.ai_settings.changed.v1` in the same transaction. The same values again change nothing: same version, no event.
+         *     - The next send of every user of the org uses the new values. A conversation whose model is no longer allowed gets 400 on its next send.
+         */
+        put: operations["llm.updateAiSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/export": {
         parameters: {
             query?: never;
@@ -39,6 +75,8 @@ export interface paths {
         /**
          * Create a conversation
          * @description Creates an empty conversation for the caller in the org of the token.
+         *     - Without `model` the conversation gets the default model of the org (AI settings).
+         *     - A `model` the org does not allow: 400 `invalid_request`.
          */
         post: operations["llm.createConversation"];
         delete?: never;
@@ -103,13 +141,97 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description The system prompt of the org. Plain text, never HTML. Line breaks and tabs are allowed; other control characters are refused.
+         *     Empty: the system prompt of the service.
+         */
+        AiSystemPrompt: string;
+        /**
+         * @description The AI settings of one org (synthwerk#39). llm applies them to every create and send of the org.
+         *     The schema is closed. A new setting (for example AI tools) comes with a new spec minor version.
+         */
+        AiSettings: {
+            model: components["schemas"]["ModelAlias"];
+            /** @description The aliases the users of the org may pick. Holds `model`. Always a subset of `bounds.models`. */
+            allowed_models: components["schemas"]["ModelAlias"][];
+            system_prompt: components["schemas"]["AiSystemPrompt"];
+            /**
+             * Format: int32
+             * @description Max characters of one user message in this org. A longer message gets 413 `input_too_large`.
+             */
+            max_input_chars: number;
+            /**
+             * Format: int64
+             * @description Tokens one user may use in this org per UTC day, below the plan. `0`: the plan limit only.
+             *     The smaller of this cap and the plan limit applies.
+             */
+            user_tokens_per_day: number;
+            /**
+             * Format: float
+             * @description Sampling temperature of the model. Absent means the model default.
+             */
+            temperature?: number;
+            /**
+             * Format: int64
+             * @description Goes up by one on every saved change. `0` means the org never saved settings and gets the defaults.
+             */
+            version: number;
+            /**
+             * Format: date-time
+             * @description Time of the last saved change. Absent with `version` 0.
+             */
+            updated_at?: string;
+            bounds: components["schemas"]["AiSettingsBounds"];
+        };
+        /** @description The limits the settings must stay in. The service and the org's plan set them, never the org. */
+        AiSettingsBounds: {
+            /** @description Every model alias of the service (the operator's allow-list). */
+            models: components["schemas"]["ModelAlias"][];
+            /**
+             * Format: int32
+             * @description The input limit of the service.
+             */
+            max_input_chars: number;
+            /**
+             * Format: int64
+             * @description Tokens per user per UTC day of the org's plan (identity entitlements). `0` means no limit.
+             */
+            user_tokens_per_day: number;
+            /**
+             * Format: int32
+             * @description Max characters of `system_prompt`.
+             */
+            system_prompt_max_chars: number;
+            /**
+             * Format: float
+             * @description Max `temperature`.
+             */
+            temperature_max: number;
+        };
+        /** @description Every AI setting of the org. Absent `temperature` means the model default. */
+        UpdateAiSettingsRequest: {
+            /**
+             * Format: int64
+             * @description The `version` the caller read.
+             */
+            version: number;
+            model: components["schemas"]["ModelAlias"];
+            allowed_models: components["schemas"]["ModelAlias"][];
+            system_prompt: components["schemas"]["AiSystemPrompt"];
+            /** Format: int32 */
+            max_input_chars: number;
+            /** Format: int64 */
+            user_tokens_per_day: number;
+            /** Format: float */
+            temperature?: number;
+        };
         /** @description Model alias, for example `default`. Never a provider model name. */
         ModelAlias: string;
         CreateConversationRequest: {
             model?: components["schemas"]["ModelAlias"];
         };
         SendMessageRequest: {
-            /** @description The user message. Plain text. Above the server limit the answer is 413. */
+            /** @description The user message. Plain text. Above the input limit of the org (AI settings, at most the server limit) the answer is 413. */
             content: string;
             model?: components["schemas"]["ModelAlias"];
         };
@@ -260,12 +382,14 @@ export interface components {
          *     |---|---|---|
          *     | `invalid_request` | 400 | Body or parameter not valid. |
          *     | `unauthenticated` | 401 | Token missing or not valid. |
-         *     | `forbidden` | 403 | Scope or origin does not allow the call. |
+         *     | `forbidden` | 403 | Scope, role or origin does not allow the call. |
          *     | `not_found` | 404 | Unknown id or another owner's id. |
+         *     | `version_conflict` | 409 | The AI settings changed since the caller read them. |
          *     | `input_too_large` | 413 | Message above the input limit. |
          *     | `too_many_streams` | 429 | Owner has the max number of open streams. |
          *     | `quota_exhausted` | 429 | User or org quota used up. `quota` names the scope and the reset. |
          *     | `model_unavailable` | 503 | Provider down or busy. Also as an `error` event mid-stream. |
+         *     | `settings_unavailable` | 503 | llm cannot check the membership and the plan for the AI settings now. |
          */
         Problem: {
             /**
@@ -354,7 +478,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description The token scope or origin does not allow the call. Code `forbidden`. The body is generic. */
+        /** @description The token scope, role or origin does not allow the call. Code `forbidden`. The body is generic. */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -421,6 +545,43 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /** @description The AI settings changed since the caller read them. Code `version_conflict`. Nothing changed. */
+        VersionConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://schemas.synthwerk.dev/problems/version_conflict",
+                 *       "title": "Version conflict",
+                 *       "status": 409,
+                 *       "code": "version_conflict",
+                 *       "detail": "The settings changed. Read them again."
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description llm cannot check the membership and the plan of the org now (identity down or not configured). Code `settings_unavailable`. */
+        SettingsUnavailable: {
+            headers: {
+                /** @description Seconds to wait before a retry. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://schemas.synthwerk.dev/problems/settings_unavailable",
+                 *       "title": "Settings unavailable",
+                 *       "status": 503,
+                 *       "code": "settings_unavailable"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description The model cannot answer now (provider down or busy). Code `model_unavailable`. */
         ModelUnavailable: {
             headers: {
@@ -451,6 +612,122 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    "llm.getAiSettings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The AI settings and their bounds. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "model": "default",
+                     *       "allowed_models": [
+                     *         "default",
+                     *         "small"
+                     *       ],
+                     *       "system_prompt": "You answer questions about the shop. Answer briefly.",
+                     *       "max_input_chars": 2000,
+                     *       "user_tokens_per_day": 20000,
+                     *       "temperature": 0.3,
+                     *       "version": 3,
+                     *       "updated_at": "2026-10-30T10:00:00Z",
+                     *       "bounds": {
+                     *         "models": [
+                     *           "default",
+                     *           "small"
+                     *         ],
+                     *         "max_input_chars": 8000,
+                     *         "user_tokens_per_day": 50000,
+                     *         "system_prompt_max_chars": 4000,
+                     *         "temperature_max": 2
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AiSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["SettingsUnavailable"];
+        };
+    };
+    "llm.updateAiSettings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "version": 2,
+                 *       "model": "default",
+                 *       "allowed_models": [
+                 *         "default",
+                 *         "small"
+                 *       ],
+                 *       "system_prompt": "You answer questions about the shop. Answer briefly.",
+                 *       "max_input_chars": 2000,
+                 *       "user_tokens_per_day": 20000,
+                 *       "temperature": 0.3
+                 *     }
+                 */
+                "application/json": components["schemas"]["UpdateAiSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description The saved AI settings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "model": "default",
+                     *       "allowed_models": [
+                     *         "default",
+                     *         "small"
+                     *       ],
+                     *       "system_prompt": "You answer questions about the shop. Answer briefly.",
+                     *       "max_input_chars": 2000,
+                     *       "user_tokens_per_day": 20000,
+                     *       "temperature": 0.3,
+                     *       "version": 3,
+                     *       "updated_at": "2026-10-30T10:00:00Z",
+                     *       "bounds": {
+                     *         "models": [
+                     *           "default",
+                     *           "small"
+                     *         ],
+                     *         "max_input_chars": 8000,
+                     *         "user_tokens_per_day": 50000,
+                     *         "system_prompt_max_chars": 4000,
+                     *         "temperature_max": 2
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AiSettings"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["VersionConflict"];
+            503: components["responses"]["SettingsUnavailable"];
+        };
+    };
     "llm.exportMe": {
         parameters: {
             query?: never;

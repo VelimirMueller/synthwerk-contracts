@@ -4,9 +4,9 @@ slug: llm-chat-api
 status: planned
 epic: E3
 owner: contracts
-paths: ["openapi/llm/**", "codegen/oapi-codegen.llm.yaml", "events/llm/message.completed.v1.schema.json"]
-api: ["POST /v1/conversations", "GET /v1/conversations/{id}", "POST /v1/conversations/{id}/messages", "GET /v1/me/export"]
-events: ["dev.synthwerk.llm.message.completed.v1"]
+paths: ["openapi/llm/**", "codegen/oapi-codegen.llm.yaml", "events/llm/message.completed.v1.schema.json", "events/llm/ai_settings.changed.v1.schema.json"]
+api: ["POST /v1/conversations", "GET /v1/conversations/{id}", "POST /v1/conversations/{id}/messages", "GET /v1/me/export", "GET /v1/ai-settings", "PUT /v1/ai-settings"]
+events: ["dev.synthwerk.llm.message.completed.v1", "dev.synthwerk.llm.ai_settings.changed.v1"]
 mcp: []
 updated: 2026-10-30
 ---
@@ -16,6 +16,7 @@ updated: 2026-10-30
 > **In 30 seconds**
 > - `synthwerk-llm` serves conversations. A sent message comes back as a Server-Sent Events stream.
 > - The stream has four events: `delta`, `usage`, `done`, `error` (D-44).
+> - An owner or admin sets the AI settings of the org with `/v1/ai-settings` (synthwerk#39). They stay inside the service aliases and the plan.
 > - The spec is `openapi/llm/openapi.yaml`. CI generates a Go client and a TS client from it.
 
 ## What it does
@@ -24,6 +25,7 @@ updated: 2026-10-30
 - `GET /v1/conversations/{id}` returns the conversation with its messages, oldest first.
 - `POST /v1/conversations/{id}/messages` stores the user message and streams the answer.
 - `GET /v1/me/export` returns every conversation, message and own quota row of the caller, in every org (`LlmExport`, synthwerk#41). Identity embeds it in its own export.
+- `GET /v1/ai-settings` and `PUT /v1/ai-settings` read and replace the AI settings of the token's org (synthwerk#39). See [AI settings](#ai-settings).
 - The org and the owner come from the verified token. They are never body fields.
 - After each answer the service emits `dev.synthwerk.llm.message.completed.v1`. It holds metadata only.
 - Go: package `github.com/VelimirMueller/synthwerk-contracts/go/llm`. TS: `createLlmClient` and `StreamEvent` in `@synthwerk/contracts`.
@@ -53,6 +55,25 @@ data: <one line of JSON>
 - Headers: `Cache-Control: no-store`, `X-Accel-Buffering: no`.
 - M2 does not replay. `Last-Event-ID` is ignored, but clients can store the `id`.
 - OpenAPI 3.1 cannot type a stream. The spec types one frame as `StreamEvent`, a `oneOf` on `event`.
+
+## AI settings
+
+One settings record per org. llm applies it to every create and send of the org.
+
+| Setting | Values | Default (`version` 0) |
+|---|---|---|
+| `model` | An alias of `allowed_models`. The model of a new conversation without `model`. | `default` |
+| `allowed_models` | 1 to 32 aliases, a subset of `bounds.models` (the operator's `MODEL_ALIASES`). Holds `model`. | every service alias |
+| `system_prompt` | Plain text, 4000 characters or less. Line breaks and tabs allowed, other control characters refused. Empty = the service prompt. | empty |
+| `max_input_chars` | 1 to `bounds.max_input_chars` (service limit, at most 8000). A longer message gets 413. | service limit |
+| `user_tokens_per_day` | 0 to `bounds.user_tokens_per_day` (the plan's per-user limit, identity entitlements). The smaller of cap and plan applies. 0 = plan only. | 0 |
+| `temperature` | 0 to 2. Absent = the model default. | absent |
+
+- Access: token role `owner` or `admin`, then an active stored membership. llm checks it with identity `GET /v1/me/entitlements` and the caller's token; the same call gives the plan limit for `bounds`.
+- `member`, `operator` and widget tokens get 403. Identity down or not configured: 503 `settings_unavailable`.
+- `PUT` replaces every setting. `version` must be the one the caller read, else 409 `version_conflict`.
+- A change emits `dev.synthwerk.llm.ai_settings.changed.v1` with the full new state and the list of changed settings. No system prompt text, only its length. Identity shows it in the audit list.
+- An org can never name a provider model: only aliases, and only those of the service.
 
 ## How to use
 
@@ -96,6 +117,7 @@ A send over quota answers `429` before any model call (synthwerk#33):
 | Type | When |
 |---|---|
 | `dev.synthwerk.llm.message.completed.v1` | An answer ends: `completed`, `failed` or `canceled`. No prompt, no answer text. |
+| `dev.synthwerk.llm.ai_settings.changed.v1` | An owner or admin changed the AI settings. Full new state, the changed setting names, the prompt length only. `orgid` = identity org id. |
 
 ## Errors
 
@@ -105,10 +127,12 @@ A send over quota answers `429` before any model call (synthwerk#33):
 | 401 | `unauthenticated` | Token missing or not valid. `WWW-Authenticate: Bearer`. |
 | 403 | `forbidden` | Scope or origin does not allow the call. |
 | 404 | `not_found` | Unknown id or another owner's id. Same body. |
+| 409 | `version_conflict` | The AI settings changed since the caller read them. Nothing changed. |
 | 413 | `input_too_large` | Message above the input limit. |
 | 429 | `too_many_streams` | Owner has the max number of open streams. |
 | 429 | `quota_exhausted` | User or org quota of the window used up. No model call. Body member `quota`; `Retry-After` = seconds to the reset. |
 | 503 | `model_unavailable` | Provider down or busy. Also an `error` event mid-stream. |
+| 503 | `settings_unavailable` | llm cannot check the membership and the plan for the AI settings now. |
 
 ## Tests
 
@@ -118,7 +142,8 @@ A send over quota answers `429` before any model call (synthwerk#33):
 - `tests/contract/llm_test.go` — `Problem - quota_exhausted - names scope, unit, limit and reset`
 - `tests/contract/llm_test.go` — `Problem - quota member - only in the problem schema, optional`
 - `tests/contract/identity_account_test.go` — `LLM ExportMe - spec example - conversations, messages with tokens, own quota rows`; `LLM ExportMe - widget token - 403 forbidden`
-- `tests/contract/events_test.go` — `Catalog - each entry - names, schema $id and example match`
+- `tests/contract/llm_settings_test.go` — `AiSettings - each 200 example - decodes strictly and stays inside its bounds`; `UpdateAiSettings - spec request example - client sends PUT /v1/ai-settings with the body`; `UpdateAiSettings - stale version - 409 version_conflict`; `GetAiSettings - identity down - 503 settings_unavailable`; `GetAiSettings - member token - 403 forbidden`
+- `tests/contract/events_test.go` — `Catalog - each entry - names, schema $id and example match`; `AuditEvent.type - every identity event and every event identity consumes - matches the spec pattern`
 
 ## Changes
 
@@ -128,3 +153,4 @@ A send over quota answers `429` before any model call (synthwerk#33):
 | 2026-10-23 | `message.completed` carries the org id in the `orgid` extension. `tenantid` is deprecated (D-44). |
 | 2026-10-29 | `quota_exhausted` is sent (synthwerk#33). New optional problem member `quota` (`QuotaExceeded`). Spec version 0.2.0. |
 | 2026-10-30 | Add `GET /v1/me/export` and `LlmExport` (synthwerk#41). llm consumes `dev.synthwerk.identity.user.deleted.v1`. Spec version 0.3.0. |
+| 2026-10-30 | Add `GET`/`PUT /v1/ai-settings`, `AiSettings`, problem codes `version_conflict` and `settings_unavailable`, and `llm.ai_settings.changed.v1` (synthwerk#39). Spec version 0.4.0. |
