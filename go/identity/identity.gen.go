@@ -949,6 +949,12 @@ type IdentityCreateWidgetTokenParams struct {
 	Origin string `json:"Origin"`
 }
 
+// IdentityDeleteMeParams defines parameters for IdentityDeleteMe.
+type IdentityDeleteMeParams struct {
+	// XSynthwerkIdToken A fresh OIDC ID token of the caller (compact JWS). The proof of a recent sign-in with MFA. Without it, or when it fails a check, the answer is 403 `recent_mfa_required`.
+	XSynthwerkIdToken *string `json:"X-Synthwerk-Id-Token,omitempty"`
+}
+
 // IdentityListOrgsParams defines parameters for IdentityListOrgs.
 type IdentityListOrgsParams struct {
 	// Limit Page size.
@@ -1113,7 +1119,8 @@ type ClientInterface interface {
 	// IdentityDeleteMe Delete the own account
 	//
 	// Deletes the caller's account (synthwerk#41). Emits `dev.synthwerk.identity.user.deleted.v1`; the other services delete the user's rows when they get it.
-	// - Needs a recent sign-in with MFA: the token has `amr` `mfa` and the user's newest gated sign-in is at most 15 minutes old (identity setting, default 15 minutes). Else 403 `recent_mfa_required`: sign in again, then retry.
+	// - Needs a recent sign-in with MFA, else 403 `recent_mfa_required`: sign in again, then retry. The access token must have `amr` `mfa`. The proof of the recent sign-in is the header `X-Synthwerk-Id-Token`, see below. Zitadel access tokens carry no `sid` and no `auth_time`, so a delete without this header always gets 403.
+	// - `X-Synthwerk-Id-Token`: an ID token of the same sign-in flow, from an OIDC client that identity accepts (the studio). Identity checks its signature, `iss`, `aud` (an accepted client id), `exp`, the same `sub` as the access token, and `auth_time` at most 15 minutes old (identity setting). The sign-in must have MFA: the ID token has `amr` `mfa`, or the user's newest gated sign-in is of the same session (`sid`) and at most 15 minutes old. Get a fresh ID token with `prompt=login` and `max_age`. The client keeps the ID token server side and sends it to identity only.
 	// - Last owner rule: an org with other members must keep an owner. When the caller is its only owner, the answer is 409 `last_owner` and nothing changes. Make another member `owner` first.
 	// - An org where the caller is the only member closes with the account. Identity deletes it with its apps and entitlements. `deleted_org_ids` lists these orgs.
 	// - Identity deletes its own rows of the user in one transaction with the event. The Zitadel user is removed after the answer, with retries. A token issued before stays valid until it expires.
@@ -1121,7 +1128,7 @@ type ClientInterface interface {
 	// - A repeat while the old token is still valid answers 202 again, with the first `requested_at` and an empty `deleted_org_ids`. It changes nothing.
 	//
 	// Corresponds with DELETE /v1/me (the `IdentityDeleteMe` operationId).
-	IdentityDeleteMe(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	IdentityDeleteMe(ctx context.Context, params *IdentityDeleteMeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// IdentityGetMe Get the caller
 	//
@@ -1441,7 +1448,8 @@ func (c *Client) IdentityCreateWidgetToken(ctx context.Context, appId AppId, par
 // IdentityDeleteMe Delete the own account
 //
 // Deletes the caller's account (synthwerk#41). Emits `dev.synthwerk.identity.user.deleted.v1`; the other services delete the user's rows when they get it.
-// - Needs a recent sign-in with MFA: the token has `amr` `mfa` and the user's newest gated sign-in is at most 15 minutes old (identity setting, default 15 minutes). Else 403 `recent_mfa_required`: sign in again, then retry.
+// - Needs a recent sign-in with MFA, else 403 `recent_mfa_required`: sign in again, then retry. The access token must have `amr` `mfa`. The proof of the recent sign-in is the header `X-Synthwerk-Id-Token`, see below. Zitadel access tokens carry no `sid` and no `auth_time`, so a delete without this header always gets 403.
+// - `X-Synthwerk-Id-Token`: an ID token of the same sign-in flow, from an OIDC client that identity accepts (the studio). Identity checks its signature, `iss`, `aud` (an accepted client id), `exp`, the same `sub` as the access token, and `auth_time` at most 15 minutes old (identity setting). The sign-in must have MFA: the ID token has `amr` `mfa`, or the user's newest gated sign-in is of the same session (`sid`) and at most 15 minutes old. Get a fresh ID token with `prompt=login` and `max_age`. The client keeps the ID token server side and sends it to identity only.
 // - Last owner rule: an org with other members must keep an owner. When the caller is its only owner, the answer is 409 `last_owner` and nothing changes. Make another member `owner` first.
 // - An org where the caller is the only member closes with the account. Identity deletes it with its apps and entitlements. `deleted_org_ids` lists these orgs.
 // - Identity deletes its own rows of the user in one transaction with the event. The Zitadel user is removed after the answer, with retries. A token issued before stays valid until it expires.
@@ -1449,8 +1457,8 @@ func (c *Client) IdentityCreateWidgetToken(ctx context.Context, appId AppId, par
 // - A repeat while the old token is still valid answers 202 again, with the first `requested_at` and an empty `deleted_org_ids`. It changes nothing.
 //
 // Corresponds with DELETE /v1/me (the `IdentityDeleteMe` operationId).
-func (c *Client) IdentityDeleteMe(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewIdentityDeleteMeRequest(c.Server)
+func (c *Client) IdentityDeleteMe(ctx context.Context, params *IdentityDeleteMeParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIdentityDeleteMeRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -2073,7 +2081,7 @@ func NewIdentityCreateWidgetTokenRequest(server string, appId AppId, params *Ide
 }
 
 // NewIdentityDeleteMeRequest constructs an http.Request for the IdentityDeleteMe method
-func NewIdentityDeleteMeRequest(server string) (*http.Request, error) {
+func NewIdentityDeleteMeRequest(server string, params *IdentityDeleteMeParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -2094,6 +2102,21 @@ func NewIdentityDeleteMeRequest(server string) (*http.Request, error) {
 	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+
+		if params.XSynthwerkIdToken != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "X-Synthwerk-Id-Token", *params.XSynthwerkIdToken, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("X-Synthwerk-Id-Token", headerParam0)
+		}
+
 	}
 
 	return req, nil
@@ -3131,7 +3154,8 @@ type ClientWithResponsesInterface interface {
 	// IdentityDeleteMeWithResponse Delete the own account
 	//
 	// Deletes the caller's account (synthwerk#41). Emits `dev.synthwerk.identity.user.deleted.v1`; the other services delete the user's rows when they get it.
-	// - Needs a recent sign-in with MFA: the token has `amr` `mfa` and the user's newest gated sign-in is at most 15 minutes old (identity setting, default 15 minutes). Else 403 `recent_mfa_required`: sign in again, then retry.
+	// - Needs a recent sign-in with MFA, else 403 `recent_mfa_required`: sign in again, then retry. The access token must have `amr` `mfa`. The proof of the recent sign-in is the header `X-Synthwerk-Id-Token`, see below. Zitadel access tokens carry no `sid` and no `auth_time`, so a delete without this header always gets 403.
+	// - `X-Synthwerk-Id-Token`: an ID token of the same sign-in flow, from an OIDC client that identity accepts (the studio). Identity checks its signature, `iss`, `aud` (an accepted client id), `exp`, the same `sub` as the access token, and `auth_time` at most 15 minutes old (identity setting). The sign-in must have MFA: the ID token has `amr` `mfa`, or the user's newest gated sign-in is of the same session (`sid`) and at most 15 minutes old. Get a fresh ID token with `prompt=login` and `max_age`. The client keeps the ID token server side and sends it to identity only.
 	// - Last owner rule: an org with other members must keep an owner. When the caller is its only owner, the answer is 409 `last_owner` and nothing changes. Make another member `owner` first.
 	// - An org where the caller is the only member closes with the account. Identity deletes it with its apps and entitlements. `deleted_org_ids` lists these orgs.
 	// - Identity deletes its own rows of the user in one transaction with the event. The Zitadel user is removed after the answer, with retries. A token issued before stays valid until it expires.
@@ -3141,7 +3165,7 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /v1/me (the `IdentityDeleteMe` operationId).
-	IdentityDeleteMeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*IdentityDeleteMeResponse, error)
+	IdentityDeleteMeWithResponse(ctx context.Context, params *IdentityDeleteMeParams, reqEditors ...RequestEditorFn) (*IdentityDeleteMeResponse, error)
 
 	// IdentityGetMeWithResponse Get the caller
 	//
@@ -5169,7 +5193,8 @@ func (c *ClientWithResponses) IdentityCreateWidgetTokenWithResponse(ctx context.
 // IdentityDeleteMeWithResponse Delete the own account
 //
 // Deletes the caller's account (synthwerk#41). Emits `dev.synthwerk.identity.user.deleted.v1`; the other services delete the user's rows when they get it.
-// - Needs a recent sign-in with MFA: the token has `amr` `mfa` and the user's newest gated sign-in is at most 15 minutes old (identity setting, default 15 minutes). Else 403 `recent_mfa_required`: sign in again, then retry.
+// - Needs a recent sign-in with MFA, else 403 `recent_mfa_required`: sign in again, then retry. The access token must have `amr` `mfa`. The proof of the recent sign-in is the header `X-Synthwerk-Id-Token`, see below. Zitadel access tokens carry no `sid` and no `auth_time`, so a delete without this header always gets 403.
+// - `X-Synthwerk-Id-Token`: an ID token of the same sign-in flow, from an OIDC client that identity accepts (the studio). Identity checks its signature, `iss`, `aud` (an accepted client id), `exp`, the same `sub` as the access token, and `auth_time` at most 15 minutes old (identity setting). The sign-in must have MFA: the ID token has `amr` `mfa`, or the user's newest gated sign-in is of the same session (`sid`) and at most 15 minutes old. Get a fresh ID token with `prompt=login` and `max_age`. The client keeps the ID token server side and sends it to identity only.
 // - Last owner rule: an org with other members must keep an owner. When the caller is its only owner, the answer is 409 `last_owner` and nothing changes. Make another member `owner` first.
 // - An org where the caller is the only member closes with the account. Identity deletes it with its apps and entitlements. `deleted_org_ids` lists these orgs.
 // - Identity deletes its own rows of the user in one transaction with the event. The Zitadel user is removed after the answer, with retries. A token issued before stays valid until it expires.
@@ -5179,8 +5204,8 @@ func (c *ClientWithResponses) IdentityCreateWidgetTokenWithResponse(ctx context.
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /v1/me (the `IdentityDeleteMe` operationId).
-func (c *ClientWithResponses) IdentityDeleteMeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*IdentityDeleteMeResponse, error) {
-	rsp, err := c.IdentityDeleteMe(ctx, reqEditors...)
+func (c *ClientWithResponses) IdentityDeleteMeWithResponse(ctx context.Context, params *IdentityDeleteMeParams, reqEditors ...RequestEditorFn) (*IdentityDeleteMeResponse, error) {
+	rsp, err := c.IdentityDeleteMe(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}

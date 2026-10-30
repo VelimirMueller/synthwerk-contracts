@@ -42,7 +42,7 @@ func TestIdentityClientRoutes(t *testing.T) {
 		call       func() (result, error)
 	}{
 		{"getMe", "GET /v1/me", func() (result, error) { return c.IdentityGetMeWithResponse(ctx) }},
-		{"deleteMe", "DELETE /v1/me", func() (result, error) { return c.IdentityDeleteMeWithResponse(ctx) }},
+		{"deleteMe", "DELETE /v1/me", func() (result, error) { return c.IdentityDeleteMeWithResponse(ctx, nil) }},
 		{"exportMe", "GET /v1/me/export", func() (result, error) { return c.IdentityExportMeWithResponse(ctx) }},
 		{"listOrgs", "GET /v1/orgs", func() (result, error) {
 			return c.IdentityListOrgsWithResponse(ctx, &identity.IdentityListOrgsParams{Limit: &limit, Cursor: &cursor})

@@ -46,7 +46,7 @@ updated: 2026-10-30
 - `GET /v1/orgs/{orgId}/entitlements` returns the plan and the limits of one org (any org role with an active membership, or operator).
 - A new org gets the plan `free`. Every change of a plan or its limits emits `dev.synthwerk.identity.org.entitlements_changed.v1` with the full new state (#31).
 - `GET /v1/me/export` returns every row Synthwerk keeps about the caller: the identity rows, plus the export of each service that keeps user rows (today llm), asked with the caller's token (#41).
-- `DELETE /v1/me` deletes the caller's account. It needs a sign-in with MFA in the last 15 minutes. It emits `dev.synthwerk.identity.user.deleted.v1`; the other services delete the user's rows when they get it (#41).
+- `DELETE /v1/me` deletes the caller's account. It needs a sign-in with MFA in the last 15 minutes, proven by a fresh ID token in the header `X-Synthwerk-Id-Token` (Zitadel access tokens carry no `sid` and no `auth_time`). It emits `dev.synthwerk.identity.user.deleted.v1`; the other services delete the user's rows when they get it (#41).
 - Creating an org emits `dev.synthwerk.identity.org.created.v1`.
 - A new Zitadel user (Action webhook) emits `dev.synthwerk.identity.user.created.v1`, with Zitadel ids only.
 - Go: package `github.com/VelimirMueller/synthwerk-contracts/go/identity`. TS: `createIdentityClient` in `@synthwerk/contracts`.
@@ -86,7 +86,7 @@ updated: 2026-10-30
 | Widget settings read | No token. `Origin` must be in the allow-list. `Cache-Control: no-cache`, refusals `no-store`. Settings only: no origins, org or name |
 | CORS caching | Widget settings and widget token routes send `Vary: Origin` on every answer, preflight included. Token answers and refusals send `Cache-Control: no-store` |
 | Export | One JSON document, `format_version` 1. `complete` is false when a service did not answer; `services[].data` is that service's own export schema (`LlmExport`) |
-| Account delete | Token with `amr` `mfa` and a gated sign-in at most 15 minutes old, else 403 `recent_mfa_required`. Operators get 403 `forbidden` |
+| Account delete | Token with `amr` `mfa`, plus header `X-Synthwerk-Id-Token`: an ID token of an accepted client, same `sub`, `auth_time` at most 15 minutes old, `amr` `mfa` (or gate evidence of its `sid`). Else 403 `recent_mfa_required`. Operators get 403 `forbidden` |
 | Last owner on delete | Only owner of an org with other members: 409 `last_owner`, nothing changes. Only member of an org: the org closes with the account (`deleted_org_ids`) |
 | After delete | Identity rows go in one transaction with the event. The Zitadel user is removed after the answer, with retries. Old tokens stay valid until they expire |
 | Widget token keys | Public keys at `/.well-known/jwks.json` of identity (outside the OpenAPI, no token) |
@@ -114,7 +114,7 @@ updated: 2026-10-30
 | 401 | `unauthenticated` | Token missing or not valid. |
 | 403 | `forbidden` | Role does not allow the call. Generic body. |
 | 403 | `app_limit_reached` | The org has `apps_per_org` apps already. |
-| 403 | `recent_mfa_required` | Account delete without a sign-in with MFA in the last 15 minutes. |
+| 403 | `recent_mfa_required` | Account delete without a sign-in with MFA in the last 15 minutes, or without a valid `X-Synthwerk-Id-Token`. |
 | 403 | `origin_not_allowed` | The `Origin` header is missing or not in the allow-list of the app. |
 | 404 | `not_found` | Unknown org or app, or the caller is not a member. Same body. |
 | 409 | `slug_taken` | Another org has the slug. |
@@ -173,3 +173,4 @@ updated: 2026-10-30
 | 2026-10-30 | Add `GET /v1/me/export`, `DELETE /v1/me`, problem code `recent_mfa_required` and `user.deleted.v1` (synthwerk#41). Spec 0.5.0. |
 | 2026-10-30 | Org routes, entitlements and the widget token need an active stored membership; a deactivated or invited member gets 404 (synthwerk#37 security review). Wording only. Spec 0.5.1. |
 | 2026-10-30 | The audit list also shows `dev.synthwerk.llm.ai_settings.changed.v1`, which identity reads from `EVT_LLM` (synthwerk#39). Spec 0.6.0. |
+| 2026-10-30 | `DELETE /v1/me` reads the recent sign-in from a fresh ID token in the optional header `X-Synthwerk-Id-Token`; kit/auth adds `IDTokenVerifier` (synthwerk#41). Spec 0.7.0. |

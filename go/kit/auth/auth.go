@@ -53,6 +53,7 @@ var (
 	ErrMalformed   = errors.New("malformed token")
 	ErrAlgorithm   = errors.New("algorithm not allowed")
 	ErrTokenType   = errors.New("not an access token")
+	ErrIDTokenType = errors.New("not an ID token")
 	ErrUnknownKey  = errors.New("unknown key id")
 	ErrSignature   = errors.New("bad signature")
 	ErrExpired     = errors.New("token expired")
@@ -170,6 +171,23 @@ func NewVerifier(cfg Config) (*Verifier, error) {
 // A refused token gives an error that wraps ErrUnauthenticated and the reason.
 // A key set that cannot be loaded gives ErrUnavailable.
 func (v *Verifier) Verify(ctx context.Context, raw string) (*Principal, error) {
+	all, err := v.verify(ctx, raw, true)
+	if err != nil {
+		return nil, err
+	}
+	p, err := v.mapper.Map(all)
+	if err != nil {
+		return nil, refuse(fmt.Errorf("%w: %w", ErrClaims, err))
+	}
+	p.Issuer = v.issuer
+	p.AMR = strs(all["amr"])
+	p.Raw = all
+	return p, nil
+}
+
+// verify checks typ, signature, iss, aud, exp, nbf and iat and returns the claims.
+// accessToken refuses a token with an ID token claim (nonce, at_hash).
+func (v *Verifier) verify(ctx context.Context, raw string, accessToken bool) (map[string]any, error) {
 	if raw == "" || len(raw) > maxTokenLen {
 		return nil, refuse(ErrMalformed)
 	}
@@ -178,6 +196,9 @@ func (v *Verifier) Verify(ctx context.Context, raw string) (*Principal, error) {
 		return nil, err
 	}
 	if !v.types[normType(typ)] {
+		if !accessToken {
+			return nil, refuse(fmt.Errorf("%w: typ %q", ErrIDTokenType, typ))
+		}
 		return nil, refuse(fmt.Errorf("%w: typ %q", ErrTokenType, typ))
 	}
 	tok, err := jwt.ParseSigned(raw, algorithms)
@@ -200,9 +221,11 @@ func (v *Verifier) Verify(ctx context.Context, raw string) (*Principal, error) {
 		}
 		return nil, refuse(ErrMalformed)
 	}
-	for _, c := range idTokenClaims {
-		if _, ok := all[c]; ok {
-			return nil, refuse(fmt.Errorf("%w: ID token claim %s", ErrTokenType, c))
+	if accessToken {
+		for _, c := range idTokenClaims {
+			if _, ok := all[c]; ok {
+				return nil, refuse(fmt.Errorf("%w: ID token claim %s", ErrTokenType, c))
+			}
 		}
 	}
 	if std.Expiry == nil {
@@ -222,15 +245,7 @@ func (v *Verifier) Verify(ctx context.Context, raw string) (*Principal, error) {
 	default:
 		return nil, refuse(ErrClaims)
 	}
-
-	p, err := v.mapper.Map(all)
-	if err != nil {
-		return nil, refuse(fmt.Errorf("%w: %w", ErrClaims, err))
-	}
-	p.Issuer = v.issuer
-	p.AMR = strs(all["amr"])
-	p.Raw = all
-	return p, nil
+	return all, nil
 }
 
 // Issuer is the "iss" this Verifier accepts.

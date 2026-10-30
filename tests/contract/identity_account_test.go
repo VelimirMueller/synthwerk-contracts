@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/VelimirMueller/synthwerk-contracts/go/identity"
@@ -70,13 +71,33 @@ func TestIdentityAccount(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		res, err := c.IdentityDeleteMeWithResponse(ctx)
+		res, err := c.IdentityDeleteMeWithResponse(ctx, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		d := res.JSON202
 		if d == nil || d.Status != identity.AccountDeletionStatusAccepted || d.UserId == "" || len(d.DeletedOrgIds) != 1 || d.RequestedAt.IsZero() {
 			t.Fatalf("status %d, got %+v", res.StatusCode(), d)
+		}
+	})
+
+	t.Run("DeleteMe - ID token param - sent as X-Synthwerk-Id-Token", func(t *testing.T) {
+		var got string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			got = r.Header.Get("X-Synthwerk-Id-Token")
+			w.WriteHeader(http.StatusAccepted)
+		}))
+		t.Cleanup(srv.Close)
+		c, err := identity.NewClientWithResponses(srv.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		idToken := "header.payload.signature" //nolint:gosec // G101: a placeholder, not a credential
+		if _, err := c.IdentityDeleteMeWithResponse(ctx, &identity.IdentityDeleteMeParams{XSynthwerkIdToken: &idToken}); err != nil {
+			t.Fatal(err)
+		}
+		if got != idToken {
+			t.Fatalf("header %q, want the ID token", got)
 		}
 	})
 
@@ -99,7 +120,7 @@ func TestIdentityAccount(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			res, err := c.IdentityDeleteMeWithResponse(ctx)
+			res, err := c.IdentityDeleteMeWithResponse(ctx, nil)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -15,6 +15,9 @@
 //     RequireScope and RequireMFA guard single routes. Refusals are RFC 9457
 //     problem+json with a stable code: 401 unauthenticated, 403 forbidden or
 //     mfa_required, 503 auth_unavailable.
+//   - IDTokenVerifier checks an OIDC ID token with the same key set rules, for proof
+//     of a recent sign-in (auth_time, amr, sid) that Zitadel access tokens do not
+//     carry (synthwerk#41). Its audiences are client ids, not the project id.
 //   - Package authtest serves a JWKS over httptest and mints tokens, so services test
 //     without Zitadel.
 //
