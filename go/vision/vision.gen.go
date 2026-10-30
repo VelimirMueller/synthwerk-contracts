@@ -926,6 +926,8 @@ type VisionDeleteLabelResponse struct {
 	JSON409 *Conflict
 	// JSON422 the response for an HTTP 422 `application/json` response
 	JSON422 *Invalid
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *Unavailable
 }
 
 // GetJSON401 returns the response for an HTTP 401 `application/json` response
@@ -946,6 +948,11 @@ func (r VisionDeleteLabelResponse) GetJSON409() *Conflict {
 // GetJSON422 returns the response for an HTTP 422 `application/json` response
 func (r VisionDeleteLabelResponse) GetJSON422() *Invalid {
 	return r.JSON422
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r VisionDeleteLabelResponse) GetJSON503() *Unavailable {
+	return r.JSON503
 }
 
 // GetBody returns the raw response body bytes
@@ -1296,6 +1303,13 @@ func ParseVisionDeleteLabelResponse(rsp *http.Response) (*VisionDeleteLabelRespo
 			return nil, err
 		}
 		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Unavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 

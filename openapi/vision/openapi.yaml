@@ -141,6 +141,8 @@ paths:
           $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/Invalid"
+        "503":
+          $ref: "#/components/responses/Unavailable"
   /v1/orgs/{orgId}/feedback:
     parameters:
       - $ref: "#/components/parameters/OrgId"

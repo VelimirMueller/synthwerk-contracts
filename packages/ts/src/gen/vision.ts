@@ -400,6 +400,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["Invalid"];
+            503: components["responses"]["Unavailable"];
         };
     };
     "vision.createFeedback": {
