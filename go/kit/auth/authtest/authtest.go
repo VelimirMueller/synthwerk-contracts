@@ -98,6 +98,12 @@ func (i *Issuer) Config() auth.Config {
 	return auth.Config{Issuer: i.URL(), Audiences: []string{Audience}, HTTPClient: i.srv.Client()}
 }
 
+// IDTokenConfig returns an ID token verifier config for this issuer: the audience is
+// ClientID, the client that got the ID token.
+func (i *Issuer) IDTokenConfig() auth.Config {
+	return auth.Config{Issuer: i.URL(), Audiences: []string{ClientID}, HTTPClient: i.srv.Client()}
+}
+
 // Rotate adds a new published key (RS256 or ES256) and signs the next tokens with it.
 // Old keys stay published. It returns the new kid.
 func (i *Issuer) Rotate(t testing.TB, alg jose.SignatureAlgorithm) string {
@@ -159,6 +165,22 @@ func (i *Issuer) MintNone(t testing.TB, claims map[string]any) string {
 // result to Mint.
 func Claims(sub, org string, roles ...string) map[string]any {
 	return map[string]any{"sub": sub, auth.ClaimOrgID: org, auth.ClaimRoles: Roles(org, roles...)}
+}
+
+// IDTokenClaims returns the claims of a Zitadel ID token for sub, issued to ClientID
+// after a sign-in at authTime with amr and session sid. Pass the result to Mint.
+func IDTokenClaims(sub, sid string, authTime time.Time, amr ...string) map[string]any {
+	c := map[string]any{
+		"sub": sub, "aud": []string{ClientID}, "azp": ClientID, "auth_time": authTime.Unix(),
+		"nonce": "nonce-1", "at_hash": "at-hash-1", auth.ClaimOrgID: nil,
+	}
+	if len(amr) > 0 {
+		c["amr"] = amr
+	}
+	if sid != "" {
+		c["sid"] = sid
+	}
+	return c
 }
 
 // Roles returns a Zitadel roles claim that grants roles in org.

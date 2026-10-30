@@ -28,7 +28,7 @@ updated: 2026-10-30
 | `kit/cloudevents` | Builds and checks CloudEvents 1.0.2 events: UUIDv7 id, `source`, `orgid`, `traceparent`, NATS subject from the type. |
 | `kit/outbox` | Outbox table, `Enqueue` in the caller's transaction, the relay to JetStream with `Nats-Msg-Id` = event id, and `Cleanup` of old published rows. |
 | `kit/env` | Reads `SYNTHWERK_<SERVICE>_*` and `SYNTHWERK_PLATFORM_ENV` (D-40). |
-| `kit/auth` | Verifies Zitadel access tokens against the issuer JWKS (D-20, D-23). `MultiVerifier` adds more issuers (widget tokens, #30). Maps claims to a `Principal` (subject, org, roles, scopes, issuer). HTTP middleware and `RequireRole`, `RequireOrg`, `RequireScope`, `RequireMFA`, `RequireIssuer`. |
+| `kit/auth` | Verifies Zitadel access tokens against the issuer JWKS (D-20, D-23). `MultiVerifier` adds more issuers (widget tokens, #30). Maps claims to a `Principal` (subject, org, roles, scopes, issuer). HTTP middleware and `RequireRole`, `RequireOrg`, `RequireScope`, `RequireMFA`, `RequireIssuer`. `IDTokenVerifier` checks an OIDC ID token as proof of a recent sign-in. |
 | `kit/auth/authtest` | Fake issuer for tests: serves discovery and a JWKS over `httptest`, mints signed tokens. |
 
 - `/readyz` answers 503 `down` until `MarkStarted`. Then it runs every check in parallel, each with its own timeout (default 300 ms, all within 900 ms).
@@ -47,6 +47,8 @@ updated: 2026-10-30
 - Zitadel `aud` is `[client id, project id]`. Set `Audiences` to the project id.
 - The org id claim exists only with the scope `urn:zitadel:iam:user:resourceowner`. Without it the token is refused (401).
 - Zitadel access tokens have `client_id`, no `azp` and no `scope` claim. `Principal.ClientID` reads `client_id`, else `azp`. `Principal.Scopes` stays empty until an Action sets `synthwerk:scope`.
+- `auth.IDTokenVerifier` uses the same key set and algorithm rules. Its `Audiences` are OIDC client ids, not the project id. `Verify(ctx, raw, subject)` also needs: `sub` equal to the caller's subject, `auth_time` set and not in the future, `azp` (when set) an accepted client. `typ` `at+jwt` never passes. The nonce is not checked: only the client that signed in knows it.
+- Zitadel v4.20.0 access tokens carry no `sid` and no `auth_time`. A route that needs a recent sign-in (identity `DELETE /v1/me`, synthwerk#41) reads them from the ID token.
 - `RequireMFA` needs `amr` to contain `mfa` (passkey: `["user","mfa"]`; password and TOTP: `["pwd","otp","mfa"]`; password only: `["pwd"]`).
 - `RequireMFA` reads only `amr`, which is evidence from the sign-in. It never accepts an enrolment flag such as `synthwerk:mfa` (a user who has a second factor can still sign in with a password only through the Session API).
 - Zitadel v4.20.0 access tokens carry `amr` only with the MFA gate on (synthwerk#94, synthwerk-infra ADR-0004, `SYNTHWERK_ZITADEL_MFA_GATE=true`). The gate in synthwerk-identity reads the session factors before Zitadel finishes a sign-in and refuses a session without a second factor. Its pre-access-token target adds the `amr` of the user's newest gated sign-in (max 12 h old). Without the gate, Zitadel tokens have no `amr` and `RequireMFA` refuses them (fail closed).
@@ -64,7 +66,7 @@ updated: 2026-10-30
 6. Add one `health.Check` per dependency. Call `MarkStarted` when the service can serve.
 7. Wrap the mux: `otelhttp.NewHandler(log.HTTP(logger, mux), service)`.
 8. Auth: `auth.NewVerifier(auth.Config{Issuer, Audiences})`. Mount the API mux under `auth.Middleware(v, api)`; keep `/healthz` and `/readyz` outside. Add `v.Ready` as the `jwks` readiness check.
-9. Tests: `authtest.NewIssuer(t)`, `auth.NewVerifier(iss.Config())`, `iss.Mint(t, authtest.Claims(sub, org, roles...))`.
+9. Tests: `authtest.NewIssuer(t)`, `auth.NewVerifier(iss.Config())`, `iss.Mint(t, authtest.Claims(sub, org, roles...))`. ID tokens: `auth.NewIDTokenVerifier(iss.IDTokenConfig())`, `iss.Mint(t, authtest.IDTokenClaims(sub, sid, authTime, amr...))`.
 
 ## Rules and limits
 
@@ -127,6 +129,7 @@ updated: 2026-10-30
 - `tests/unit/kit/auth_test.go` — `RequireMFA - amr pwd only - 403`
 - `tests/unit/kit/auth_test.go` — `RequireMFA - enrolment flag true, amr pwd only - 403`
 - `tests/unit/kit/auth_test.go` — `Map - Zitadel v4.20.0 access token - org roles and client id`
+- `tests/unit/kit/idtoken_test.go` — `Verify - Zitadel ID token - sub, auth_time, amr and sid`; `access token (no auth_time) / typ at+jwt / other client / ID token of another user / auth_time in the future - rejects`
 - `tests/unit/kit/health_test.go` — `readyz - check hangs - answers within the budget with timeout`
 - `tests/unit/kit/log_test.go` — `log line - forbidden keys anywhere - keys dropped`
 - `tests/unit/kit/otel_test.go` — `Setup - endpoint not set - no exporter, one warning`
@@ -142,4 +145,5 @@ updated: 2026-10-30
 | 2026-10-23 | `kit/auth`: Zitadel v4.20.0 token shape (`client_id`, `aud`, org scope), `RequireMFA` (SW-M2-0.5). |
 | 2026-10-23 | D-44: `kit/cloudevents` adds `WithOrg`/`OrgID`; `WithTenant`/`TenantID` deprecated, still working. |
 | 2026-10-30 | `kit/auth`: `MultiVerifier`, `Principal.Issuer`, `RequireIssuer`; `Middleware` takes a `TokenVerifier` (#30 widget tokens in llm). |
+| 2026-10-30 | `kit/auth`: `IDTokenVerifier`, `authtest.IDTokenConfig` and `IDTokenClaims` (synthwerk#41). |
 | 2026-10-29 | `kit/outbox`: the relay deletes published rows after a retention (default 7 days); unpublished rows stay (#3). |

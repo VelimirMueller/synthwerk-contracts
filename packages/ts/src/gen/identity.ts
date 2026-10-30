@@ -21,7 +21,8 @@ export interface paths {
         /**
          * Delete the own account
          * @description Deletes the caller's account (synthwerk#41). Emits `dev.synthwerk.identity.user.deleted.v1`; the other services delete the user's rows when they get it.
-         *     - Needs a recent sign-in with MFA: the token has `amr` `mfa` and the user's newest gated sign-in is at most 15 minutes old (identity setting, default 15 minutes). Else 403 `recent_mfa_required`: sign in again, then retry.
+         *     - Needs a recent sign-in with MFA, else 403 `recent_mfa_required`: sign in again, then retry. The access token must have `amr` `mfa`. The proof of the recent sign-in is the header `X-Synthwerk-Id-Token`, see below. Zitadel access tokens carry no `sid` and no `auth_time`, so a delete without this header always gets 403.
+         *     - `X-Synthwerk-Id-Token`: an ID token of the same sign-in flow, from an OIDC client that identity accepts (the studio). Identity checks its signature, `iss`, `aud` (an accepted client id), `exp`, the same `sub` as the access token, and `auth_time` at most 15 minutes old (identity setting). The sign-in must have MFA: the ID token has `amr` `mfa`, or the user's newest gated sign-in is of the same session (`sid`) and at most 15 minutes old. Get a fresh ID token with `prompt=login` and `max_age`. The client keeps the ID token server side and sends it to identity only.
          *     - Last owner rule: an org with other members must keep an owner. When the caller is its only owner, the answer is 409 `last_owner` and nothing changes. Make another member `owner` first.
          *     - An org where the caller is the only member closes with the account. Identity deletes it with its apps and entitlements. `deleted_org_ids` lists these orgs.
          *     - Identity deletes its own rows of the user in one transaction with the event. The Zitadel user is removed after the answer, with retries. A token issued before stays valid until it expires.
@@ -1038,7 +1039,7 @@ export interface components {
             };
         };
         /**
-         * @description - `recent_mfa_required`: the token has no `amr` `mfa`, or the newest sign-in with MFA is older than 15 minutes. Sign in again with MFA, then retry.
+         * @description - `recent_mfa_required`: the token has no `amr` `mfa`, the `X-Synthwerk-Id-Token` header is missing or fails a check, or the sign-in with MFA is older than 15 minutes. Sign in again with MFA, then retry.
          *     - `forbidden`: the caller is an `operator`. Platform users are not removed here.
          */
         RecentMFARequired: {
@@ -1149,7 +1150,10 @@ export interface operations {
     "identity.deleteMe": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A fresh OIDC ID token of the caller (compact JWS). The proof of a recent sign-in with MFA. Without it, or when it fails a check, the answer is 403 `recent_mfa_required`. */
+                "X-Synthwerk-Id-Token"?: string;
+            };
             path?: never;
             cookie?: never;
         };
