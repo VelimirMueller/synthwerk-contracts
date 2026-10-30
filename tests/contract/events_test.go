@@ -210,3 +210,42 @@ func checkEqual(t *testing.T, what string, got, want any) {
 		t.Errorf("%s: got %v, want %v", what, got, want)
 	}
 }
+
+func TestAuditEventTypePattern(t *testing.T) {
+	t.Run("AuditEvent.type - every identity event of the catalog - matches the spec pattern", func(t *testing.T) {
+		raw, err := os.ReadFile("../../openapi/identity/openapi.yaml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var spec struct {
+			Components struct {
+				Schemas struct {
+					AuditEvent struct {
+						Properties struct {
+							Type struct {
+								Pattern string `yaml:"pattern"`
+							} `yaml:"type"`
+						} `yaml:"properties"`
+					} `yaml:"AuditEvent"`
+				} `yaml:"schemas"`
+			} `yaml:"components"`
+		}
+		if err := yaml.Unmarshal(raw, &spec); err != nil {
+			t.Fatal(err)
+		}
+		re := regexp.MustCompile(spec.Components.Schemas.AuditEvent.Properties.Type.Pattern)
+		n := 0
+		for _, e := range loadCatalog(t) {
+			if e.Producer != "identity" {
+				continue
+			}
+			n++
+			if !re.MatchString(e.Type) {
+				t.Errorf("%s does not match %s", e.Type, re)
+			}
+		}
+		if n == 0 {
+			t.Fatal("no identity events")
+		}
+	})
+}

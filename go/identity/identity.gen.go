@@ -18,6 +18,24 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for MemberStatus.
+const (
+	MemberStatusActive      MemberStatus = "active"
+	MemberStatusDeactivated MemberStatus = "deactivated"
+)
+
+// Valid indicates whether the value is a known member of the MemberStatus enum.
+func (e MemberStatus) Valid() bool {
+	switch e {
+	case MemberStatusActive:
+		return true
+	case MemberStatusDeactivated:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for OrgRole.
 const (
 	OrgRoleAdmin  OrgRole = "admin"
@@ -215,6 +233,33 @@ type AppPage struct {
 	NextCursor *string `json:"next_cursor,omitempty"`
 }
 
+// AuditEvent One org event of identity, as it went to the outbox.
+type AuditEvent struct {
+	// Actor Who did it. `user:<sub>`, `service:<name>` or `system` (a change from Zitadel).
+	Actor string `json:"actor"`
+
+	// Data The event data. Its schema is the event schema in `events/identity`.
+	Data map[string]interface{} `json:"data"`
+
+	// Id The CloudEvents id.
+	Id openapi_types.UUID `json:"id"`
+
+	// Subject The CloudEvents subject, the id of the main entity. Absent when the event has none.
+	Subject *string   `json:"subject,omitempty"`
+	Time    time.Time `json:"time"`
+
+	// Type The CloudEvents type. Clients must accept types they do not know.
+	Type string `json:"type"`
+}
+
+// AuditEventPage defines model for AuditEventPage.
+type AuditEventPage struct {
+	Items []AuditEvent `json:"items"`
+
+	// NextCursor Cursor of the next page. Absent on the last page.
+	NextCursor *string `json:"next_cursor,omitempty"`
+}
+
 // ChangeMemberRoleRequest defines model for ChangeMemberRoleRequest.
 type ChangeMemberRoleRequest struct {
 	// Role An org role. `operator` is never an org role.
@@ -263,6 +308,38 @@ type Entitlements struct {
 	Version int64 `json:"version"`
 }
 
+// Invitation A pending invitation. It never says whether the email has an account.
+type Invitation struct {
+	CreatedAt time.Time `json:"created_at"`
+
+	// Email The email the admin typed. Only owners and admins of the org see it.
+	Email openapi_types.Email `json:"email"`
+	Id    openapi_types.UUID  `json:"id"`
+
+	// InvitedBy Subject id of the owner or admin who invited.
+	InvitedBy string `json:"invited_by"`
+
+	// Role An org role. `operator` is never an org role.
+	Role OrgRole `json:"role"`
+}
+
+// InvitationPage defines model for InvitationPage.
+type InvitationPage struct {
+	Items []Invitation `json:"items"`
+
+	// NextCursor Cursor of the next page. Absent on the last page.
+	NextCursor *string `json:"next_cursor,omitempty"`
+}
+
+// InviteMemberRequest defines model for InviteMemberRequest.
+type InviteMemberRequest struct {
+	// Email Where Zitadel sends the invite mail. Identity passes it to Zitadel and stores it nowhere.
+	Email openapi_types.Email `json:"email"`
+
+	// Role An org role. `operator` is never an org role.
+	Role OrgRole `json:"role"`
+}
+
 // Me defines model for Me.
 type Me struct {
 	Org Org `json:"org"`
@@ -277,8 +354,12 @@ type Me struct {
 // Member defines model for Member.
 type Member struct {
 	// Role An org role. `operator` is never an org role.
-	Role      OrgRole   `json:"role"`
-	UpdatedAt time.Time `json:"updated_at"`
+	Role OrgRole `json:"role"`
+
+	// Status - `active`: the Zitadel user grant is active. Tokens carry the org role.
+	// - `deactivated`: the grant is deactivated. The member keeps the row and the role, but tokens carry no org role.
+	Status    MemberStatus `json:"status"`
+	UpdatedAt time.Time    `json:"updated_at"`
 
 	// UserId Subject id (token `sub`). Never an email.
 	UserId string `json:"user_id"`
@@ -291,6 +372,10 @@ type MemberPage struct {
 	// NextCursor Cursor of the next page. Absent on the last page.
 	NextCursor *string `json:"next_cursor,omitempty"`
 }
+
+// MemberStatus - `active`: the Zitadel user grant is active. Tokens carry the org role.
+// - `deactivated`: the grant is deactivated. The member keeps the row and the role, but tokens carry no org role.
+type MemberStatus string
 
 // Org defines model for Org.
 type Org struct {
@@ -327,6 +412,9 @@ type OrgRole string
 // | `slug_taken` | 409 | Another org has the slug. |
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
+// | `own_membership` | 409 | The caller tried to deactivate their own membership. |
+// | `member_exists` | 409 | The email is an active or deactivated member of this org. |
+// | `rate_limited` | 429 | Too many invites. Retry after `Retry-After` seconds. |
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
@@ -433,6 +521,9 @@ type WidgetTokenTokenType string
 // AppId defines model for AppId.
 type AppId = openapi_types.UUID
 
+// InvitationId defines model for InvitationId.
+type InvitationId = openapi_types.UUID
+
 // OrgId defines model for OrgId.
 type OrgId = openapi_types.UUID
 
@@ -451,6 +542,9 @@ type UserId = string
 // | `slug_taken` | 409 | Another org has the slug. |
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
+// | `own_membership` | 409 | The caller tried to deactivate their own membership. |
+// | `member_exists` | 409 | The email is an active or deactivated member of this org. |
+// | `rate_limited` | 429 | Too many invites. Retry after `Retry-After` seconds. |
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
@@ -468,6 +562,9 @@ type Conflict = Problem
 // | `slug_taken` | 409 | Another org has the slug. |
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
+// | `own_membership` | 409 | The caller tried to deactivate their own membership. |
+// | `member_exists` | 409 | The email is an active or deactivated member of this org. |
+// | `rate_limited` | 429 | Too many invites. Retry after `Retry-After` seconds. |
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
@@ -485,6 +582,9 @@ type CreateAppForbidden = Problem
 // | `slug_taken` | 409 | Another org has the slug. |
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
+// | `own_membership` | 409 | The caller tried to deactivate their own membership. |
+// | `member_exists` | 409 | The email is an active or deactivated member of this org. |
+// | `rate_limited` | 429 | Too many invites. Retry after `Retry-After` seconds. |
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
@@ -502,10 +602,33 @@ type Forbidden = Problem
 // | `slug_taken` | 409 | Another org has the slug. |
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
+// | `own_membership` | 409 | The caller tried to deactivate their own membership. |
+// | `member_exists` | 409 | The email is an active or deactivated member of this org. |
+// | `rate_limited` | 429 | Too many invites. Retry after `Retry-After` seconds. |
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type InvalidRequest = Problem
+
+// MemberConflict RFC 9457 problem details with the stable Synthwerk `code`.
+// Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
+//
+// | Code | Status | Cause |
+// |---|---|---|
+// | `invalid_request` | 400 | Body or parameter not valid. |
+// | `unauthenticated` | 401 | Token missing or not valid. |
+// | `forbidden` | 403 | Role does not allow the call. |
+// | `not_found` | 404 | Unknown org or member, or no membership. |
+// | `slug_taken` | 409 | Another org has the slug. |
+// | `last_owner` | 409 | The org would lose its last owner. |
+// | `own_role` | 409 | The caller tried to change their own role. |
+// | `own_membership` | 409 | The caller tried to deactivate their own membership. |
+// | `member_exists` | 409 | The email is an active or deactivated member of this org. |
+// | `rate_limited` | 429 | Too many invites. Retry after `Retry-After` seconds. |
+// | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
+// | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
+// | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+type MemberConflict = Problem
 
 // NotFound RFC 9457 problem details with the stable Synthwerk `code`.
 // Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
@@ -519,6 +642,9 @@ type InvalidRequest = Problem
 // | `slug_taken` | 409 | Another org has the slug. |
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
+// | `own_membership` | 409 | The caller tried to deactivate their own membership. |
+// | `member_exists` | 409 | The email is an active or deactivated member of this org. |
+// | `rate_limited` | 429 | Too many invites. Retry after `Retry-After` seconds. |
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
@@ -536,10 +662,33 @@ type NotFound = Problem
 // | `slug_taken` | 409 | Another org has the slug. |
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
+// | `own_membership` | 409 | The caller tried to deactivate their own membership. |
+// | `member_exists` | 409 | The email is an active or deactivated member of this org. |
+// | `rate_limited` | 429 | Too many invites. Retry after `Retry-After` seconds. |
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
 type OriginNotAllowed = Problem
+
+// RateLimited RFC 9457 problem details with the stable Synthwerk `code`.
+// Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
+//
+// | Code | Status | Cause |
+// |---|---|---|
+// | `invalid_request` | 400 | Body or parameter not valid. |
+// | `unauthenticated` | 401 | Token missing or not valid. |
+// | `forbidden` | 403 | Role does not allow the call. |
+// | `not_found` | 404 | Unknown org or member, or no membership. |
+// | `slug_taken` | 409 | Another org has the slug. |
+// | `last_owner` | 409 | The org would lose its last owner. |
+// | `own_role` | 409 | The caller tried to change their own role. |
+// | `own_membership` | 409 | The caller tried to deactivate their own membership. |
+// | `member_exists` | 409 | The email is an active or deactivated member of this org. |
+// | `rate_limited` | 429 | Too many invites. Retry after `Retry-After` seconds. |
+// | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
+// | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
+// | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+type RateLimited = Problem
 
 // RoleConflict RFC 9457 problem details with the stable Synthwerk `code`.
 // Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
@@ -553,6 +702,9 @@ type OriginNotAllowed = Problem
 // | `slug_taken` | 409 | Another org has the slug. |
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
+// | `own_membership` | 409 | The caller tried to deactivate their own membership. |
+// | `member_exists` | 409 | The email is an active or deactivated member of this org. |
+// | `rate_limited` | 429 | Too many invites. Retry after `Retry-After` seconds. |
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
@@ -570,6 +722,9 @@ type RoleConflict = Problem
 // | `slug_taken` | 409 | Another org has the slug. |
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
+// | `own_membership` | 409 | The caller tried to deactivate their own membership. |
+// | `member_exists` | 409 | The email is an active or deactivated member of this org. |
+// | `rate_limited` | 429 | Too many invites. Retry after `Retry-After` seconds. |
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
@@ -587,6 +742,9 @@ type Unauthenticated = Problem
 // | `slug_taken` | 409 | Another org has the slug. |
 // | `last_owner` | 409 | The org would lose its last owner. |
 // | `own_role` | 409 | The caller tried to change their own role. |
+// | `own_membership` | 409 | The caller tried to deactivate their own membership. |
+// | `member_exists` | 409 | The email is an active or deactivated member of this org. |
+// | `rate_limited` | 429 | Too many invites. Retry after `Retry-After` seconds. |
 // | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
 // | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
 // | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
@@ -622,6 +780,24 @@ type IdentityListAppsParams struct {
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// IdentityListAuditEventsParams defines parameters for IdentityListAuditEvents.
+type IdentityListAuditEventsParams struct {
+	// Limit Page size.
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor The `next_cursor` of the previous page.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// IdentityListInvitationsParams defines parameters for IdentityListInvitations.
+type IdentityListInvitationsParams struct {
+	// Limit Page size.
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor The `next_cursor` of the previous page.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // IdentityListMembersParams defines parameters for IdentityListMembers.
 type IdentityListMembersParams struct {
 	// Limit Page size.
@@ -639,6 +815,9 @@ type IdentityCreateAppJSONRequestBody = CreateAppRequest
 
 // IdentityUpdateAppJSONRequestBody defines body for IdentityUpdateApp for application/json ContentType.
 type IdentityUpdateAppJSONRequestBody = UpdateAppRequest
+
+// IdentityInviteMemberJSONRequestBody defines body for IdentityInviteMember for application/json ContentType.
+type IdentityInviteMemberJSONRequestBody = InviteMemberRequest
 
 // IdentityChangeMemberRoleJSONRequestBody defines body for IdentityChangeMemberRole for application/json ContentType.
 type IdentityChangeMemberRoleJSONRequestBody = ChangeMemberRoleRequest
@@ -866,6 +1045,17 @@ type ClientInterface interface {
 	// Corresponds with PATCH /v1/orgs/{orgId}/apps/{appId} (the `IdentityUpdateApp` operationId).
 	IdentityUpdateApp(ctx context.Context, orgId OrgId, appId AppId, body IdentityUpdateAppJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// IdentityListAuditEvents List the audit events of an org
+	//
+	// The admin actions of the org, newest first. Each item is an event identity wrote to its outbox for the org, kept after the outbox row is gone.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` gets 403. An `operator` gets 403.
+	// - Event types: `org.created`, `member.invited`, `member.role_changed`, `member.deactivated`, `member.reactivated`, `app.created`, `org.entitlements_changed`, and later org events of identity. Clients must accept types they do not know.
+	// - `data` is the event data, as its schema in `events/identity` says. No email, no personal name.
+	// - Cursor paging, max 100 per page.
+	//
+	// Corresponds with GET /v1/orgs/{orgId}/audit-events (the `IdentityListAuditEvents` operationId).
+	IdentityListAuditEvents(ctx context.Context, orgId OrgId, params *IdentityListAuditEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// IdentityGetOrgEntitlements Get the entitlements of an org
 	//
 	// The plan and the limits of the org. Needs an org role in the org (any role), or the role `operator`.
@@ -873,12 +1063,70 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/orgs/{orgId}/entitlements (the `IdentityGetOrgEntitlements` operationId).
 	IdentityGetOrgEntitlements(ctx context.Context, orgId OrgId, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// IdentityListInvitations List pending invitations
+	//
+	// Pending invitations of the org, newest first. An invitation stops being pending when the invitee signs in to the org or an admin revokes it.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` or an `operator` gets 403.
+	// - It holds the email the admin typed. It never says whether the email has an account.
+	// - Cursor paging, max 100 per page.
+	//
+	// Corresponds with GET /v1/orgs/{orgId}/invitations (the `IdentityListInvitations` operationId).
+	IdentityListInvitations(ctx context.Context, orgId OrgId, params *IdentityListInvitationsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IdentityRevokeInvitation Revoke a pending invitation
+	//
+	// Revokes a pending invitation. Emits `dev.synthwerk.identity.member.invite_revoked.v1` with the invitation id.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` or an `operator` gets 403.
+	// - Only an `owner` revokes an invitation for the role `owner`.
+	// - When identity created a Zitadel user for the invitation, identity deletes that user. The invitee cannot sign in to the org.
+	// - The invitee does not become a member later: a revoked invitation is never accepted.
+	// - An invitation that is not pending (accepted, revoked or unknown): 404.
+	//
+	// Corresponds with DELETE /v1/orgs/{orgId}/invitations/{invitationId} (the `IdentityRevokeInvitation` operationId).
+	IdentityRevokeInvitation(ctx context.Context, orgId OrgId, invitationId InvitationId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// IdentityListMembers List members
 	//
-	// Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. The stored membership must also be `owner` or `admin`, so a token issued before a demotion gets 403. Cursor paging, max 100 per page.
+	// Members of the org, their org roles and their status. Deactivated members are listed too. An invitee is listed after the first sign-in to the org; pending invitations are in `listInvitations`. Needs the role `owner` or `admin` in the org, or `operator`. The stored membership must also be an active `owner` or `admin`, so a token issued before a demotion or a deactivation gets 403. Cursor paging, max 100 per page.
 	//
 	// Corresponds with GET /v1/orgs/{orgId}/members (the `IdentityListMembers` operationId).
 	IdentityListMembers(ctx context.Context, orgId OrgId, params *IdentityListMembersParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IdentityInviteMemberWithBody Invite a member
+	//
+	// Creates a pending invitation. Emits `dev.synthwerk.identity.member.invited.v1` with the invitation id.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
+	// - Only an `owner` invites an `owner`.
+	// - A new email: identity also creates the Zitadel user and its user grant, and Zitadel sends the invite mail (Mailpit in local, Resend in dev and prd).
+	// - An email of a user of another org: adding users of another org is not supported yet. The invitation stays pending and is never accepted.
+	// - Both cases look the same: the same 202 answer, the same pending item in `listInvitations`, the same audit event, and no item in `listMembers`. The API does not show which emails have an account.
+	// - The invitee shows in `listMembers` after the first sign-in to the org. Then the invitation is no longer pending.
+	// - The email has a pending invitation in the org already: 202 with that invitation, unchanged. Zitadel is not called again and no event is written. To change its role, revoke it and invite again.
+	// - The email is an active or deactivated member of this org: 409 `member_exists`.
+	// - Rate limit per caller and per org: 429 `rate_limited` with `Retry-After`.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{orgId}/members (the `IdentityInviteMember` operationId).
+	IdentityInviteMemberWithBody(ctx context.Context, orgId OrgId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IdentityInviteMember Invite a member
+	//
+	// Creates a pending invitation. Emits `dev.synthwerk.identity.member.invited.v1` with the invitation id.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
+	// - Only an `owner` invites an `owner`.
+	// - A new email: identity also creates the Zitadel user and its user grant, and Zitadel sends the invite mail (Mailpit in local, Resend in dev and prd).
+	// - An email of a user of another org: adding users of another org is not supported yet. The invitation stays pending and is never accepted.
+	// - Both cases look the same: the same 202 answer, the same pending item in `listInvitations`, the same audit event, and no item in `listMembers`. The API does not show which emails have an account.
+	// - The invitee shows in `listMembers` after the first sign-in to the org. Then the invitation is no longer pending.
+	// - The email has a pending invitation in the org already: 202 with that invitation, unchanged. Zitadel is not called again and no event is written. To change its role, revoke it and invite again.
+	// - The email is an active or deactivated member of this org: 409 `member_exists`.
+	// - Rate limit per caller and per org: 429 `rate_limited` with `Retry-After`.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{orgId}/members (the `IdentityInviteMember` operationId).
+	IdentityInviteMember(ctx context.Context, orgId OrgId, body IdentityInviteMemberJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// IdentityChangeMemberRoleWithBody Change the role of a member
 	//
@@ -907,6 +1155,28 @@ type ClientInterface interface {
 	//
 	// Corresponds with PATCH /v1/orgs/{orgId}/members/{userId} (the `IdentityChangeMemberRole` operationId).
 	IdentityChangeMemberRole(ctx context.Context, orgId OrgId, userId UserId, body IdentityChangeMemberRoleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IdentityDeactivateMember Deactivate a member
+	//
+	// Deactivates the Zitadel user grant of the member. The member keeps the row and the role, but the next token has no org role in this org. Emits `dev.synthwerk.identity.member.deactivated.v1`.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+	// - Only an `owner` deactivates an `owner`. The last active owner stays active (409 `last_owner`).
+	// - Nobody deactivates their own membership (409 `own_membership`).
+	// - A token issued before the change keeps working at other services until it expires. Identity checks the stored status at once.
+	// - A member that is deactivated already answers 200 and emits nothing.
+	//
+	// Corresponds with POST /v1/orgs/{orgId}/members/{userId}:deactivate (the `IdentityDeactivateMember` operationId).
+	IdentityDeactivateMember(ctx context.Context, orgId OrgId, userId UserId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IdentityReactivateMember Reactivate a member
+	//
+	// Reactivates the Zitadel user grant of a deactivated member, with the role it had. Emits `dev.synthwerk.identity.member.reactivated.v1`.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+	// - Only an `owner` reactivates an `owner`.
+	// - A member that is active already answers 200 and emits nothing.
+	//
+	// Corresponds with POST /v1/orgs/{orgId}/members/{userId}:reactivate (the `IdentityReactivateMember` operationId).
+	IdentityReactivateMember(ctx context.Context, orgId OrgId, userId UserId, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 // IdentityGetWidgetSettings Get the widget settings
@@ -1208,6 +1478,27 @@ func (c *Client) IdentityUpdateApp(ctx context.Context, orgId OrgId, appId AppId
 	return c.Client.Do(req)
 }
 
+// IdentityListAuditEvents List the audit events of an org
+//
+// The admin actions of the org, newest first. Each item is an event identity wrote to its outbox for the org, kept after the outbox row is gone.
+// - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` gets 403. An `operator` gets 403.
+// - Event types: `org.created`, `member.invited`, `member.role_changed`, `member.deactivated`, `member.reactivated`, `app.created`, `org.entitlements_changed`, and later org events of identity. Clients must accept types they do not know.
+// - `data` is the event data, as its schema in `events/identity` says. No email, no personal name.
+// - Cursor paging, max 100 per page.
+//
+// Corresponds with GET /v1/orgs/{orgId}/audit-events (the `IdentityListAuditEvents` operationId).
+func (c *Client) IdentityListAuditEvents(ctx context.Context, orgId OrgId, params *IdentityListAuditEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIdentityListAuditEventsRequest(c.Server, orgId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // IdentityGetOrgEntitlements Get the entitlements of an org
 //
 // The plan and the limits of the org. Needs an org role in the org (any role), or the role `operator`.
@@ -1225,13 +1516,111 @@ func (c *Client) IdentityGetOrgEntitlements(ctx context.Context, orgId OrgId, re
 	return c.Client.Do(req)
 }
 
+// IdentityListInvitations List pending invitations
+//
+// Pending invitations of the org, newest first. An invitation stops being pending when the invitee signs in to the org or an admin revokes it.
+// - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` or an `operator` gets 403.
+// - It holds the email the admin typed. It never says whether the email has an account.
+// - Cursor paging, max 100 per page.
+//
+// Corresponds with GET /v1/orgs/{orgId}/invitations (the `IdentityListInvitations` operationId).
+func (c *Client) IdentityListInvitations(ctx context.Context, orgId OrgId, params *IdentityListInvitationsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIdentityListInvitationsRequest(c.Server, orgId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// IdentityRevokeInvitation Revoke a pending invitation
+//
+// Revokes a pending invitation. Emits `dev.synthwerk.identity.member.invite_revoked.v1` with the invitation id.
+// - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` or an `operator` gets 403.
+// - Only an `owner` revokes an invitation for the role `owner`.
+// - When identity created a Zitadel user for the invitation, identity deletes that user. The invitee cannot sign in to the org.
+// - The invitee does not become a member later: a revoked invitation is never accepted.
+// - An invitation that is not pending (accepted, revoked or unknown): 404.
+//
+// Corresponds with DELETE /v1/orgs/{orgId}/invitations/{invitationId} (the `IdentityRevokeInvitation` operationId).
+func (c *Client) IdentityRevokeInvitation(ctx context.Context, orgId OrgId, invitationId InvitationId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIdentityRevokeInvitationRequest(c.Server, orgId, invitationId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // IdentityListMembers List members
 //
-// Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. The stored membership must also be `owner` or `admin`, so a token issued before a demotion gets 403. Cursor paging, max 100 per page.
+// Members of the org, their org roles and their status. Deactivated members are listed too. An invitee is listed after the first sign-in to the org; pending invitations are in `listInvitations`. Needs the role `owner` or `admin` in the org, or `operator`. The stored membership must also be an active `owner` or `admin`, so a token issued before a demotion or a deactivation gets 403. Cursor paging, max 100 per page.
 //
 // Corresponds with GET /v1/orgs/{orgId}/members (the `IdentityListMembers` operationId).
 func (c *Client) IdentityListMembers(ctx context.Context, orgId OrgId, params *IdentityListMembersParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewIdentityListMembersRequest(c.Server, orgId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// IdentityInviteMemberWithBody Invite a member
+//
+// Creates a pending invitation. Emits `dev.synthwerk.identity.member.invited.v1` with the invitation id.
+// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
+// - Only an `owner` invites an `owner`.
+// - A new email: identity also creates the Zitadel user and its user grant, and Zitadel sends the invite mail (Mailpit in local, Resend in dev and prd).
+// - An email of a user of another org: adding users of another org is not supported yet. The invitation stays pending and is never accepted.
+// - Both cases look the same: the same 202 answer, the same pending item in `listInvitations`, the same audit event, and no item in `listMembers`. The API does not show which emails have an account.
+// - The invitee shows in `listMembers` after the first sign-in to the org. Then the invitation is no longer pending.
+// - The email has a pending invitation in the org already: 202 with that invitation, unchanged. Zitadel is not called again and no event is written. To change its role, revoke it and invite again.
+// - The email is an active or deactivated member of this org: 409 `member_exists`.
+// - Rate limit per caller and per org: 429 `rate_limited` with `Retry-After`.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{orgId}/members (the `IdentityInviteMember` operationId).
+func (c *Client) IdentityInviteMemberWithBody(ctx context.Context, orgId OrgId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIdentityInviteMemberRequestWithBody(c.Server, orgId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// IdentityInviteMember Invite a member
+//
+// Creates a pending invitation. Emits `dev.synthwerk.identity.member.invited.v1` with the invitation id.
+// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
+// - Only an `owner` invites an `owner`.
+// - A new email: identity also creates the Zitadel user and its user grant, and Zitadel sends the invite mail (Mailpit in local, Resend in dev and prd).
+// - An email of a user of another org: adding users of another org is not supported yet. The invitation stays pending and is never accepted.
+// - Both cases look the same: the same 202 answer, the same pending item in `listInvitations`, the same audit event, and no item in `listMembers`. The API does not show which emails have an account.
+// - The invitee shows in `listMembers` after the first sign-in to the org. Then the invitation is no longer pending.
+// - The email has a pending invitation in the org already: 202 with that invitation, unchanged. Zitadel is not called again and no event is written. To change its role, revoke it and invite again.
+// - The email is an active or deactivated member of this org: 409 `member_exists`.
+// - Rate limit per caller and per org: 429 `rate_limited` with `Retry-After`.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{orgId}/members (the `IdentityInviteMember` operationId).
+func (c *Client) IdentityInviteMember(ctx context.Context, orgId OrgId, body IdentityInviteMemberJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIdentityInviteMemberRequest(c.Server, orgId, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1280,6 +1669,48 @@ func (c *Client) IdentityChangeMemberRoleWithBody(ctx context.Context, orgId Org
 // Corresponds with PATCH /v1/orgs/{orgId}/members/{userId} (the `IdentityChangeMemberRole` operationId).
 func (c *Client) IdentityChangeMemberRole(ctx context.Context, orgId OrgId, userId UserId, body IdentityChangeMemberRoleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewIdentityChangeMemberRoleRequest(c.Server, orgId, userId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// IdentityDeactivateMember Deactivate a member
+//
+// Deactivates the Zitadel user grant of the member. The member keeps the row and the role, but the next token has no org role in this org. Emits `dev.synthwerk.identity.member.deactivated.v1`.
+// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+// - Only an `owner` deactivates an `owner`. The last active owner stays active (409 `last_owner`).
+// - Nobody deactivates their own membership (409 `own_membership`).
+// - A token issued before the change keeps working at other services until it expires. Identity checks the stored status at once.
+// - A member that is deactivated already answers 200 and emits nothing.
+//
+// Corresponds with POST /v1/orgs/{orgId}/members/{userId}:deactivate (the `IdentityDeactivateMember` operationId).
+func (c *Client) IdentityDeactivateMember(ctx context.Context, orgId OrgId, userId UserId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIdentityDeactivateMemberRequest(c.Server, orgId, userId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// IdentityReactivateMember Reactivate a member
+//
+// Reactivates the Zitadel user grant of a deactivated member, with the role it had. Emits `dev.synthwerk.identity.member.reactivated.v1`.
+// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+// - Only an `owner` reactivates an `owner`.
+// - A member that is active already answers 200 and emits nothing.
+//
+// Corresponds with POST /v1/orgs/{orgId}/members/{userId}:reactivate (the `IdentityReactivateMember` operationId).
+func (c *Client) IdentityReactivateMember(ctx context.Context, orgId OrgId, userId UserId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIdentityReactivateMemberRequest(c.Server, orgId, userId)
 	if err != nil {
 		return nil, err
 	}
@@ -1834,6 +2265,79 @@ func NewIdentityUpdateAppRequestWithBody(server string, orgId OrgId, appId AppId
 	return req, nil
 }
 
+// NewIdentityListAuditEventsRequest constructs an http.Request for the IdentityListAuditEvents method
+func NewIdentityListAuditEventsRequest(server string, orgId OrgId, params *IdentityListAuditEventsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "orgId", orgId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/audit-events", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewIdentityGetOrgEntitlementsRequest constructs an http.Request for the IdentityGetOrgEntitlements method
 func NewIdentityGetOrgEntitlementsRequest(server string, orgId OrgId) (*http.Request, error) {
 	var err error
@@ -1861,6 +2365,120 @@ func NewIdentityGetOrgEntitlementsRequest(server string, orgId OrgId) (*http.Req
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewIdentityListInvitationsRequest constructs an http.Request for the IdentityListInvitations method
+func NewIdentityListInvitationsRequest(server string, orgId OrgId, params *IdentityListInvitationsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "orgId", orgId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/invitations", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewIdentityRevokeInvitationRequest constructs an http.Request for the IdentityRevokeInvitation method
+func NewIdentityRevokeInvitationRequest(server string, orgId OrgId, invitationId InvitationId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "orgId", orgId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "invitationId", invitationId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/invitations/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1941,6 +2559,53 @@ func NewIdentityListMembersRequest(server string, orgId OrgId, params *IdentityL
 	return req, nil
 }
 
+// NewIdentityInviteMemberRequest calls the generic IdentityInviteMember builder with application/json body
+func NewIdentityInviteMemberRequest(server string, orgId OrgId, body IdentityInviteMemberJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewIdentityInviteMemberRequestWithBody(server, orgId, "application/json", bodyReader)
+}
+
+// NewIdentityInviteMemberRequestWithBody constructs an http.Request for the IdentityInviteMember method, with any body, and a specified content type
+func NewIdentityInviteMemberRequestWithBody(server string, orgId OrgId, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "orgId", orgId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/members", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewIdentityChangeMemberRoleRequest calls the generic IdentityChangeMemberRole builder with application/json body
 func NewIdentityChangeMemberRoleRequest(server string, orgId OrgId, userId UserId, body IdentityChangeMemberRoleJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -1991,6 +2656,88 @@ func NewIdentityChangeMemberRoleRequestWithBody(server string, orgId OrgId, user
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewIdentityDeactivateMemberRequest constructs an http.Request for the IdentityDeactivateMember method
+func NewIdentityDeactivateMemberRequest(server string, orgId OrgId, userId UserId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "orgId", orgId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "userId", userId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/members/%s:deactivate", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewIdentityReactivateMemberRequest constructs an http.Request for the IdentityReactivateMember method
+func NewIdentityReactivateMemberRequest(server string, orgId OrgId, userId UserId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "orgId", orgId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "userId", userId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/members/%s:reactivate", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -2206,6 +2953,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PATCH /v1/orgs/{orgId}/apps/{appId} (the `IdentityUpdateApp` operationId).
 	IdentityUpdateAppWithResponse(ctx context.Context, orgId OrgId, appId AppId, body IdentityUpdateAppJSONRequestBody, reqEditors ...RequestEditorFn) (*IdentityUpdateAppResponse, error)
 
+	// IdentityListAuditEventsWithResponse List the audit events of an org
+	//
+	// The admin actions of the org, newest first. Each item is an event identity wrote to its outbox for the org, kept after the outbox row is gone.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` gets 403. An `operator` gets 403.
+	// - Event types: `org.created`, `member.invited`, `member.role_changed`, `member.deactivated`, `member.reactivated`, `app.created`, `org.entitlements_changed`, and later org events of identity. Clients must accept types they do not know.
+	// - `data` is the event data, as its schema in `events/identity` says. No email, no personal name.
+	// - Cursor paging, max 100 per page.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{orgId}/audit-events (the `IdentityListAuditEvents` operationId).
+	IdentityListAuditEventsWithResponse(ctx context.Context, orgId OrgId, params *IdentityListAuditEventsParams, reqEditors ...RequestEditorFn) (*IdentityListAuditEventsResponse, error)
+
 	// IdentityGetOrgEntitlementsWithResponse Get the entitlements of an org
 	//
 	// The plan and the limits of the org. Needs an org role in the org (any role), or the role `operator`.
@@ -2215,14 +2975,76 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{orgId}/entitlements (the `IdentityGetOrgEntitlements` operationId).
 	IdentityGetOrgEntitlementsWithResponse(ctx context.Context, orgId OrgId, reqEditors ...RequestEditorFn) (*IdentityGetOrgEntitlementsResponse, error)
 
+	// IdentityListInvitationsWithResponse List pending invitations
+	//
+	// Pending invitations of the org, newest first. An invitation stops being pending when the invitee signs in to the org or an admin revokes it.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` or an `operator` gets 403.
+	// - It holds the email the admin typed. It never says whether the email has an account.
+	// - Cursor paging, max 100 per page.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{orgId}/invitations (the `IdentityListInvitations` operationId).
+	IdentityListInvitationsWithResponse(ctx context.Context, orgId OrgId, params *IdentityListInvitationsParams, reqEditors ...RequestEditorFn) (*IdentityListInvitationsResponse, error)
+
+	// IdentityRevokeInvitationWithResponse Revoke a pending invitation
+	//
+	// Revokes a pending invitation. Emits `dev.synthwerk.identity.member.invite_revoked.v1` with the invitation id.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` or an `operator` gets 403.
+	// - Only an `owner` revokes an invitation for the role `owner`.
+	// - When identity created a Zitadel user for the invitation, identity deletes that user. The invitee cannot sign in to the org.
+	// - The invitee does not become a member later: a revoked invitation is never accepted.
+	// - An invitation that is not pending (accepted, revoked or unknown): 404.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{orgId}/invitations/{invitationId} (the `IdentityRevokeInvitation` operationId).
+	IdentityRevokeInvitationWithResponse(ctx context.Context, orgId OrgId, invitationId InvitationId, reqEditors ...RequestEditorFn) (*IdentityRevokeInvitationResponse, error)
+
 	// IdentityListMembersWithResponse List members
 	//
-	// Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. The stored membership must also be `owner` or `admin`, so a token issued before a demotion gets 403. Cursor paging, max 100 per page.
+	// Members of the org, their org roles and their status. Deactivated members are listed too. An invitee is listed after the first sign-in to the org; pending invitations are in `listInvitations`. Needs the role `owner` or `admin` in the org, or `operator`. The stored membership must also be an active `owner` or `admin`, so a token issued before a demotion or a deactivation gets 403. Cursor paging, max 100 per page.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /v1/orgs/{orgId}/members (the `IdentityListMembers` operationId).
 	IdentityListMembersWithResponse(ctx context.Context, orgId OrgId, params *IdentityListMembersParams, reqEditors ...RequestEditorFn) (*IdentityListMembersResponse, error)
+
+	// IdentityInviteMemberWithBodyWithResponse Invite a member
+	//
+	// Creates a pending invitation. Emits `dev.synthwerk.identity.member.invited.v1` with the invitation id.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
+	// - Only an `owner` invites an `owner`.
+	// - A new email: identity also creates the Zitadel user and its user grant, and Zitadel sends the invite mail (Mailpit in local, Resend in dev and prd).
+	// - An email of a user of another org: adding users of another org is not supported yet. The invitation stays pending and is never accepted.
+	// - Both cases look the same: the same 202 answer, the same pending item in `listInvitations`, the same audit event, and no item in `listMembers`. The API does not show which emails have an account.
+	// - The invitee shows in `listMembers` after the first sign-in to the org. Then the invitation is no longer pending.
+	// - The email has a pending invitation in the org already: 202 with that invitation, unchanged. Zitadel is not called again and no event is written. To change its role, revoke it and invite again.
+	// - The email is an active or deactivated member of this org: 409 `member_exists`.
+	// - Rate limit per caller and per org: 429 `rate_limited` with `Retry-After`.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{orgId}/members (the `IdentityInviteMember` operationId).
+	IdentityInviteMemberWithBodyWithResponse(ctx context.Context, orgId OrgId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*IdentityInviteMemberResponse, error)
+
+	// IdentityInviteMemberWithResponse Invite a member
+	//
+	// Creates a pending invitation. Emits `dev.synthwerk.identity.member.invited.v1` with the invitation id.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
+	// - Only an `owner` invites an `owner`.
+	// - A new email: identity also creates the Zitadel user and its user grant, and Zitadel sends the invite mail (Mailpit in local, Resend in dev and prd).
+	// - An email of a user of another org: adding users of another org is not supported yet. The invitation stays pending and is never accepted.
+	// - Both cases look the same: the same 202 answer, the same pending item in `listInvitations`, the same audit event, and no item in `listMembers`. The API does not show which emails have an account.
+	// - The invitee shows in `listMembers` after the first sign-in to the org. Then the invitation is no longer pending.
+	// - The email has a pending invitation in the org already: 202 with that invitation, unchanged. Zitadel is not called again and no event is written. To change its role, revoke it and invite again.
+	// - The email is an active or deactivated member of this org: 409 `member_exists`.
+	// - Rate limit per caller and per org: 429 `rate_limited` with `Retry-After`.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{orgId}/members (the `IdentityInviteMember` operationId).
+	IdentityInviteMemberWithResponse(ctx context.Context, orgId OrgId, body IdentityInviteMemberJSONRequestBody, reqEditors ...RequestEditorFn) (*IdentityInviteMemberResponse, error)
 
 	// IdentityChangeMemberRoleWithBodyWithResponse Change the role of a member
 	//
@@ -2251,6 +3073,32 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PATCH /v1/orgs/{orgId}/members/{userId} (the `IdentityChangeMemberRole` operationId).
 	IdentityChangeMemberRoleWithResponse(ctx context.Context, orgId OrgId, userId UserId, body IdentityChangeMemberRoleJSONRequestBody, reqEditors ...RequestEditorFn) (*IdentityChangeMemberRoleResponse, error)
+
+	// IdentityDeactivateMemberWithResponse Deactivate a member
+	//
+	// Deactivates the Zitadel user grant of the member. The member keeps the row and the role, but the next token has no org role in this org. Emits `dev.synthwerk.identity.member.deactivated.v1`.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+	// - Only an `owner` deactivates an `owner`. The last active owner stays active (409 `last_owner`).
+	// - Nobody deactivates their own membership (409 `own_membership`).
+	// - A token issued before the change keeps working at other services until it expires. Identity checks the stored status at once.
+	// - A member that is deactivated already answers 200 and emits nothing.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{orgId}/members/{userId}:deactivate (the `IdentityDeactivateMember` operationId).
+	IdentityDeactivateMemberWithResponse(ctx context.Context, orgId OrgId, userId UserId, reqEditors ...RequestEditorFn) (*IdentityDeactivateMemberResponse, error)
+
+	// IdentityReactivateMemberWithResponse Reactivate a member
+	//
+	// Reactivates the Zitadel user grant of a deactivated member, with the role it had. Emits `dev.synthwerk.identity.member.reactivated.v1`.
+	// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+	// - Only an `owner` reactivates an `owner`.
+	// - A member that is active already answers 200 and emits nothing.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{orgId}/members/{userId}:reactivate (the `IdentityReactivateMember` operationId).
+	IdentityReactivateMemberWithResponse(ctx context.Context, orgId OrgId, userId UserId, reqEditors ...RequestEditorFn) (*IdentityReactivateMemberResponse, error)
 }
 
 // IdentityGetWidgetSettingsResponse200Headers the declared response headers of an HTTP 200 response for IdentityGetWidgetSettings
@@ -3085,6 +3933,82 @@ func (r IdentityUpdateAppResponse) ContentType() string {
 	return ""
 }
 
+// IdentityListAuditEventsResponse401Headers the declared response headers of an HTTP 401 response for IdentityListAuditEvents
+type IdentityListAuditEventsResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type IdentityListAuditEventsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AuditEventPage
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *InvalidRequest
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Unauthenticated
+	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
+	ApplicationproblemJSON403 *Forbidden
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *NotFound
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *IdentityListAuditEventsResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r IdentityListAuditEventsResponse) GetJSON200() *AuditEventPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r IdentityListAuditEventsResponse) GetApplicationproblemJSON400() *InvalidRequest {
+	return r.ApplicationproblemJSON400
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r IdentityListAuditEventsResponse) GetApplicationproblemJSON401() *Unauthenticated {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
+func (r IdentityListAuditEventsResponse) GetApplicationproblemJSON403() *Forbidden {
+	return r.ApplicationproblemJSON403
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r IdentityListAuditEventsResponse) GetApplicationproblemJSON404() *NotFound {
+	return r.ApplicationproblemJSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r IdentityListAuditEventsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r IdentityListAuditEventsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IdentityListAuditEventsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IdentityListAuditEventsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // IdentityGetOrgEntitlementsResponse401Headers the declared response headers of an HTTP 401 response for IdentityGetOrgEntitlements
 type IdentityGetOrgEntitlementsResponse401Headers struct {
 	WWWAuthenticate *string
@@ -3141,6 +4065,151 @@ func (r IdentityGetOrgEntitlementsResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r IdentityGetOrgEntitlementsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// IdentityListInvitationsResponse401Headers the declared response headers of an HTTP 401 response for IdentityListInvitations
+type IdentityListInvitationsResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type IdentityListInvitationsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *InvitationPage
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *InvalidRequest
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Unauthenticated
+	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
+	ApplicationproblemJSON403 *Forbidden
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *NotFound
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *IdentityListInvitationsResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r IdentityListInvitationsResponse) GetJSON200() *InvitationPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r IdentityListInvitationsResponse) GetApplicationproblemJSON400() *InvalidRequest {
+	return r.ApplicationproblemJSON400
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r IdentityListInvitationsResponse) GetApplicationproblemJSON401() *Unauthenticated {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
+func (r IdentityListInvitationsResponse) GetApplicationproblemJSON403() *Forbidden {
+	return r.ApplicationproblemJSON403
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r IdentityListInvitationsResponse) GetApplicationproblemJSON404() *NotFound {
+	return r.ApplicationproblemJSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r IdentityListInvitationsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r IdentityListInvitationsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IdentityListInvitationsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IdentityListInvitationsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// IdentityRevokeInvitationResponse401Headers the declared response headers of an HTTP 401 response for IdentityRevokeInvitation
+type IdentityRevokeInvitationResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type IdentityRevokeInvitationResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Unauthenticated
+	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
+	ApplicationproblemJSON403 *Forbidden
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *NotFound
+	// ApplicationproblemJSON502 the response for an HTTP 502 `application/problem+json` response
+	ApplicationproblemJSON502 *UpstreamUnavailable
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *IdentityRevokeInvitationResponse401Headers
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r IdentityRevokeInvitationResponse) GetApplicationproblemJSON401() *Unauthenticated {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
+func (r IdentityRevokeInvitationResponse) GetApplicationproblemJSON403() *Forbidden {
+	return r.ApplicationproblemJSON403
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r IdentityRevokeInvitationResponse) GetApplicationproblemJSON404() *NotFound {
+	return r.ApplicationproblemJSON404
+}
+
+// GetApplicationproblemJSON502 returns the response for an HTTP 502 `application/problem+json` response
+func (r IdentityRevokeInvitationResponse) GetApplicationproblemJSON502() *UpstreamUnavailable {
+	return r.ApplicationproblemJSON502
+}
+
+// GetBody returns the raw response body bytes
+func (r IdentityRevokeInvitationResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r IdentityRevokeInvitationResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IdentityRevokeInvitationResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IdentityRevokeInvitationResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -3217,6 +4286,110 @@ func (r IdentityListMembersResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r IdentityListMembersResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// IdentityInviteMemberResponse401Headers the declared response headers of an HTTP 401 response for IdentityInviteMember
+type IdentityInviteMemberResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+// IdentityInviteMemberResponse429Headers the declared response headers of an HTTP 429 response for IdentityInviteMember
+type IdentityInviteMemberResponse429Headers struct {
+	RetryAfter *int
+}
+
+type IdentityInviteMemberResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *Invitation
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *InvalidRequest
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Unauthenticated
+	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
+	ApplicationproblemJSON403 *Forbidden
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *NotFound
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *MemberConflict
+	// ApplicationproblemJSON429 the response for an HTTP 429 `application/problem+json` response
+	ApplicationproblemJSON429 *RateLimited
+	// ApplicationproblemJSON502 the response for an HTTP 502 `application/problem+json` response
+	ApplicationproblemJSON502 *UpstreamUnavailable
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *IdentityInviteMemberResponse401Headers
+	// Headers429 the parsed response headers for an HTTP 429 response
+	Headers429 *IdentityInviteMemberResponse429Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r IdentityInviteMemberResponse) GetJSON202() *Invitation {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r IdentityInviteMemberResponse) GetApplicationproblemJSON400() *InvalidRequest {
+	return r.ApplicationproblemJSON400
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r IdentityInviteMemberResponse) GetApplicationproblemJSON401() *Unauthenticated {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
+func (r IdentityInviteMemberResponse) GetApplicationproblemJSON403() *Forbidden {
+	return r.ApplicationproblemJSON403
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r IdentityInviteMemberResponse) GetApplicationproblemJSON404() *NotFound {
+	return r.ApplicationproblemJSON404
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r IdentityInviteMemberResponse) GetApplicationproblemJSON409() *MemberConflict {
+	return r.ApplicationproblemJSON409
+}
+
+// GetApplicationproblemJSON429 returns the response for an HTTP 429 `application/problem+json` response
+func (r IdentityInviteMemberResponse) GetApplicationproblemJSON429() *RateLimited {
+	return r.ApplicationproblemJSON429
+}
+
+// GetApplicationproblemJSON502 returns the response for an HTTP 502 `application/problem+json` response
+func (r IdentityInviteMemberResponse) GetApplicationproblemJSON502() *UpstreamUnavailable {
+	return r.ApplicationproblemJSON502
+}
+
+// GetBody returns the raw response body bytes
+func (r IdentityInviteMemberResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r IdentityInviteMemberResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IdentityInviteMemberResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IdentityInviteMemberResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -3307,6 +4480,172 @@ func (r IdentityChangeMemberRoleResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r IdentityChangeMemberRoleResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// IdentityDeactivateMemberResponse401Headers the declared response headers of an HTTP 401 response for IdentityDeactivateMember
+type IdentityDeactivateMemberResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type IdentityDeactivateMemberResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Member
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Unauthenticated
+	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
+	ApplicationproblemJSON403 *Forbidden
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *NotFound
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *MemberConflict
+	// ApplicationproblemJSON502 the response for an HTTP 502 `application/problem+json` response
+	ApplicationproblemJSON502 *UpstreamUnavailable
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *IdentityDeactivateMemberResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r IdentityDeactivateMemberResponse) GetJSON200() *Member {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r IdentityDeactivateMemberResponse) GetApplicationproblemJSON401() *Unauthenticated {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
+func (r IdentityDeactivateMemberResponse) GetApplicationproblemJSON403() *Forbidden {
+	return r.ApplicationproblemJSON403
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r IdentityDeactivateMemberResponse) GetApplicationproblemJSON404() *NotFound {
+	return r.ApplicationproblemJSON404
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r IdentityDeactivateMemberResponse) GetApplicationproblemJSON409() *MemberConflict {
+	return r.ApplicationproblemJSON409
+}
+
+// GetApplicationproblemJSON502 returns the response for an HTTP 502 `application/problem+json` response
+func (r IdentityDeactivateMemberResponse) GetApplicationproblemJSON502() *UpstreamUnavailable {
+	return r.ApplicationproblemJSON502
+}
+
+// GetBody returns the raw response body bytes
+func (r IdentityDeactivateMemberResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r IdentityDeactivateMemberResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IdentityDeactivateMemberResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IdentityDeactivateMemberResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// IdentityReactivateMemberResponse401Headers the declared response headers of an HTTP 401 response for IdentityReactivateMember
+type IdentityReactivateMemberResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type IdentityReactivateMemberResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Member
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Unauthenticated
+	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
+	ApplicationproblemJSON403 *Forbidden
+	// ApplicationproblemJSON404 the response for an HTTP 404 `application/problem+json` response
+	ApplicationproblemJSON404 *NotFound
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *MemberConflict
+	// ApplicationproblemJSON502 the response for an HTTP 502 `application/problem+json` response
+	ApplicationproblemJSON502 *UpstreamUnavailable
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *IdentityReactivateMemberResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r IdentityReactivateMemberResponse) GetJSON200() *Member {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r IdentityReactivateMemberResponse) GetApplicationproblemJSON401() *Unauthenticated {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
+func (r IdentityReactivateMemberResponse) GetApplicationproblemJSON403() *Forbidden {
+	return r.ApplicationproblemJSON403
+}
+
+// GetApplicationproblemJSON404 returns the response for an HTTP 404 `application/problem+json` response
+func (r IdentityReactivateMemberResponse) GetApplicationproblemJSON404() *NotFound {
+	return r.ApplicationproblemJSON404
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r IdentityReactivateMemberResponse) GetApplicationproblemJSON409() *MemberConflict {
+	return r.ApplicationproblemJSON409
+}
+
+// GetApplicationproblemJSON502 returns the response for an HTTP 502 `application/problem+json` response
+func (r IdentityReactivateMemberResponse) GetApplicationproblemJSON502() *UpstreamUnavailable {
+	return r.ApplicationproblemJSON502
+}
+
+// GetBody returns the raw response body bytes
+func (r IdentityReactivateMemberResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r IdentityReactivateMemberResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IdentityReactivateMemberResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IdentityReactivateMemberResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -3570,6 +4909,25 @@ func (c *ClientWithResponses) IdentityUpdateAppWithResponse(ctx context.Context,
 	return ParseIdentityUpdateAppResponse(rsp)
 }
 
+// IdentityListAuditEventsWithResponse List the audit events of an org
+//
+// The admin actions of the org, newest first. Each item is an event identity wrote to its outbox for the org, kept after the outbox row is gone.
+// - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` gets 403. An `operator` gets 403.
+// - Event types: `org.created`, `member.invited`, `member.role_changed`, `member.deactivated`, `member.reactivated`, `app.created`, `org.entitlements_changed`, and later org events of identity. Clients must accept types they do not know.
+// - `data` is the event data, as its schema in `events/identity` says. No email, no personal name.
+// - Cursor paging, max 100 per page.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{orgId}/audit-events (the `IdentityListAuditEvents` operationId).
+func (c *ClientWithResponses) IdentityListAuditEventsWithResponse(ctx context.Context, orgId OrgId, params *IdentityListAuditEventsParams, reqEditors ...RequestEditorFn) (*IdentityListAuditEventsResponse, error) {
+	rsp, err := c.IdentityListAuditEvents(ctx, orgId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIdentityListAuditEventsResponse(rsp)
+}
+
 // IdentityGetOrgEntitlementsWithResponse Get the entitlements of an org
 //
 // The plan and the limits of the org. Needs an org role in the org (any role), or the role `operator`.
@@ -3585,9 +4943,47 @@ func (c *ClientWithResponses) IdentityGetOrgEntitlementsWithResponse(ctx context
 	return ParseIdentityGetOrgEntitlementsResponse(rsp)
 }
 
+// IdentityListInvitationsWithResponse List pending invitations
+//
+// Pending invitations of the org, newest first. An invitation stops being pending when the invitee signs in to the org or an admin revokes it.
+// - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` or an `operator` gets 403.
+// - It holds the email the admin typed. It never says whether the email has an account.
+// - Cursor paging, max 100 per page.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{orgId}/invitations (the `IdentityListInvitations` operationId).
+func (c *ClientWithResponses) IdentityListInvitationsWithResponse(ctx context.Context, orgId OrgId, params *IdentityListInvitationsParams, reqEditors ...RequestEditorFn) (*IdentityListInvitationsResponse, error) {
+	rsp, err := c.IdentityListInvitations(ctx, orgId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIdentityListInvitationsResponse(rsp)
+}
+
+// IdentityRevokeInvitationWithResponse Revoke a pending invitation
+//
+// Revokes a pending invitation. Emits `dev.synthwerk.identity.member.invite_revoked.v1` with the invitation id.
+// - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` or an `operator` gets 403.
+// - Only an `owner` revokes an invitation for the role `owner`.
+// - When identity created a Zitadel user for the invitation, identity deletes that user. The invitee cannot sign in to the org.
+// - The invitee does not become a member later: a revoked invitation is never accepted.
+// - An invitation that is not pending (accepted, revoked or unknown): 404.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{orgId}/invitations/{invitationId} (the `IdentityRevokeInvitation` operationId).
+func (c *ClientWithResponses) IdentityRevokeInvitationWithResponse(ctx context.Context, orgId OrgId, invitationId InvitationId, reqEditors ...RequestEditorFn) (*IdentityRevokeInvitationResponse, error) {
+	rsp, err := c.IdentityRevokeInvitation(ctx, orgId, invitationId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIdentityRevokeInvitationResponse(rsp)
+}
+
 // IdentityListMembersWithResponse List members
 //
-// Members of the org and their org roles. Needs the role `owner` or `admin` in the org, or `operator`. The stored membership must also be `owner` or `admin`, so a token issued before a demotion gets 403. Cursor paging, max 100 per page.
+// Members of the org, their org roles and their status. Deactivated members are listed too. An invitee is listed after the first sign-in to the org; pending invitations are in `listInvitations`. Needs the role `owner` or `admin` in the org, or `operator`. The stored membership must also be an active `owner` or `admin`, so a token issued before a demotion or a deactivation gets 403. Cursor paging, max 100 per page.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -3598,6 +4994,54 @@ func (c *ClientWithResponses) IdentityListMembersWithResponse(ctx context.Contex
 		return nil, err
 	}
 	return ParseIdentityListMembersResponse(rsp)
+}
+
+// IdentityInviteMemberWithBodyWithResponse Invite a member
+//
+// Creates a pending invitation. Emits `dev.synthwerk.identity.member.invited.v1` with the invitation id.
+// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
+// - Only an `owner` invites an `owner`.
+// - A new email: identity also creates the Zitadel user and its user grant, and Zitadel sends the invite mail (Mailpit in local, Resend in dev and prd).
+// - An email of a user of another org: adding users of another org is not supported yet. The invitation stays pending and is never accepted.
+// - Both cases look the same: the same 202 answer, the same pending item in `listInvitations`, the same audit event, and no item in `listMembers`. The API does not show which emails have an account.
+// - The invitee shows in `listMembers` after the first sign-in to the org. Then the invitation is no longer pending.
+// - The email has a pending invitation in the org already: 202 with that invitation, unchanged. Zitadel is not called again and no event is written. To change its role, revoke it and invite again.
+// - The email is an active or deactivated member of this org: 409 `member_exists`.
+// - Rate limit per caller and per org: 429 `rate_limited` with `Retry-After`.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{orgId}/members (the `IdentityInviteMember` operationId).
+func (c *ClientWithResponses) IdentityInviteMemberWithBodyWithResponse(ctx context.Context, orgId OrgId, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*IdentityInviteMemberResponse, error) {
+	rsp, err := c.IdentityInviteMemberWithBody(ctx, orgId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIdentityInviteMemberResponse(rsp)
+}
+
+// IdentityInviteMemberWithResponse Invite a member
+//
+// Creates a pending invitation. Emits `dev.synthwerk.identity.member.invited.v1` with the invitation id.
+// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` gets 403. An `operator` gets 403: operator access is read only.
+// - Only an `owner` invites an `owner`.
+// - A new email: identity also creates the Zitadel user and its user grant, and Zitadel sends the invite mail (Mailpit in local, Resend in dev and prd).
+// - An email of a user of another org: adding users of another org is not supported yet. The invitation stays pending and is never accepted.
+// - Both cases look the same: the same 202 answer, the same pending item in `listInvitations`, the same audit event, and no item in `listMembers`. The API does not show which emails have an account.
+// - The invitee shows in `listMembers` after the first sign-in to the org. Then the invitation is no longer pending.
+// - The email has a pending invitation in the org already: 202 with that invitation, unchanged. Zitadel is not called again and no event is written. To change its role, revoke it and invite again.
+// - The email is an active or deactivated member of this org: 409 `member_exists`.
+// - Rate limit per caller and per org: 429 `rate_limited` with `Retry-After`.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{orgId}/members (the `IdentityInviteMember` operationId).
+func (c *ClientWithResponses) IdentityInviteMemberWithResponse(ctx context.Context, orgId OrgId, body IdentityInviteMemberJSONRequestBody, reqEditors ...RequestEditorFn) (*IdentityInviteMemberResponse, error) {
+	rsp, err := c.IdentityInviteMember(ctx, orgId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIdentityInviteMemberResponse(rsp)
 }
 
 // IdentityChangeMemberRoleWithBodyWithResponse Change the role of a member
@@ -3638,6 +5082,44 @@ func (c *ClientWithResponses) IdentityChangeMemberRoleWithResponse(ctx context.C
 		return nil, err
 	}
 	return ParseIdentityChangeMemberRoleResponse(rsp)
+}
+
+// IdentityDeactivateMemberWithResponse Deactivate a member
+//
+// Deactivates the Zitadel user grant of the member. The member keeps the row and the role, but the next token has no org role in this org. Emits `dev.synthwerk.identity.member.deactivated.v1`.
+// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+// - Only an `owner` deactivates an `owner`. The last active owner stays active (409 `last_owner`).
+// - Nobody deactivates their own membership (409 `own_membership`).
+// - A token issued before the change keeps working at other services until it expires. Identity checks the stored status at once.
+// - A member that is deactivated already answers 200 and emits nothing.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{orgId}/members/{userId}:deactivate (the `IdentityDeactivateMember` operationId).
+func (c *ClientWithResponses) IdentityDeactivateMemberWithResponse(ctx context.Context, orgId OrgId, userId UserId, reqEditors ...RequestEditorFn) (*IdentityDeactivateMemberResponse, error) {
+	rsp, err := c.IdentityDeactivateMember(ctx, orgId, userId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIdentityDeactivateMemberResponse(rsp)
+}
+
+// IdentityReactivateMemberWithResponse Reactivate a member
+//
+// Reactivates the Zitadel user grant of a deactivated member, with the role it had. Emits `dev.synthwerk.identity.member.reactivated.v1`.
+// - Needs the role `owner` or `admin` in the org. The stored membership must agree. A `member` or an `operator` gets 403.
+// - Only an `owner` reactivates an `owner`.
+// - A member that is active already answers 200 and emits nothing.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{orgId}/members/{userId}:reactivate (the `IdentityReactivateMember` operationId).
+func (c *ClientWithResponses) IdentityReactivateMemberWithResponse(ctx context.Context, orgId OrgId, userId UserId, reqEditors ...RequestEditorFn) (*IdentityReactivateMemberResponse, error) {
+	rsp, err := c.IdentityReactivateMember(ctx, orgId, userId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIdentityReactivateMemberResponse(rsp)
 }
 
 // ParseIdentityGetWidgetSettingsResponse parses an HTTP response from a IdentityGetWidgetSettingsWithResponse call
@@ -4406,6 +5888,73 @@ func ParseIdentityUpdateAppResponse(rsp *http.Response) (*IdentityUpdateAppRespo
 	return response, nil
 }
 
+// ParseIdentityListAuditEventsResponse parses an HTTP response from a IdentityListAuditEventsWithResponse call
+func ParseIdentityListAuditEventsResponse(rsp *http.Response) (*IdentityListAuditEventsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IdentityListAuditEventsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AuditEventPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest InvalidRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthenticated
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers IdentityListAuditEventsResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseIdentityGetOrgEntitlementsResponse parses an HTTP response from a IdentityGetOrgEntitlementsWithResponse call
 func ParseIdentityGetOrgEntitlementsResponse(rsp *http.Response) (*IdentityGetOrgEntitlementsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -4446,6 +5995,136 @@ func ParseIdentityGetOrgEntitlementsResponse(rsp *http.Response) (*IdentityGetOr
 	switch {
 	case rsp.StatusCode == 401:
 		var headers IdentityGetOrgEntitlementsResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseIdentityListInvitationsResponse parses an HTTP response from a IdentityListInvitationsWithResponse call
+func ParseIdentityListInvitationsResponse(rsp *http.Response) (*IdentityListInvitationsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IdentityListInvitationsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest InvitationPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest InvalidRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthenticated
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers IdentityListInvitationsResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseIdentityRevokeInvitationResponse parses an HTTP response from a IdentityRevokeInvitationWithResponse call
+func ParseIdentityRevokeInvitationResponse(rsp *http.Response) (*IdentityRevokeInvitationResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IdentityRevokeInvitationResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthenticated
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
+		var dest UpstreamUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON502 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers IdentityRevokeInvitationResponse401Headers
 		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
@@ -4526,6 +6205,104 @@ func ParseIdentityListMembersResponse(rsp *http.Response) (*IdentityListMembersR
 	return response, nil
 }
 
+// ParseIdentityInviteMemberResponse parses an HTTP response from a IdentityInviteMemberWithResponse call
+func ParseIdentityInviteMemberResponse(rsp *http.Response) (*IdentityInviteMemberResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IdentityInviteMemberResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest Invitation
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest InvalidRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthenticated
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest MemberConflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest RateLimited
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
+		var dest UpstreamUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON502 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers IdentityInviteMemberResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	case rsp.StatusCode == 429:
+		var headers IdentityInviteMemberResponse429Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		response.Headers429 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseIdentityChangeMemberRoleResponse parses an HTTP response from a IdentityChangeMemberRoleWithResponse call
 func ParseIdentityChangeMemberRoleResponse(rsp *http.Response) (*IdentityChangeMemberRoleResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -4594,6 +6371,154 @@ func ParseIdentityChangeMemberRoleResponse(rsp *http.Response) (*IdentityChangeM
 	switch {
 	case rsp.StatusCode == 401:
 		var headers IdentityChangeMemberRoleResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseIdentityDeactivateMemberResponse parses an HTTP response from a IdentityDeactivateMemberWithResponse call
+func ParseIdentityDeactivateMemberResponse(rsp *http.Response) (*IdentityDeactivateMemberResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IdentityDeactivateMemberResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Member
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthenticated
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest MemberConflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
+		var dest UpstreamUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON502 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers IdentityDeactivateMemberResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseIdentityReactivateMemberResponse parses an HTTP response from a IdentityReactivateMemberWithResponse call
+func ParseIdentityReactivateMemberResponse(rsp *http.Response) (*IdentityReactivateMemberResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IdentityReactivateMemberResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Member
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthenticated
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest MemberConflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
+		var dest UpstreamUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON502 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers IdentityReactivateMemberResponse401Headers
 		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {

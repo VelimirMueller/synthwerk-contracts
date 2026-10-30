@@ -83,3 +83,39 @@ events:
     status: draft
     schema: identity/org.entitlements_changed.v1.schema.json
     example: examples/dev.synthwerk.identity.org.entitlements_changed.v1.json
+
+  - type: dev.synthwerk.identity.member.invited.v1
+    nats_subject: evt.identity.member.invited.v1
+    stream: EVT_IDENTITY
+    producer: identity
+    consumers: [pulse]
+    status: draft
+    schema: identity/member.invited.v1.schema.json
+    example: examples/dev.synthwerk.identity.member.invited.v1.json
+
+  - type: dev.synthwerk.identity.member.invite_revoked.v1
+    nats_subject: evt.identity.member.invite_revoked.v1
+    stream: EVT_IDENTITY
+    producer: identity
+    consumers: [pulse]
+    status: draft
+    schema: identity/member.invite_revoked.v1.schema.json
+    example: examples/dev.synthwerk.identity.member.invite_revoked.v1.json
+
+  - type: dev.synthwerk.identity.member.deactivated.v1
+    nats_subject: evt.identity.member.deactivated.v1
+    stream: EVT_IDENTITY
+    producer: identity
+    consumers: [pulse]
+    status: draft
+    schema: identity/member.deactivated.v1.schema.json
+    example: examples/dev.synthwerk.identity.member.deactivated.v1.json
+
+  - type: dev.synthwerk.identity.member.reactivated.v1
+    nats_subject: evt.identity.member.reactivated.v1
+    stream: EVT_IDENTITY
+    producer: identity
+    consumers: [pulse]
+    status: draft
+    schema: identity/member.reactivated.v1.schema.json
+    example: examples/dev.synthwerk.identity.member.reactivated.v1.json

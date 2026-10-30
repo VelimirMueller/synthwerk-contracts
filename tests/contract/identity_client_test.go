@@ -52,6 +52,27 @@ func TestIdentityClientRoutes(t *testing.T) {
 		{"listMembers", "GET /v1/orgs/" + org.String() + "/members", func() (result, error) {
 			return c.IdentityListMembersWithResponse(ctx, org, &identity.IdentityListMembersParams{Limit: &limit})
 		}},
+		{"inviteMember", "POST /v1/orgs/" + org.String() + "/members", func() (result, error) {
+			return c.IdentityInviteMemberWithResponse(ctx, org, identity.InviteMemberRequest{Email: "ada@example.com", Role: identity.OrgRoleMember})
+		}},
+		{"changeMemberRole", "PATCH /v1/orgs/" + org.String() + "/members/u1", func() (result, error) {
+			return c.IdentityChangeMemberRoleWithResponse(ctx, org, "u1", identity.ChangeMemberRoleRequest{Role: identity.OrgRoleAdmin})
+		}},
+		{"deactivateMember", "POST /v1/orgs/" + org.String() + "/members/u1:deactivate", func() (result, error) {
+			return c.IdentityDeactivateMemberWithResponse(ctx, org, "u1")
+		}},
+		{"reactivateMember", "POST /v1/orgs/" + org.String() + "/members/u1:reactivate", func() (result, error) {
+			return c.IdentityReactivateMemberWithResponse(ctx, org, "u1")
+		}},
+		{"listInvitations", "GET /v1/orgs/" + org.String() + "/invitations", func() (result, error) {
+			return c.IdentityListInvitationsWithResponse(ctx, org, &identity.IdentityListInvitationsParams{Limit: &limit, Cursor: &cursor})
+		}},
+		{"revokeInvitation", "DELETE /v1/orgs/" + org.String() + "/invitations/" + app.String(), func() (result, error) {
+			return c.IdentityRevokeInvitationWithResponse(ctx, org, app)
+		}},
+		{"listAuditEvents", "GET /v1/orgs/" + org.String() + "/audit-events", func() (result, error) {
+			return c.IdentityListAuditEventsWithResponse(ctx, org, &identity.IdentityListAuditEventsParams{Limit: &limit, Cursor: &cursor})
+		}},
 		{"listApps", "GET /v1/orgs/" + org.String() + "/apps", func() (result, error) {
 			return c.IdentityListAppsWithResponse(ctx, org, &identity.IdentityListAppsParams{Limit: &limit, Cursor: &cursor})
 		}},

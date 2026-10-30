@@ -92,6 +92,125 @@ func TestIdentityContract(t *testing.T) {
 		}
 	})
 
+	t.Run("InviteMember - spec example - 202 with the pending invitation", func(t *testing.T) {
+		body := toJSON(t, spec.Paths["/v1/orgs/{orgId}/members"].Post.Responses["202"].Content["application/json"].Example)
+		strict(t, body, &identity.Invitation{})
+
+		client, err := identity.NewClientWithResponses(serveAs(t, http.StatusAccepted, "application/json", body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := client.IdentityInviteMemberWithResponse(ctx, uuid.MustParse("0199f3a0-5b6c-7d8e-9f0a-1b2c3d4e5f60"),
+			identity.InviteMemberRequest{Email: "ada@example.com", Role: identity.OrgRoleMember})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.JSON202 == nil || res.JSON202.Role != identity.OrgRoleMember || res.JSON202.Email != "ada@example.com" {
+			t.Fatalf("got %+v", res.JSON202)
+		}
+	})
+
+	t.Run("ListInvitations - spec example - pending invitations", func(t *testing.T) {
+		body := toJSON(t, spec.Paths["/v1/orgs/{orgId}/invitations"].Get.Responses["200"].Content["application/json"].Example)
+		strict(t, body, &identity.InvitationPage{})
+
+		client, err := identity.NewClientWithResponses(serveAs(t, http.StatusOK, "application/json", body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := client.IdentityListInvitationsWithResponse(ctx, uuid.MustParse("0199f3a0-5b6c-7d8e-9f0a-1b2c3d4e5f60"), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.JSON200 == nil || len(res.JSON200.Items) != 1 || res.JSON200.Items[0].InvitedBy == "" {
+			t.Fatalf("got %+v", res.JSON200)
+		}
+	})
+
+	t.Run("InviteMember - too many invites - 429 problem with code rate_limited", func(t *testing.T) {
+		r := spec.Components.Responses["RateLimited"]
+		body := toJSON(t, r.Content["application/problem+json"].Example)
+		var p identity.Problem
+		strict(t, body, &p)
+		if p.Code != "rate_limited" || p.Status != http.StatusTooManyRequests {
+			t.Fatalf("got %+v", p)
+		}
+	})
+
+	t.Run("InviteMember - email is a user already - 409 problem with code member_exists", func(t *testing.T) {
+		body := toJSON(t, spec.Components.Responses["MemberConflict"].Content["application/problem+json"].Example)
+		var p identity.Problem
+		strict(t, body, &p)
+		if p.Code != "member_exists" || p.Status != http.StatusConflict {
+			t.Fatalf("got %+v", p)
+		}
+	})
+
+	for _, tc := range []struct {
+		name, path string
+		want       identity.MemberStatus
+		call       func(c *identity.ClientWithResponses) (*identity.Member, error)
+	}{
+		{"DeactivateMember", "/v1/orgs/{orgId}/members/{userId}:deactivate", identity.MemberStatusDeactivated, func(c *identity.ClientWithResponses) (*identity.Member, error) {
+			res, err := c.IdentityDeactivateMemberWithResponse(ctx, uuid.MustParse("0199f3a0-5b6c-7d8e-9f0a-1b2c3d4e5f60"), "396370217707541255")
+			if err != nil {
+				return nil, err
+			}
+			return res.JSON200, nil
+		}},
+		{"ReactivateMember", "/v1/orgs/{orgId}/members/{userId}:reactivate", identity.MemberStatusActive, func(c *identity.ClientWithResponses) (*identity.Member, error) {
+			res, err := c.IdentityReactivateMemberWithResponse(ctx, uuid.MustParse("0199f3a0-5b6c-7d8e-9f0a-1b2c3d4e5f60"), "396370217707541255")
+			if err != nil {
+				return nil, err
+			}
+			return res.JSON200, nil
+		}},
+	} {
+		t.Run(tc.name+" - spec example - member with the new status", func(t *testing.T) {
+			body := toJSON(t, spec.Paths[tc.path].Post.Responses["200"].Content["application/json"].Example)
+			strict(t, body, &identity.Member{})
+			client, err := identity.NewClientWithResponses(serveAs(t, http.StatusOK, "application/json", body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			m, err := tc.call(client)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if m == nil || m.Status != tc.want || !m.Status.Valid() {
+				t.Fatalf("got %+v", m)
+			}
+		})
+	}
+
+	t.Run("ListAuditEvents - spec example - newest first, event data, next cursor", func(t *testing.T) {
+		body := toJSON(t, spec.Paths["/v1/orgs/{orgId}/audit-events"].Get.Responses["200"].Content["application/json"].Example)
+		strict(t, body, &identity.AuditEventPage{})
+
+		client, err := identity.NewClientWithResponses(serveAs(t, http.StatusOK, "application/json", body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := client.IdentityListAuditEventsWithResponse(ctx, uuid.MustParse("0199f3a0-5b6c-7d8e-9f0a-1b2c3d4e5f60"), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		page := res.JSON200
+		if page == nil || len(page.Items) != 2 || page.NextCursor == nil {
+			t.Fatalf("got %+v", page)
+		}
+		first := page.Items[0]
+		if first.Type != "dev.synthwerk.identity.member.role_changed.v1" || first.Data["new_role"] != "admin" || !first.Time.After(page.Items[1].Time) {
+			t.Fatalf("got %+v", first)
+		}
+	})
+
+	t.Run("MemberStatus - enum - active and deactivated only", func(t *testing.T) {
+		if !identity.MemberStatusActive.Valid() || !identity.MemberStatusDeactivated.Valid() || identity.MemberStatus("pending").Valid() {
+			t.Fatal("MemberStatus enum")
+		}
+	})
+
 	t.Run("ListApps - spec example - one page of apps with origins", func(t *testing.T) {
 		body := toJSON(t, spec.Paths["/v1/orgs/{orgId}/apps"].Get.Responses["200"].Content["application/json"].Example)
 		strict(t, body, &identity.AppPage{})
