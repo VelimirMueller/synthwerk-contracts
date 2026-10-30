@@ -823,6 +823,7 @@ export interface components {
          *     | `origin_not_allowed` | 403 | The `Origin` header is not in the allow-list of the app. |
          *     | `app_limit_reached` | 403 | The org has `apps_per_org` apps already. |
          *     | `upstream_unavailable` | 502 | Zitadel did not take the change. Nothing changed. |
+         *     | `upstream_unavailable` | 503 | The Zitadel setup is not finished (no project id yet). Nothing changed. Retry after `Retry-After` seconds. |
          *     | `recent_mfa_required` | 403 | Account delete without a sign-in with MFA in the last 15 minutes. |
          */
         Problem: {
@@ -1089,6 +1090,26 @@ export interface components {
                  *       "title": "Upstream unavailable",
                  *       "status": 502,
                  *       "code": "upstream_unavailable"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description The Zitadel setup is not finished, so identity does not know the project id yet. Code `upstream_unavailable`. Nothing changed. Retry after the seconds in `Retry-After`. */
+        ZitadelNotReady: {
+            headers: {
+                /** @description Seconds until the next try. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://schemas.synthwerk.dev/problems/upstream_unavailable",
+                 *       "title": "Upstream unavailable",
+                 *       "status": 503,
+                 *       "code": "upstream_unavailable",
+                 *       "detail": "The Zitadel setup is not finished. Retry later."
                  *     }
                  */
                 "application/problem+json": components["schemas"]["Problem"];
@@ -1531,6 +1552,7 @@ export interface operations {
             409: components["responses"]["MemberConflict"];
             429: components["responses"]["RateLimited"];
             502: components["responses"]["UpstreamUnavailable"];
+            503: components["responses"]["ZitadelNotReady"];
         };
     };
     "identity.changeMemberRole": {
@@ -1579,6 +1601,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["RoleConflict"];
             502: components["responses"]["UpstreamUnavailable"];
+            503: components["responses"]["ZitadelNotReady"];
         };
     };
     "identity.deactivateMember": {
@@ -1617,6 +1640,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["MemberConflict"];
             502: components["responses"]["UpstreamUnavailable"];
+            503: components["responses"]["ZitadelNotReady"];
         };
     };
     "identity.reactivateMember": {
@@ -1655,6 +1679,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["MemberConflict"];
             502: components["responses"]["UpstreamUnavailable"];
+            503: components["responses"]["ZitadelNotReady"];
         };
     };
     "identity.listInvitations": {
@@ -1727,6 +1752,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             502: components["responses"]["UpstreamUnavailable"];
+            503: components["responses"]["ZitadelNotReady"];
         };
     };
     "identity.listAuditEvents": {

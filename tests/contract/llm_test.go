@@ -19,6 +19,7 @@ import (
 // specOp is the part of an operation the tests read: the response examples.
 type specOp struct {
 	Responses map[string]struct {
+		Ref     string `yaml:"$ref"`
 		Content map[string]struct {
 			Example  any `yaml:"example"`
 			Examples map[string]struct {

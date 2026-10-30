@@ -124,6 +124,7 @@ updated: 2026-10-30
 | 409 | `member_exists` | The invited email is an active or deactivated member of this org. |
 | 429 | `rate_limited` | Too many invites from the caller or for the org. |
 | 502 | `upstream_unavailable` | Zitadel did not take the change. Nothing changed. |
+| 503 | `upstream_unavailable` | The Zitadel setup is not finished (identity has no project id yet): invite, role change, deactivate, reactivate, revoke invite. Nothing changed. Retry after `Retry-After` seconds. |
 
 ## Tests
 
@@ -141,6 +142,7 @@ updated: 2026-10-30
 - `tests/contract/identity_test.go` — `InviteMember - spec example - 202 with the pending invitation`
 - `tests/contract/identity_test.go` — `ListInvitations - spec example - pending invitations`
 - `tests/contract/identity_test.go` — `InviteMember - too many invites - 429 problem with code rate_limited`
+- `tests/contract/identity_test.go` — `InviteMember - Zitadel setup not finished - 503 problem with code upstream_unavailable and Retry-After`
 - `tests/contract/identity_test.go` — `InviteMember - email is a user already - 409 problem with code member_exists`
 - `tests/contract/identity_test.go` — `DeactivateMember - spec example - member with the new status` (and `ReactivateMember`)
 - `tests/contract/identity_test.go` — `ListAuditEvents - spec example - newest first, event data, next cursor`
@@ -174,3 +176,4 @@ updated: 2026-10-30
 | 2026-10-30 | Org routes, entitlements and the widget token need an active stored membership; a deactivated or invited member gets 404 (synthwerk#37 security review). Wording only. Spec 0.5.1. |
 | 2026-10-30 | The audit list also shows `dev.synthwerk.llm.ai_settings.changed.v1`, which identity reads from `EVT_LLM` (synthwerk#39). Spec 0.6.0. |
 | 2026-10-30 | `DELETE /v1/me` reads the recent sign-in from a fresh ID token in the optional header `X-Synthwerk-Id-Token`; kit/auth adds `IDTokenVerifier` (synthwerk#41). Spec 0.7.0. |
+| 2026-10-30 | The five routes that write to Zitadel also list 503 `upstream_unavailable` with `Retry-After`: identity answers it until it knows the Zitadel project id (synthwerk#37). Spec 0.7.1. |
