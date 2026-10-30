@@ -80,7 +80,7 @@ updated: 2026-10-30
 
 ## Open points
 
-- The classification and upload routes of vision are not in this spec yet.
+- The classification and upload routes are in the same spec: see [Vision classification and upload API](vision-widget-api.md).
 - Problem details (RFC 9457) for vision errors.
 - The `label_set.changed` event.
 

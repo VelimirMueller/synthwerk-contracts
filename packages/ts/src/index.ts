@@ -59,10 +59,22 @@ export type Label = VisionComponents["schemas"]["Label"];
 export type LabelTopic = VisionComponents["schemas"]["Topic"];
 export type CreateLabelRequest = VisionComponents["schemas"]["CreateLabelRequest"];
 export type Feedback = VisionComponents["schemas"]["Feedback"];
+/** Answer of POST /v1/classifications. `correction` is null when no correction matches. */
+export type Classification = VisionComponents["schemas"]["Classification"];
+export type ScoredLabel = VisionComponents["schemas"]["ScoredLabel"];
+export type ScoredTopic = VisionComponents["schemas"]["ScoredTopic"];
+export type Correction = VisionComponents["schemas"]["Correction"];
+export type ImageInfo = VisionComponents["schemas"]["ImageInfo"];
+export type ModelInfo = VisionComponents["schemas"]["ModelInfo"];
+/** Answer of POST /v1/images: the stored image and its generated id. */
+export type VisionImage = VisionComponents["schemas"]["Image"];
+/** FastAPI error body `{detail}` of vision. Branch on the status, never on `detail`. */
+export type VisionError = VisionComponents["schemas"]["Error"];
 
 /**
- * Client for the vision label-set admin routes. Server side only: the bearer is the vision
- * admin token, a service credential that must never reach a browser.
+ * Client for synthwerk-vision. Two kinds of routes with two different bearers:
+ * - `POST /v1/classifications` and `POST /v1/images`: a widget token (origin-bound, browser).
+ * - The label-set admin routes: the vision admin token. Server side only, never in a browser.
  */
 export function createVisionClient(options: ClientOptions) {
   return createClient<VisionPaths>(options);
