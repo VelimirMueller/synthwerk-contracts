@@ -20,7 +20,7 @@
 | `events/` | CloudEvents envelope, catalog, data schemas per domain, one example per type. |
 | `rules/` | Spectral ruleset, oasdiff severity levels. |
 | `codegen/` | oapi-codegen config per spec. |
-| `go/` | Go module `github.com/VelimirMueller/synthwerk-contracts/go`. `health/`, `llm/` and `identity/` are generated. |
+| `go/` | Go module `github.com/VelimirMueller/synthwerk-contracts/go`. `health/`, `llm/`, `identity/` and `vision/` are generated. |
 | `go/kit/` | Shared Go kit: health, log, otel, cloudevents, outbox, env, auth. See `docs/features/go-service-kit.md`. |
 | `go/examples/service/` | Example service that wires the kit. New Go services start from a copy. |
 | `packages/ts/` | npm package `@synthwerk/contracts`. `src/gen/` is generated. |
