@@ -227,10 +227,14 @@ func (v *Verifier) Verify(ctx context.Context, raw string) (*Principal, error) {
 	if err != nil {
 		return nil, refuse(fmt.Errorf("%w: %w", ErrClaims, err))
 	}
+	p.Issuer = v.issuer
 	p.AMR = strs(all["amr"])
 	p.Raw = all
 	return p, nil
 }
+
+// Issuer is the "iss" this Verifier accepts.
+func (v *Verifier) Issuer() string { return v.issuer }
 
 // Ready loads the key set when it is empty or older than MaxAge. Use it as the
 // readiness check "jwks": it fails while no key is known.

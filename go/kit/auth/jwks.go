@@ -155,13 +155,16 @@ func usable(k jose.JSONWebKey) bool {
 	}
 }
 
+// getJSON fetches u. u is Config.Issuer discovery, Config.JWKSURL or the jwks_uri of
+// the configured issuer: never request data, so no SSRF (gosec G704 is a false
+// positive through the TokenVerifier interface).
 func getJSON(ctx context.Context, client *http.Client, u string, out any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, http.NoBody) //nolint:gosec // G704: u is config, see above
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Accept", "application/json")
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) //nolint:gosec // G704: u is config, see above
 	if err != nil {
 		return err
 	}

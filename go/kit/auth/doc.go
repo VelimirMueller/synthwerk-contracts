@@ -1,5 +1,5 @@
-// Package auth verifies the access tokens of the Synthwerk identity provider (Zitadel)
-// in each service (D-20, D-23). No edge plugin checks JWTs.
+// Package auth verifies the access tokens of the Synthwerk identity provider (Zitadel),
+// and of other issuers a service trusts, in each service (D-20, D-23). No edge plugin checks JWTs.
 //
 //   - Verifier checks the signature against the issuer JWKS, then iss, aud, exp, nbf
 //     and iat with a small leeway. Only RS256 and ES256 pass: never "none", never HS*.
@@ -7,6 +7,10 @@
 //     also refreshes after MaxAge. When a refresh fails, the last good key set stays.
 //   - A ClaimsMapper turns the verified claims into a Principal (subject, org, roles,
 //     scopes). ZitadelMapper is the default. Its claim names are in zitadel.go.
+//   - MultiVerifier accepts more than one issuer: it picks the Verifier by the exact
+//     "iss", and that Verifier checks the token with its own JWKS and audiences.
+//     Principal.Issuer names the issuer; RequireIssuer keeps a route to some issuers.
+//     llm uses it for the widget tokens of synthwerk-identity (synthwerk#30).
 //   - Middleware puts the Principal in the request context. RequireRole, RequireOrg,
 //     RequireScope and RequireMFA guard single routes. Refusals are RFC 9457
 //     problem+json with a stable code: 401 unauthenticated, 403 forbidden or
