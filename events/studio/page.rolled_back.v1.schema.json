@@ -36,7 +36,7 @@
       "minimum": 1
     },
     "previous_version": {
-      "description": "The live version before the roll back. null: nothing was live, for example after an unpublish (synthwerk#108). The builder has no unpublish yet.",
+      "description": "The live version before the roll back. null: nothing was live, for example after an unpublish (synthwerk#108).",
       "type": ["integer", "null"],
       "minimum": 1
     }
