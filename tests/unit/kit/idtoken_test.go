@@ -25,7 +25,7 @@ func TestIDTokenVerifier(t *testing.T) {
 	}
 
 	t.Run("Verify - Zitadel ID token - sub, auth_time, amr and sid", func(t *testing.T) {
-		tok, err := v.Verify(t.Context(), iss.Mint(t, idClaims(nil)))
+		tok, err := v.Verify(t.Context(), iss.Mint(t, idClaims(nil)), "user-7")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -40,7 +40,7 @@ func TestIDTokenVerifier(t *testing.T) {
 		reason error
 	}{
 		{"Verify - access token (no auth_time) - rejects", func(t *testing.T) string {
-			return iss.Mint(t, map[string]any{"aud": []string{authtest.ClientID, "project-1"}})
+			return iss.Mint(t, map[string]any{"sub": "user-7", "aud": []string{authtest.ClientID, "project-1"}})
 		}, auth.ErrClaims},
 		{"Verify - typ at+jwt - rejects", func(t *testing.T) string {
 			return iss.MintType(t, "at+jwt", idClaims(nil))
@@ -67,6 +67,12 @@ func TestIDTokenVerifier(t *testing.T) {
 		{"Verify - no sub - rejects", func(t *testing.T) string {
 			return iss.Mint(t, idClaims(map[string]any{"sub": nil}))
 		}, auth.ErrClaims},
+		{"Verify - ID token of another user - rejects", func(t *testing.T) string {
+			return iss.Mint(t, idClaims(map[string]any{"sub": "user-8"}))
+		}, auth.ErrSubject},
+		{"Verify - azp not a string - rejects", func(t *testing.T) string {
+			return iss.Mint(t, idClaims(map[string]any{"azp": 7}))
+		}, auth.ErrAudience},
 		{"Verify - key not in the JWKS - rejects", func(t *testing.T) string {
 			return iss.MintUnpublished(t, idClaims(nil))
 		}, auth.ErrUnknownKey},
@@ -76,15 +82,21 @@ func TestIDTokenVerifier(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := v.Verify(t.Context(), tc.token(t))
+			_, err := v.Verify(t.Context(), tc.token(t), "user-7")
 			if !errors.Is(err, auth.ErrUnauthenticated) || !errors.Is(err, tc.reason) {
 				t.Fatalf("got %v, want ErrUnauthenticated and %v", err, tc.reason)
 			}
 		})
 	}
 
+	t.Run("Verify - empty expected subject - rejects", func(t *testing.T) {
+		if _, err := v.Verify(t.Context(), iss.Mint(t, idClaims(nil)), ""); !errors.Is(err, auth.ErrSubject) {
+			t.Fatalf("got %v, want ErrSubject", err)
+		}
+	})
+
 	t.Run("Verify - no typ - accepts", func(t *testing.T) {
-		if _, err := v.Verify(t.Context(), iss.MintType(t, "", idClaims(nil))); err != nil {
+		if _, err := v.Verify(t.Context(), iss.MintType(t, "", idClaims(nil)), "user-7"); err != nil {
 			t.Fatal(err)
 		}
 	})

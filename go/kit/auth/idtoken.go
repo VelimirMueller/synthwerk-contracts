@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -57,16 +58,20 @@ func NewIDTokenVerifier(cfg Config) (*IDTokenVerifier, error) {
 	return &IDTokenVerifier{v: v, clients: append([]string(nil), cfg.Audiences...)}, nil
 }
 
+// ErrSubject: the ID token belongs to another user than the caller.
+var ErrSubject = errors.New("subject differs")
+
 // Verify checks raw like Verifier.Verify does (signature, iss, aud, exp, nbf, iat),
 // then the ID token rules:
-//   - "sub" is set.
+//   - "sub" equals subject, the subject of the caller's access token. An empty
+//     subject refuses every token.
 //   - "auth_time" is set and not in the future (leeway). A token without it is no
 //     proof of a sign-in: Zitadel access tokens do not have it.
 //   - "azp", when set, is one of the client ids.
 //
 // The nonce is not checked: only the client that started the sign-in knows it.
 // A refused token gives an error that wraps ErrUnauthenticated and the reason.
-func (iv *IDTokenVerifier) Verify(ctx context.Context, raw string) (*IDToken, error) {
+func (iv *IDTokenVerifier) Verify(ctx context.Context, raw, subject string) (*IDToken, error) {
 	all, err := iv.v.verify(ctx, raw, false)
 	if err != nil {
 		return nil, err
@@ -75,8 +80,11 @@ func (iv *IDTokenVerifier) Verify(ctx context.Context, raw string) (*IDToken, er
 	if sub == "" {
 		return nil, refuse(fmt.Errorf("%w: no sub", ErrClaims))
 	}
+	if subject == "" || sub != subject {
+		return nil, refuse(ErrSubject)
+	}
 	if azp, ok := all["azp"]; ok {
-		if s, _ := azp.(string); !slices.Contains(iv.clients, s) {
+		if s, isStr := azp.(string); !isStr || !slices.Contains(iv.clients, s) {
 			return nil, refuse(fmt.Errorf("%w: azp is not an accepted client", ErrAudience))
 		}
 	}
