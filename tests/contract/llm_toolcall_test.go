@@ -50,6 +50,9 @@ func TestLlmToolCallV3(t *testing.T) {
 		if !regexp.MustCompile(`^user:[A-Za-z0-9_-]{1,128}$`).MatchString(ev.Actor) {
 			t.Errorf("actor %q", ev.Actor)
 		}
+		if d.Outcome != "ok" && d.Outcome != "denied" && d.Outcome != "error" || d.DurationMS < 0 {
+			t.Errorf("outcome %q duration %d", d.Outcome, d.DurationMS)
+		}
 		if d.Scope != "org" || !regexp.MustCompile(`^[a-z]+_[a-z]+_[a-z_]+$`).MatchString(d.Tool) {
 			t.Errorf("scope %q tool %q", d.Scope, d.Tool)
 		}

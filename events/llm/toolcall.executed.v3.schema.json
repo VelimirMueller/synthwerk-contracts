@@ -14,8 +14,8 @@
       "pattern": "^[a-z]+_[a-z]+_[a-z_]+$"
     },
     "scope": {
-      "description": "Token scope of the tool (D-14, D-44). llm emits this fact for org tools. user and operator stay for later producers.",
-      "enum": ["operator", "org", "user"]
+      "description": "Token scope of the tool (D-14, D-44). Only org: user tools read the caller's own data and are not audited. A later version may add operator.",
+      "enum": ["org"]
     },
     "org_id": {
       "description": "Identity org id (UUID). Equals the orgid extension.",
