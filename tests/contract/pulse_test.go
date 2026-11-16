@@ -131,4 +131,37 @@ func TestPulseContract(t *testing.T) {
 			t.Fatalf("status %d body %+v", res.StatusCode(), res.ApplicationproblemJSON403)
 		}
 	})
+	t.Run("PublicStats - spec example - decodes strictly, aggregates only", func(t *testing.T) {
+		var st pulse.PublicStats
+		strict(t, example("/v1/public-stats", "200"), &st)
+		if st.WindowDays != 30 || st.UptimeRatio == nil || *st.UptimeRatio > 1 || st.P95Ms == nil || st.AnsweredChats == nil {
+			t.Fatalf("got %+v", st)
+		}
+	})
+
+	t.Run("GetPublicStats - client - calls the path without a token", func(t *testing.T) {
+		body := example("/v1/public-stats", "200")
+		var gotPath, gotAuth string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotPath, gotAuth = r.URL.Path, r.Header.Get("Authorization")
+			w.Header().Set("Content-Type", appJSON)
+			w.Header().Set("Cache-Control", "public, max-age=60")
+			_, _ = w.Write(body)
+		}))
+		t.Cleanup(srv.Close)
+		client, err := pulse.NewClientWithResponses(srv.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := client.PulseGetPublicStatsWithResponse(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if gotPath != "/v1/public-stats" || gotAuth != "" {
+			t.Fatalf("path %q auth %q", gotPath, gotAuth)
+		}
+		if res.JSON200 == nil || res.JSON200.AnsweredChats == nil || *res.JSON200.AnsweredChats != 1234 {
+			t.Fatalf("got %+v", res.JSON200)
+		}
+	})
 }

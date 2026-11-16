@@ -1,11 +1,11 @@
 openapi: 3.1.0
 info:
   title: Synthwerk pulse
-  version: 0.1.0
-  summary: Live status, platform and org numbers, AI cost per day and active alerts of synthwerk-pulse.
+  version: 0.2.0
+  summary: Live status, platform and org numbers, AI cost per day, active alerts and the public numbers of synthwerk-pulse.
   description: |
-    The contract of synthwerk-pulse for the studio health view (synthwerk#26, synthwerk#40, synthwerk#57).
-    - Every `/v1` route needs a Bearer token (Zitadel access token). Members get 403.
+    The contract of synthwerk-pulse for the studio health view (synthwerk#26, synthwerk#40, synthwerk#57) and the public site (synthwerk#47).
+    - Every `/v1` route needs a Bearer token (Zitadel access token), except `GET /v1/public-stats`. Members get 403.
     - `operator` counts only when the grant is in the platform org (`SYNTHWERK_PULSE_PLATFORM_ORG_ID`). An `owner` or `admin` grant counts only in the org of the token.
     - The status of platform parts and the alerts hold no org data. Operators and the owners and admins of any org may read them.
     - Trace links (`trace_id`, `trace_url`) go to operators only: a trace can hold data of every org.
@@ -25,6 +25,8 @@ tags:
     description: Rates, p95, host, database, bus, AI numbers and AI cost per day.
   - name: alerts
     description: Active alerts with trace links.
+  - name: public
+    description: Public numbers for the public site. No token, no personal data.
 security:
   - bearer: []
 paths:
@@ -395,6 +397,35 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "503":
           $ref: "#/components/responses/AuthUnavailable"
+  /v1/public-stats:
+    get:
+      operationId: pulse.getPublicStats
+      summary: Public numbers
+      description: |
+        Uptime, p95 and answered chats for the public site (synthwerk#47). No token.
+        - Aggregates only: no org id, no user data.
+        - `uptime_ratio`: share of target-minutes that were not `down` in the last `window_days` UTC days, today included. Null before the first sample.
+        - `p95_ms`: p95 of the edge request duration in the last 24 h, all edge services except `pulse` (its health stream stays open up to 1 h). Null without Prometheus or without traffic.
+        - `answered_chats`: llm answers with status `completed` in the last `window_days` UTC days, every org. Null when pulse cannot read them.
+        - Pulse computes the numbers at most once per 60 s. The load does not grow with the number of callers.
+      tags: [public]
+      security: []
+      responses:
+        "200":
+          description: The public numbers.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/PublicCache"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicStats"
+              example:
+                generated_at: "2026-11-16T10:00:00Z"
+                window_days: 30
+                uptime_ratio: 0.9993
+                p95_ms: 412.5
+                answered_chats: 1234
 components:
   securitySchemes:
     bearer:
@@ -413,6 +444,11 @@ components:
         maxLength: 64
         pattern: "^[A-Za-z0-9_-]{1,64}$"
   headers:
+    PublicCache:
+      description: "`public, max-age=60`. A CDN or the studio may keep the answer for 60 s."
+      schema:
+        type: string
+        maxLength: 64
     NoStore:
       description: Always `no-store`.
       schema:
@@ -865,6 +901,36 @@ components:
           maxItems: 100
           items:
             $ref: "#/components/schemas/Alert"
+    PublicStats:
+      type: object
+      additionalProperties: false
+      required: [generated_at, window_days, uptime_ratio, p95_ms, answered_chats]
+      description: Public numbers of the platform. Aggregates only.
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+          maxLength: 64
+        window_days:
+          type: integer
+          minimum: 1
+          maximum: 366
+          description: Days of `uptime_ratio` and `answered_chats`. Today 30.
+        uptime_ratio:
+          type: [number, "null"]
+          format: double
+          minimum: 0
+          maximum: 1
+          description: Share of target-minutes that were not `down`. Null before the first sample.
+        p95_ms:
+          type: [number, "null"]
+          format: double
+          minimum: 0
+          description: p95 of the edge request duration in the last 24 h, without `pulse`. Null without data.
+        answered_chats:
+          type: [integer, "null"]
+          minimum: 0
+          description: Completed llm answers in the window, every org. Null when not readable.
     Problem:
       type: object
       additionalProperties: false

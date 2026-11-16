@@ -117,6 +117,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public numbers
+         * @description Uptime, p95 and answered chats for the public site (synthwerk#47). No token.
+         *     - Aggregates only: no org id, no user data.
+         *     - `uptime_ratio`: share of target-minutes that were not `down` in the last `window_days` UTC days, today included. Null before the first sample.
+         *     - `p95_ms`: p95 of the edge request duration in the last 24 h, all edge services except `pulse` (its health stream stays open up to 1 h). Null without Prometheus or without traffic.
+         *     - `answered_chats`: llm answers with status `completed` in the last `window_days` UTC days, every org. Null when pulse cannot read them.
+         *     - Pulse computes the numbers at most once per 60 s. The load does not grow with the number of callers.
+         */
+        get: operations["pulse.getPublicStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -347,6 +372,25 @@ export interface components {
             generated_at: string;
             alerts: components["schemas"]["Alert"][];
         };
+        /** @description Public numbers of the platform. Aggregates only. */
+        PublicStats: {
+            /** Format: date-time */
+            generated_at: string;
+            /** @description Days of `uptime_ratio` and `answered_chats`. Today 30. */
+            window_days: number;
+            /**
+             * Format: double
+             * @description Share of target-minutes that were not `down`. Null before the first sample.
+             */
+            uptime_ratio: number | null;
+            /**
+             * Format: double
+             * @description p95 of the edge request duration in the last 24 h, without `pulse`. Null without data.
+             */
+            p95_ms: number | null;
+            /** @description Completed llm answers in the window, every org. Null when not readable. */
+            answered_chats: number | null;
+        };
         /**
          * @description RFC 9457 problem details with the stable Synthwerk `code`. Pulse sends `type` `about:blank`.
          *     Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
@@ -428,6 +472,8 @@ export interface components {
     };
     requestBodies: never;
     headers: {
+        /** @description `public, max-age=60`. A CDN or the studio may keep the answer for 60 s. */
+        PublicCache: string;
         /** @description Always `no-store`. */
         NoStore: string;
     };
@@ -828,6 +874,36 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             503: components["responses"]["AuthUnavailable"];
+        };
+    };
+    "pulse.getPublicStats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The public numbers. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["PublicCache"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "generated_at": "2026-11-16T10:00:00Z",
+                     *       "window_days": 30,
+                     *       "uptime_ratio": 0.9993,
+                     *       "p95_ms": 412.5,
+                     *       "answered_chats": 1234
+                     *     }
+                     */
+                    "application/json": components["schemas"]["PublicStats"];
+                };
+            };
         };
     };
 }

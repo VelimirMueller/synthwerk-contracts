@@ -99,12 +99,15 @@ export type AiCostDay = PulseComponents["schemas"]["AiCostDay"];
 export type Alert = PulseComponents["schemas"]["Alert"];
 export type AlertList = PulseComponents["schemas"]["AlertList"];
 export type AlertRule = PulseComponents["schemas"]["AlertRule"];
+/** Body of GET /v1/public-stats: uptime, p95 and answered chats. No token, cacheable 60 s. */
+export type PublicStats = PulseComponents["schemas"]["PublicStats"];
 /** `about:blank` problem of pulse with the stable `code`. */
 export type PulseProblem = PulseComponents["schemas"]["Problem"];
 
 /**
- * Client for synthwerk-pulse: live status, numbers, AI cost and alerts. Every route needs the
- * access token of an operator, owner or admin. Server side (BFF) only. The stream route answers
+ * Client for synthwerk-pulse: live status, numbers, AI cost, alerts and the public numbers. Every
+ * route but `GET /v1/public-stats` needs the access token of an operator, owner or admin. Server
+ * side (BFF) only. The stream route answers
  * with `text/event-stream`: read it with `parseAs: "stream"`.
  */
 export function createPulseClient(options: ClientOptions) {
