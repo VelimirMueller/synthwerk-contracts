@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Synthwerk identity
-  version: 0.9.0
+  version: 0.9.1
   summary: The caller, orgs and roles. The M2 stubs of synthwerk-identity.
   description: |
     The org contract of synthwerk-identity (M2 spec #29, D-44).
@@ -1004,7 +1004,7 @@ paths:
         - The `Origin` header must equal one entry of the allow-list: same scheme, host and port. No prefix, suffix or wildcard match. Else 403 `origin_not_allowed`.
         - The token is a JWT (`typ` `at+jwt`, `alg` `ES256`), signed by identity. It lives 15 minutes or less (`expires_in`).
         - Claims: `iss` (identity), `aud`, `sub` (the user), `urn:zitadel:iam:user:resourceowner:id` (the Zitadel org), `client_id` (the app id), `synthwerk:origin` (the canonical origin), `iat`, `nbf`, `exp`, `jti`. No roles: a widget token is never an admin token.
-        - Verify it with the key set at `/.well-known/jwks.json` of identity (RFC 7517). A service that accepts it must also compare `synthwerk:origin` with the `Origin` header.
+        - Verify it with the key set at `/.well-known/jwks.json` of identity (RFC 7517). A service that accepts it must also compare `synthwerk:origin` with the `Origin` header. One exception: a service may also accept it from a configured widget frame origin (the widget host on the edge, synthwerk-widgets#33). The host page trades the token and hands it into that frame. Then the `Origin` header must equal that configured origin exactly, and `synthwerk:origin` must still be a non-empty origin: the host page origin that identity checked against the allow-list. The frame is same-origin with the service, so a browser sends its `GET` and `HEAD` without `Origin`. Such a request passes only with frame origins configured and `Sec-Fetch-Site: same-origin`. Any other `Origin`: 403.
         - Browsers send a CORS preflight first. Identity answers it with the CORS headers only for an allowed origin.
         - Every answer of this route, the CORS preflight included, sends `Vary: Origin` and `Cache-Control: no-store`.
       tags: [widget-tokens]
