@@ -8,7 +8,7 @@ paths: ["openapi/identity/**", "codegen/oapi-codegen.identity.yaml", "events/ide
 api: ["GET /v1/me", "GET /v1/orgs", "POST /v1/orgs", "GET /v1/orgs/{orgId}", "GET /v1/orgs/{orgId}/members", "POST /v1/orgs/{orgId}/members", "PATCH /v1/orgs/{orgId}/members/{userId}", "POST /v1/orgs/{orgId}/members/{userId}:deactivate", "POST /v1/orgs/{orgId}/members/{userId}:reactivate", "GET /v1/orgs/{orgId}/invitations", "GET /v1/orgs/{orgId}/audit-events", "GET /v1/orgs/{orgId}/apps", "POST /v1/orgs/{orgId}/apps", "GET /v1/orgs/{orgId}/apps/{appId}", "PATCH /v1/orgs/{orgId}/apps/{appId}", "DELETE /v1/orgs/{orgId}/apps/{appId}", "POST /v1/apps/{appId}/widget-tokens", "GET /v1/apps/{appId}/widget-settings", "GET /v1/me/entitlements", "GET /v1/orgs/{orgId}/entitlements", "GET /v1/me/export", "DELETE /v1/me"]
 events: ["dev.synthwerk.identity.org.created.v1", "dev.synthwerk.identity.user.created.v1", "dev.synthwerk.identity.member.role_changed.v1", "dev.synthwerk.identity.app.created.v1", "dev.synthwerk.identity.org.entitlements_changed.v1", "dev.synthwerk.identity.member.invited.v1", "dev.synthwerk.identity.member.invite_revoked.v1", "dev.synthwerk.identity.member.deactivated.v1", "dev.synthwerk.identity.member.reactivated.v1", "dev.synthwerk.identity.user.deleted.v1"]
 mcp: []
-updated: 2026-10-30
+updated: 2026-11-16
 ---
 
 # Identity API
@@ -35,7 +35,7 @@ updated: 2026-10-30
 - A repeat invite of an email with a pending invitation answers 202 with that invitation, unchanged, for every email.
 - `DELETE /v1/orgs/{orgId}/invitations/{invitationId}` revokes a pending invitation (owner or admin) and emits `dev.synthwerk.identity.member.invite_revoked.v1`. A Zitadel user identity made for it is deleted.
 - `POST /v1/orgs/{orgId}/members/{userId}:deactivate` and `:reactivate` switch the Zitadel user grant off and on. The member keeps the row and the role.
-- `GET /v1/orgs/{orgId}/audit-events` lists the org events identity wrote, the llm AI settings changes (synthwerk#39) and the studio page builder changes (synthwerk#106), newest first (owner or admin only, no operator). `data` is the event data.
+- `GET /v1/orgs/{orgId}/audit-events` lists the org events identity wrote, the llm AI settings changes (synthwerk#39), the llm admin AI tool calls (synthwerk#53) and the studio page builder changes (synthwerk#106), newest first (owner or admin only, no operator). `data` is the event data.
 - `GET|POST /v1/orgs/{orgId}/apps` and `GET|PATCH|DELETE /v1/orgs/{orgId}/apps/{appId}` manage the apps of an org. Read: any active member or operator. Write: owner or admin.
 - Creating an app emits `dev.synthwerk.identity.app.created.v1`. Update and delete emit no event yet.
 - A create past `apps_per_org` gets 403 `app_limit_reached` (#38).
@@ -178,3 +178,4 @@ updated: 2026-10-30
 | 2026-10-30 | `DELETE /v1/me` reads the recent sign-in from a fresh ID token in the optional header `X-Synthwerk-Id-Token`; kit/auth adds `IDTokenVerifier` (synthwerk#41). Spec 0.7.0. |
 | 2026-10-30 | The five routes that write to Zitadel also list 503 `upstream_unavailable` with `Retry-After`: identity answers it until it knows the Zitadel project id (synthwerk#37). Spec 0.7.1. |
 | 2026-10-30 | The audit list also shows `dev.synthwerk.studio.page.created.v1`, `page.published.v1` and `page.rolled_back.v1`, which identity reads from `EVT_STUDIO` (synthwerk#106). Spec 0.8.0. |
+| 2026-11-16 | The audit list also shows `dev.synthwerk.llm.toolcall.executed.v3`: each admin AI tool call of llm, read from `EVT_LLM` (synthwerk#53). Spec 0.9.0. |

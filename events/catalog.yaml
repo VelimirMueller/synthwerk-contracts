@@ -26,9 +26,18 @@ events:
     stream: EVT_LLM
     producer: llm
     consumers: [pulse]
-    status: draft
+    status: deprecated # synthwerk#53: never produced. Superseded by v3, which names the identity org.
     schema: llm/toolcall.executed.v2.schema.json
     example: examples/dev.synthwerk.llm.toolcall.executed.v2.json
+
+  - type: dev.synthwerk.llm.toolcall.executed.v3
+    nats_subject: evt.llm.toolcall.executed.v3
+    stream: EVT_LLM
+    producer: llm
+    consumers: [identity]
+    status: draft
+    schema: llm/toolcall.executed.v3.schema.json
+    example: examples/dev.synthwerk.llm.toolcall.executed.v3.json
 
   - type: dev.synthwerk.llm.message.completed.v1
     nats_subject: evt.llm.message.completed.v1
