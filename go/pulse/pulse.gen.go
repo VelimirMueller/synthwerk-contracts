@@ -279,6 +279,22 @@ type Problem struct {
 	Type string `json:"type"`
 }
 
+// PublicStats Public numbers of the platform. Aggregates only.
+type PublicStats struct {
+	// AnsweredChats Completed llm answers in the window, every org. Null when not readable.
+	AnsweredChats *int      `json:"answered_chats"`
+	GeneratedAt   time.Time `json:"generated_at"`
+
+	// P95Ms p95 of the edge request duration in the last 24 h, without `pulse`. Null without data.
+	P95Ms *float64 `json:"p95_ms"`
+
+	// UptimeRatio Share of target-minutes that were not `down`. Null before the first sample.
+	UptimeRatio *float64 `json:"uptime_ratio"`
+
+	// WindowDays Days of `uptime_ratio` and `answered_chats`. Today 30.
+	WindowDays int `json:"window_days"`
+}
+
 // ServiceMetrics Rate, error share and p95 of one service at the edge over the window.
 type ServiceMetrics struct {
 	// ErrorRatio Share of `5xx` answers.
@@ -610,6 +626,18 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{orgId}/metrics (the `PulseGetOrgMetrics` operationId).
 	PulseGetOrgMetrics(ctx context.Context, orgId OrgId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PulseGetPublicStats Public numbers
+	//
+	// Uptime, p95 and answered chats for the public site (synthwerk#47). No token.
+	// - Aggregates only: no org id, no user data.
+	// - `uptime_ratio`: share of target-minutes that were not `down` in the last `window_days` UTC days, today included. Null before the first sample.
+	// - `p95_ms`: p95 of the edge request duration in the last 24 h, all edge services except `pulse` (its health stream stays open up to 1 h). Null without Prometheus or without traffic.
+	// - `answered_chats`: llm answers with status `completed` in the last `window_days` UTC days, every org. Null when pulse cannot read them.
+	// - Pulse computes the numbers at most once per 60 s. The load does not grow with the number of callers.
+	//
+	// Corresponds with GET /v1/public-stats (the `PulseGetPublicStats` operationId).
+	PulseGetPublicStats(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 // PulseListAlerts Active alerts
@@ -700,6 +728,28 @@ func (c *Client) PulseGetPlatformMetrics(ctx context.Context, reqEditors ...Requ
 // Corresponds with GET /v1/orgs/{orgId}/metrics (the `PulseGetOrgMetrics` operationId).
 func (c *Client) PulseGetOrgMetrics(ctx context.Context, orgId OrgId, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPulseGetOrgMetricsRequest(c.Server, orgId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PulseGetPublicStats Public numbers
+//
+// Uptime, p95 and answered chats for the public site (synthwerk#47). No token.
+// - Aggregates only: no org id, no user data.
+// - `uptime_ratio`: share of target-minutes that were not `down` in the last `window_days` UTC days, today included. Null before the first sample.
+// - `p95_ms`: p95 of the edge request duration in the last 24 h, all edge services except `pulse` (its health stream stays open up to 1 h). Null without Prometheus or without traffic.
+// - `answered_chats`: llm answers with status `completed` in the last `window_days` UTC days, every org. Null when pulse cannot read them.
+// - Pulse computes the numbers at most once per 60 s. The load does not grow with the number of callers.
+//
+// Corresponds with GET /v1/public-stats (the `PulseGetPublicStats` operationId).
+func (c *Client) PulseGetPublicStats(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPulseGetPublicStatsRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -852,6 +902,33 @@ func NewPulseGetOrgMetricsRequest(server string, orgId OrgId) (*http.Request, er
 	return req, nil
 }
 
+// NewPulseGetPublicStatsRequest constructs an http.Request for the PulseGetPublicStats method
+func NewPulseGetPublicStatsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/public-stats")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -953,6 +1030,20 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{orgId}/metrics (the `PulseGetOrgMetrics` operationId).
 	PulseGetOrgMetricsWithResponse(ctx context.Context, orgId OrgId, reqEditors ...RequestEditorFn) (*PulseGetOrgMetricsResponse, error)
+
+	// PulseGetPublicStatsWithResponse Public numbers
+	//
+	// Uptime, p95 and answered chats for the public site (synthwerk#47). No token.
+	// - Aggregates only: no org id, no user data.
+	// - `uptime_ratio`: share of target-minutes that were not `down` in the last `window_days` UTC days, today included. Null before the first sample.
+	// - `p95_ms`: p95 of the edge request duration in the last 24 h, all edge services except `pulse` (its health stream stays open up to 1 h). Null without Prometheus or without traffic.
+	// - `answered_chats`: llm answers with status `completed` in the last `window_days` UTC days, every org. Null when pulse cannot read them.
+	// - Pulse computes the numbers at most once per 60 s. The load does not grow with the number of callers.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/public-stats (the `PulseGetPublicStats` operationId).
+	PulseGetPublicStatsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PulseGetPublicStatsResponse, error)
 }
 
 // PulseListAlertsResponse200Headers the declared response headers of an HTTP 200 response for PulseListAlerts
@@ -1300,6 +1391,54 @@ func (r PulseGetOrgMetricsResponse) ContentType() string {
 	return ""
 }
 
+// PulseGetPublicStatsResponse200Headers the declared response headers of an HTTP 200 response for PulseGetPublicStats
+type PulseGetPublicStatsResponse200Headers struct {
+	CacheControl *string
+}
+
+type PulseGetPublicStatsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PublicStats
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *PulseGetPublicStatsResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PulseGetPublicStatsResponse) GetJSON200() *PublicStats {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r PulseGetPublicStatsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PulseGetPublicStatsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PulseGetPublicStatsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PulseGetPublicStatsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // PulseListAlertsWithResponse Active alerts
 //
 // The alerts that are active now. Roles: operator, owner, admin.
@@ -1386,6 +1525,26 @@ func (c *ClientWithResponses) PulseGetOrgMetricsWithResponse(ctx context.Context
 		return nil, err
 	}
 	return ParsePulseGetOrgMetricsResponse(rsp)
+}
+
+// PulseGetPublicStatsWithResponse Public numbers
+//
+// Uptime, p95 and answered chats for the public site (synthwerk#47). No token.
+// - Aggregates only: no org id, no user data.
+// - `uptime_ratio`: share of target-minutes that were not `down` in the last `window_days` UTC days, today included. Null before the first sample.
+// - `p95_ms`: p95 of the edge request duration in the last 24 h, all edge services except `pulse` (its health stream stays open up to 1 h). Null without Prometheus or without traffic.
+// - `answered_chats`: llm answers with status `completed` in the last `window_days` UTC days, every org. Null when pulse cannot read them.
+// - Pulse computes the numbers at most once per 60 s. The load does not grow with the number of callers.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/public-stats (the `PulseGetPublicStats` operationId).
+func (c *ClientWithResponses) PulseGetPublicStatsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PulseGetPublicStatsResponse, error) {
+	rsp, err := c.PulseGetPublicStats(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePulseGetPublicStatsResponse(rsp)
 }
 
 // ParsePulseListAlertsResponse parses an HTTP response from a PulseListAlertsWithResponse call
@@ -1681,6 +1840,45 @@ func ParsePulseGetOrgMetricsResponse(rsp *http.Response) (*PulseGetOrgMetricsRes
 	switch {
 	case rsp.StatusCode == 200:
 		var headers PulseGetOrgMetricsResponse200Headers
+		if values := rsp.Header.Values("Cache-Control"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Cache-Control", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.CacheControl = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePulseGetPublicStatsResponse parses an HTTP response from a PulseGetPublicStatsWithResponse call
+func ParsePulseGetPublicStatsResponse(rsp *http.Response) (*PulseGetPublicStatsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PulseGetPublicStatsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PublicStats
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers PulseGetPublicStatsResponse200Headers
 		if values := rsp.Header.Values("Cache-Control"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "Cache-Control", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
