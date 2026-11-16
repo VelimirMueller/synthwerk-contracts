@@ -34,6 +34,7 @@ func TestLlmCORSHeaders(t *testing.T) {
 		name, status string
 		op           op
 	}{
+		{"listConversations", "200", spec.Paths["/v1/conversations"].Get},
 		{"createConversation", "201", spec.Paths["/v1/conversations"].Post},
 		{"getConversation", "200", spec.Paths["/v1/conversations/{id}"].Get},
 		{"sendMessage", "200", spec.Paths["/v1/conversations/{id}/messages"].Post},

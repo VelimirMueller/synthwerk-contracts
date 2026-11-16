@@ -70,7 +70,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List the own conversations
+         * @description The caller's own conversations in the org of the token, newest first (synthwerk#54).
+         *     - The owner is the token `sub`, the org is the token org. Conversations of other users never appear, also not those of the same `sub` in another org.
+         *     - Only conversations with at least one user message appear. A conversation marked deleted does not appear.
+         *     - `title` is the start of the first user message: at most 80 characters, white space joined to one space. Plain text, never HTML.
+         *     - Order: the creation time, newest first (the id is a UUIDv7). A new message does not move a conversation.
+         *     - Cursor paging, max 50 per page. The cursor is opaque.
+         *     - A user token and a widget token both work. The widget shows the list to the signed-in user.
+         *     - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: GET` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: GET`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+         *     - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+         *     - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
+         */
+        get: operations["llm.listConversations"];
         put?: never;
         /**
          * Create a conversation
@@ -252,6 +265,21 @@ export interface components {
             created_at: string;
             /** @description Messages, oldest first. */
             messages: components["schemas"]["Message"][];
+        };
+        /** @description One conversation in the list, without its messages (synthwerk#54). */
+        ConversationSummary: {
+            /** Format: uuid */
+            id: string;
+            model: components["schemas"]["ModelAlias"];
+            /** @description The start of the first user message, white space joined. Plain text, never HTML. */
+            title: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        ConversationPage: {
+            items: components["schemas"]["ConversationSummary"][];
+            /** @description Cursor of the next, older page. Absent on the last page. */
+            next_cursor?: string;
         };
         /** @enum {string} */
         MessageRole: "user" | "assistant";
@@ -792,6 +820,55 @@ export interface operations {
                     "application/json": components["schemas"]["LlmExport"];
                 };
             };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    "llm.listConversations": {
+        parameters: {
+            query?: {
+                /** @description Page size. */
+                limit?: number;
+                /** @description The `next_cursor` of the previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of the caller's conversations, newest first. */
+            200: {
+                headers: {
+                    /** @description Always `Origin`. The CORS headers depend on the request origin (infra#21). */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": "019a5e10-2b3c-7d4e-8f5a-6b7c8d9e0f1a",
+                     *           "model": "default",
+                     *           "title": "How do I reset my password?",
+                     *           "created_at": "2026-11-16T09:30:00Z"
+                     *         },
+                     *         {
+                     *           "id": "6f1c2d3e-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+                     *           "model": "default",
+                     *           "title": "What does pulse check?",
+                     *           "created_at": "2026-10-23T09:00:00Z"
+                     *         }
+                     *       ],
+                     *       "next_cursor": "NmYxYzJkM2UtNGE1Yi00YzZkLThlN2YtOWEwYjFjMmQzZTRm"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ConversationPage"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
         };

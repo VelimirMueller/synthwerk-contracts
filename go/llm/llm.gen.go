@@ -239,6 +239,26 @@ type Conversation struct {
 	Model ModelAlias `json:"model"`
 }
 
+// ConversationPage defines model for ConversationPage.
+type ConversationPage struct {
+	Items []ConversationSummary `json:"items"`
+
+	// NextCursor Cursor of the next, older page. Absent on the last page.
+	NextCursor *string `json:"next_cursor,omitempty"`
+}
+
+// ConversationSummary One conversation in the list, without its messages (synthwerk#54).
+type ConversationSummary struct {
+	CreatedAt time.Time          `json:"created_at"`
+	Id        openapi_types.UUID `json:"id"`
+
+	// Model Model alias, for example `default`. Never a provider model name.
+	Model ModelAlias `json:"model"`
+
+	// Title The start of the first user message, white space joined. Plain text, never HTML.
+	Title string `json:"title"`
+}
+
 // CreateConversationRequest defines model for CreateConversationRequest.
 type CreateConversationRequest struct {
 	// Model Model alias, for example `default`. Never a provider model name.
@@ -665,6 +685,15 @@ type Unauthenticated = Problem
 // | `settings_unavailable` | 503 | llm cannot check the membership and the plan for the AI settings now. |
 type VersionConflict = Problem
 
+// LlmListConversationsParams defines parameters for LlmListConversations.
+type LlmListConversationsParams struct {
+	// Limit Page size.
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor The `next_cursor` of the previous page.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // LlmUpdateAiSettingsJSONRequestBody defines body for LlmUpdateAiSettings for application/json ContentType.
 type LlmUpdateAiSettingsJSONRequestBody = UpdateAiSettingsRequest
 
@@ -966,6 +995,22 @@ type ClientInterface interface {
 	// Corresponds with PUT /v1/ai-settings (the `LlmUpdateAiSettings` operationId).
 	LlmUpdateAiSettings(ctx context.Context, body LlmUpdateAiSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// LlmListConversations List the own conversations
+	//
+	// The caller's own conversations in the org of the token, newest first (synthwerk#54).
+	// - The owner is the token `sub`, the org is the token org. Conversations of other users never appear, also not those of the same `sub` in another org.
+	// - Only conversations with at least one user message appear. A conversation marked deleted does not appear.
+	// - `title` is the start of the first user message: at most 80 characters, white space joined to one space. Plain text, never HTML.
+	// - Order: the creation time, newest first (the id is a UUIDv7). A new message does not move a conversation.
+	// - Cursor paging, max 50 per page. The cursor is opaque.
+	// - A user token and a widget token both work. The widget shows the list to the signed-in user.
+	// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: GET` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: GET`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+	// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+	// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
+	//
+	// Corresponds with GET /v1/conversations (the `LlmListConversations` operationId).
+	LlmListConversations(ctx context.Context, params *LlmListConversationsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// LlmCreateConversationWithBody Create a conversation
 	//
 	// Creates an empty conversation for the caller in the org of the token.
@@ -1115,6 +1160,32 @@ func (c *Client) LlmUpdateAiSettingsWithBody(ctx context.Context, contentType st
 // Corresponds with PUT /v1/ai-settings (the `LlmUpdateAiSettings` operationId).
 func (c *Client) LlmUpdateAiSettings(ctx context.Context, body LlmUpdateAiSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewLlmUpdateAiSettingsRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// LlmListConversations List the own conversations
+//
+// The caller's own conversations in the org of the token, newest first (synthwerk#54).
+// - The owner is the token `sub`, the org is the token org. Conversations of other users never appear, also not those of the same `sub` in another org.
+// - Only conversations with at least one user message appear. A conversation marked deleted does not appear.
+// - `title` is the start of the first user message: at most 80 characters, white space joined to one space. Plain text, never HTML.
+// - Order: the creation time, newest first (the id is a UUIDv7). A new message does not move a conversation.
+// - Cursor paging, max 50 per page. The cursor is opaque.
+// - A user token and a widget token both work. The widget shows the list to the signed-in user.
+// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: GET` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: GET`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
+//
+// Corresponds with GET /v1/conversations (the `LlmListConversations` operationId).
+func (c *Client) LlmListConversations(ctx context.Context, params *LlmListConversationsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewLlmListConversationsRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1331,6 +1402,72 @@ func NewLlmUpdateAiSettingsRequestWithBody(server string, contentType string, bo
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewLlmListConversationsRequest constructs an http.Request for the LlmListConversations method
+func NewLlmListConversationsRequest(server string, params *LlmListConversationsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/conversations")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -1573,6 +1710,24 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PUT /v1/ai-settings (the `LlmUpdateAiSettings` operationId).
 	LlmUpdateAiSettingsWithResponse(ctx context.Context, body LlmUpdateAiSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*LlmUpdateAiSettingsResponse, error)
+
+	// LlmListConversationsWithResponse List the own conversations
+	//
+	// The caller's own conversations in the org of the token, newest first (synthwerk#54).
+	// - The owner is the token `sub`, the org is the token org. Conversations of other users never appear, also not those of the same `sub` in another org.
+	// - Only conversations with at least one user message appear. A conversation marked deleted does not appear.
+	// - `title` is the start of the first user message: at most 80 characters, white space joined to one space. Plain text, never HTML.
+	// - Order: the creation time, newest first (the id is a UUIDv7). A new message does not move a conversation.
+	// - Cursor paging, max 50 per page. The cursor is opaque.
+	// - A user token and a widget token both work. The widget shows the list to the signed-in user.
+	// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: GET` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: GET`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+	// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+	// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/conversations (the `LlmListConversations` operationId).
+	LlmListConversationsWithResponse(ctx context.Context, params *LlmListConversationsParams, reqEditors ...RequestEditorFn) (*LlmListConversationsResponse, error)
 
 	// LlmCreateConversationWithBodyWithResponse Create a conversation
 	//
@@ -1822,6 +1977,82 @@ func (r LlmUpdateAiSettingsResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r LlmUpdateAiSettingsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// LlmListConversationsResponse200Headers the declared response headers of an HTTP 200 response for LlmListConversations
+type LlmListConversationsResponse200Headers struct {
+	Vary *string
+}
+
+// LlmListConversationsResponse401Headers the declared response headers of an HTTP 401 response for LlmListConversations
+type LlmListConversationsResponse401Headers struct {
+	WWWAuthenticate *string
+}
+
+type LlmListConversationsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ConversationPage
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *InvalidRequest
+	// ApplicationproblemJSON401 the response for an HTTP 401 `application/problem+json` response
+	ApplicationproblemJSON401 *Unauthenticated
+	// ApplicationproblemJSON403 the response for an HTTP 403 `application/problem+json` response
+	ApplicationproblemJSON403 *Forbidden
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *LlmListConversationsResponse200Headers
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *LlmListConversationsResponse401Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r LlmListConversationsResponse) GetJSON200() *ConversationPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r LlmListConversationsResponse) GetApplicationproblemJSON400() *InvalidRequest {
+	return r.ApplicationproblemJSON400
+}
+
+// GetApplicationproblemJSON401 returns the response for an HTTP 401 `application/problem+json` response
+func (r LlmListConversationsResponse) GetApplicationproblemJSON401() *Unauthenticated {
+	return r.ApplicationproblemJSON401
+}
+
+// GetApplicationproblemJSON403 returns the response for an HTTP 403 `application/problem+json` response
+func (r LlmListConversationsResponse) GetApplicationproblemJSON403() *Forbidden {
+	return r.ApplicationproblemJSON403
+}
+
+// GetBody returns the raw response body bytes
+func (r LlmListConversationsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r LlmListConversationsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r LlmListConversationsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r LlmListConversationsResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -2233,6 +2464,30 @@ func (c *ClientWithResponses) LlmUpdateAiSettingsWithResponse(ctx context.Contex
 	return ParseLlmUpdateAiSettingsResponse(rsp)
 }
 
+// LlmListConversationsWithResponse List the own conversations
+//
+// The caller's own conversations in the org of the token, newest first (synthwerk#54).
+// - The owner is the token `sub`, the org is the token org. Conversations of other users never appear, also not those of the same `sub` in another org.
+// - Only conversations with at least one user message appear. A conversation marked deleted does not appear.
+// - `title` is the start of the first user message: at most 80 characters, white space joined to one space. Plain text, never HTML.
+// - Order: the creation time, newest first (the id is a UUIDv7). A new message does not move a conversation.
+// - Cursor paging, max 50 per page. The cursor is opaque.
+// - A user token and a widget token both work. The widget shows the list to the signed-in user.
+// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: GET` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: GET`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/conversations (the `LlmListConversations` operationId).
+func (c *ClientWithResponses) LlmListConversationsWithResponse(ctx context.Context, params *LlmListConversationsParams, reqEditors ...RequestEditorFn) (*LlmListConversationsResponse, error) {
+	rsp, err := c.LlmListConversations(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseLlmListConversationsResponse(rsp)
+}
+
 // LlmCreateConversationWithBodyWithResponse Create a conversation
 //
 // Creates an empty conversation for the caller in the org of the token.
@@ -2505,6 +2760,76 @@ func ParseLlmUpdateAiSettingsResponse(rsp *http.Response) (*LlmUpdateAiSettingsR
 			headers.RetryAfter = &value
 		}
 		response.Headers503 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseLlmListConversationsResponse parses an HTTP response from a LlmListConversationsWithResponse call
+func ParseLlmListConversationsResponse(rsp *http.Response) (*LlmListConversationsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &LlmListConversationsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ConversationPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest InvalidRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthenticated
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON403 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers LlmListConversationsResponse200Headers
+		if values := rsp.Header.Values("Vary"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Vary", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.Vary = &value
+		}
+		response.Headers200 = &headers
+	case rsp.StatusCode == 401:
+		var headers LlmListConversationsResponse401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		response.Headers401 = &headers
 	}
 
 	return response, nil
