@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Synthwerk LLM gateway
-  version: 0.5.0
+  version: 0.6.0
   summary: Conversations and streamed answers. The M2 chat slice of synthwerk-llm.
   description: |
     The chat contract of synthwerk-llm (M2 spec #32, D-44).
@@ -12,7 +12,8 @@ info:
     - Stream protocol: `docs/features/llm-chat-api.md`.
     - Own data (synthwerk#41): `GET /v1/me/export` returns every row llm keeps about the caller, in every org. Identity calls it with the caller's token for `GET /v1/me/export` of identity. llm deletes the rows when it gets `dev.synthwerk.identity.user.deleted.v1`.
     - AI settings (synthwerk#39): an owner or admin sets the model choice, the system prompt, the input length, a token cap per user and the temperature of the org with `/v1/ai-settings`. Every value stays inside the model aliases of the service and the plan of the org. A change emits `dev.synthwerk.llm.ai_settings.changed.v1`; identity shows it in the audit list.
-    - CORS (infra#21): llm answers CORS for the three widget chat routes (create, read, send). The chat widget runs on customer sites. See the description of each route.
+    - CORS (infra#21): llm answers CORS for the widget chat routes (list, create, read, send). The chat widget runs on customer sites. See the description of each route.
+    - Past conversations (synthwerk#54): `GET /v1/conversations` lists the caller's own conversations in the org of the token, newest first.
   license:
     name: MIT
     identifier: MIT
@@ -179,11 +180,78 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
   /v1/conversations:
+    get:
+      operationId: llm.listConversations
+      summary: List the own conversations
+      description: |
+        The caller's own conversations in the org of the token, newest first (synthwerk#54).
+        - The owner is the token `sub`, the org is the token org. Conversations of other users never appear, also not those of the same `sub` in another org.
+        - Only conversations with at least one user message appear. A conversation marked deleted does not appear.
+        - `title` is the start of the first user message: at most 80 characters, white space joined to one space. Plain text, never HTML.
+        - Order: the creation time, newest first (the id is a UUIDv7). A new message does not move a conversation.
+        - Cursor paging, max 50 per page. The cursor is opaque.
+        - Origin binding (synthwerk#54): a conversation keeps the `synthwerk:origin` of the widget token that created it. A user token creates it without an origin.
+        - A widget token lists only the conversations of its own `synthwerk:origin`. Conversations of another origin and of a user token never appear.
+        - A user token (no `synthwerk:origin`) lists every own conversation of the org, from every origin.
+        - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: GET` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: GET`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
+        - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
+        - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
+      tags: [conversations]
+      security:
+        - bearer: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Page size.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: cursor
+          in: query
+          required: false
+          description: The `next_cursor` of the previous page.
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          description: One page of the caller's conversations, newest first.
+          headers:
+            Vary:
+              description: Always `Origin`. The CORS headers depend on the request origin (infra#21).
+              schema:
+                type: string
+                maxLength: 32
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationPage"
+              example:
+                items:
+                  - id: 019a5e10-2b3c-7d4e-8f5a-6b7c8d9e0f1a
+                    model: default
+                    title: How do I reset my password?
+                    created_at: "2026-11-16T09:30:00Z"
+                  - id: 0199f3b0-0a1b-7c2d-8e3f-4a5b6c7d8e9f
+                    model: default
+                    title: What does pulse check?
+                    created_at: "2026-10-23T09:00:00Z"
+                next_cursor: MDE5OWYzYjAtMGExYi03YzJkLThlM2YtNGE1YjZjN2Q4ZTlm
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     post:
       operationId: llm.createConversation
       summary: Create a conversation
       description: |
         Creates an empty conversation for the caller in the org of the token.
+        - A widget token binds the conversation to its `synthwerk:origin` (synthwerk#54). A user token creates it without an origin.
         - Without `model` the conversation gets the default model of the org (AI settings).
         - A `model` the org does not allow: 400 `invalid_request`.
         - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
@@ -240,6 +308,7 @@ paths:
       description: |
         The conversation with its messages, oldest first.
         An unknown id and another owner's id both answer 404 with the same body.
+        - Origin binding (synthwerk#54): a widget token reads only a conversation of its own `synthwerk:origin`. A conversation of another origin, or one a user token created, answers 404 with the same body. A user token reads every own conversation of the org.
         - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: GET` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: GET`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
         - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
         - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
@@ -288,6 +357,7 @@ paths:
       summary: Send a message and stream the answer
       description: |
         Stores the user message and streams the assistant answer as Server-Sent Events.
+        - Origin binding (synthwerk#54): a widget token sends only to a conversation of its own `synthwerk:origin`. Another origin answers 404, before any model call.
         - Refusals before the first byte answer with a status code and `application/problem+json`.
         - After the first byte the status stays 200. A failure is an `error` event, then the stream ends.
         - Order of events: zero or more `delta`, then `usage`, then `done`. Or an `error` event at any point.
@@ -731,6 +801,41 @@ components:
           description: Messages, oldest first.
           items:
             $ref: "#/components/schemas/Message"
+    ConversationSummary:
+      type: object
+      additionalProperties: false
+      required: [id, model, title, created_at]
+      description: One conversation in the list, without its messages (synthwerk#54).
+      properties:
+        id:
+          type: string
+          format: uuid
+          maxLength: 36
+        model:
+          $ref: "#/components/schemas/ModelAlias"
+        title:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: The start of the first user message, white space joined. Plain text, never HTML.
+        created_at:
+          type: string
+          format: date-time
+          maxLength: 40
+    ConversationPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/ConversationSummary"
+        next_cursor:
+          type: string
+          maxLength: 64
+          description: Cursor of the next, older page. Absent on the last page.
     MessageRole:
       type: string
       enum: [user, assistant]

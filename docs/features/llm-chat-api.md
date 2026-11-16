@@ -5,10 +5,10 @@ status: planned
 epic: E3
 owner: contracts
 paths: ["openapi/llm/**", "codegen/oapi-codegen.llm.yaml", "events/llm/message.completed.v1.schema.json", "events/llm/ai_settings.changed.v1.schema.json"]
-api: ["POST /v1/conversations", "GET /v1/conversations/{id}", "POST /v1/conversations/{id}/messages", "GET /v1/me/export", "GET /v1/ai-settings", "PUT /v1/ai-settings"]
+api: ["GET /v1/conversations", "POST /v1/conversations", "GET /v1/conversations/{id}", "POST /v1/conversations/{id}/messages", "GET /v1/me/export", "GET /v1/ai-settings", "PUT /v1/ai-settings"]
 events: ["dev.synthwerk.llm.message.completed.v1", "dev.synthwerk.llm.ai_settings.changed.v1"]
 mcp: []
-updated: 2026-10-30
+updated: 2026-11-16
 ---
 
 # LLM chat API
@@ -17,18 +17,24 @@ updated: 2026-10-30
 > - `synthwerk-llm` serves conversations. A sent message comes back as a Server-Sent Events stream.
 > - The stream has four events: `delta`, `usage`, `done`, `error` (D-44).
 > - An owner or admin sets the AI settings of the org with `/v1/ai-settings` (synthwerk#39). They stay inside the service aliases and the plan.
-> - llm answers CORS for create, read and send: the chat widget runs on customer sites (infra#21).
+> - A signed-in user lists the own past conversations with `GET /v1/conversations` (synthwerk#54).
+> - llm answers CORS for list, create, read and send: the chat widget runs on customer sites (infra#21).
 > - The spec is `openapi/llm/openapi.yaml`. CI generates a Go client and a TS client from it.
 
 ## What it does
 
+- `GET /v1/conversations` lists the caller's own conversations in the token org, newest first (`ConversationPage`, synthwerk#54). Each item has the id, the model, a title and the creation time. No messages.
+- The list shows only conversations with a user message. The title is the start of the first user message, at most 80 characters.
+- Origin binding: a widget token creates a conversation bound to its `synthwerk:origin`. It lists, reads and sends only on conversations of that origin. Another origin gets 404.
+- A user token has no origin. It lists and reads every own conversation of the org.
+- The list pages with an opaque cursor: `limit` 1 to 50, default 20. Pass `next_cursor` as `cursor`.
 - `POST /v1/conversations` creates an empty conversation for the caller.
 - `GET /v1/conversations/{id}` returns the conversation with its messages, oldest first.
 - `POST /v1/conversations/{id}/messages` stores the user message and streams the answer.
 - `GET /v1/me/export` returns every conversation, message and own quota row of the caller, in every org (`LlmExport`, synthwerk#41). Identity embeds it in its own export.
 - `GET /v1/ai-settings` and `PUT /v1/ai-settings` read and replace the AI settings of the token's org (synthwerk#39). See [AI settings](#ai-settings).
 - The org and the owner come from the verified token. They are never body fields.
-- Create, read and send answer CORS in llm (infra#21). The preflight (`OPTIONS`) needs no token. Every answer sends `Vary: Origin`.
+- List, create, read and send answer CORS in llm (infra#21). The preflight (`OPTIONS`) needs no token. Every answer sends `Vary: Origin`.
 - An allowed origin is in llm's static list or is listed by an app of an active org in identity. Only it gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`.
 - After each answer the service emits `dev.synthwerk.llm.message.completed.v1`. It holds metadata only.
 - Go: package `github.com/VelimirMueller/synthwerk-contracts/go/llm`. TS: `createLlmClient` and `StreamEvent` in `@synthwerk/contracts`.
@@ -146,7 +152,9 @@ A send over quota answers `429` before any model call (synthwerk#33):
 - `tests/contract/llm_test.go` — `Problem - quota member - only in the problem schema, optional`
 - `tests/contract/identity_account_test.go` — `LLM ExportMe - spec example - conversations, messages with tokens, own quota rows`; `LLM ExportMe - widget token - 403 forbidden`
 - `tests/contract/llm_settings_test.go` — `AiSettings - each 200 example - decodes strictly and stays inside its bounds`; `UpdateAiSettings - spec request example - client sends PUT /v1/ai-settings with the body`; `UpdateAiSettings - stale version - 409 version_conflict`; `GetAiSettings - identity down - 503 settings_unavailable`; `GetAiSettings - member token - 403 forbidden`
-- `tests/contract/llm_cors_test.go` — `CORS answer createConversation 201 - Vary documented, preflight described` (also getConversation, sendMessage)
+- `tests/contract/llm_list_test.go` — `ConversationPage - spec example - decodes strictly, newest first, short titles, UUIDv7 ids`; `ListConversations - limit and cursor - client sends GET /v1/conversations with both`; `ListConversations - bad limit - 400 invalid_request`
+- `tests/contract/llm_cors_test.go` — `Origin binding listConversations - widget token of origin A - never sees a conversation of origin B` (also create, get, send)
+- `tests/contract/llm_cors_test.go` — `CORS answer createConversation 201 - Vary documented, preflight described` (also listConversations, getConversation, sendMessage)
 - `tests/contract/events_test.go` — `Catalog - each entry - names, schema $id and example match`; `AuditEvent.type - every identity event and every event identity consumes - matches the spec pattern`
 
 ## Changes
@@ -159,3 +167,4 @@ A send over quota answers `429` before any model call (synthwerk#33):
 | 2026-10-30 | Add `GET /v1/me/export` and `LlmExport` (synthwerk#41). llm consumes `dev.synthwerk.identity.user.deleted.v1`. Spec version 0.3.0. |
 | 2026-10-30 | Add `GET`/`PUT /v1/ai-settings`, `AiSettings`, problem codes `version_conflict` and `settings_unavailable`, and `llm.ai_settings.changed.v1` (synthwerk#39). Spec version 0.4.0. |
 | 2026-10-30 | Describe the CORS answers of create, read and send; `Vary` on their success answers (infra#21). Spec version 0.5.0. |
+| 2026-11-16 | Add `GET /v1/conversations`, `ConversationSummary` and `ConversationPage`: the own past conversations, with CORS for the widget. A widget token sees only conversations of its own `synthwerk:origin` (synthwerk#54). Spec version 0.6.0. |
