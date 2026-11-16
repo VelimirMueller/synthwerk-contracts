@@ -150,7 +150,7 @@ A send over quota answers `429` before any model call (synthwerk#33):
 - `tests/contract/llm_test.go` — `Problem - quota member - only in the problem schema, optional`
 - `tests/contract/identity_account_test.go` — `LLM ExportMe - spec example - conversations, messages with tokens, own quota rows`; `LLM ExportMe - widget token - 403 forbidden`
 - `tests/contract/llm_settings_test.go` — `AiSettings - each 200 example - decodes strictly and stays inside its bounds`; `UpdateAiSettings - spec request example - client sends PUT /v1/ai-settings with the body`; `UpdateAiSettings - stale version - 409 version_conflict`; `GetAiSettings - identity down - 503 settings_unavailable`; `GetAiSettings - member token - 403 forbidden`
-- `tests/contract/llm_list_test.go` — `ConversationPage - spec example - decodes strictly, newest first, short titles, cursor = last id`; `ListConversations - limit and cursor - client sends GET /v1/conversations with both`; `ListConversations - bad limit - 400 invalid_request`
+- `tests/contract/llm_list_test.go` — `ConversationPage - spec example - decodes strictly, newest first, short titles, UUIDv7 ids`; `ListConversations - limit and cursor - client sends GET /v1/conversations with both`; `ListConversations - bad limit - 400 invalid_request`
 - `tests/contract/llm_cors_test.go` — `CORS answer createConversation 201 - Vary documented, preflight described` (also listConversations, getConversation, sendMessage)
 - `tests/contract/events_test.go` — `Catalog - each entry - names, schema $id and example match`; `AuditEvent.type - every identity event and every event identity consumes - matches the spec pattern`
 

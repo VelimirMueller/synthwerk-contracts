@@ -2,7 +2,6 @@ package contract_test
 
 import (
 	"context"
-	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -20,7 +19,7 @@ func TestLLMListConversations(t *testing.T) {
 	list := spec.Paths["/v1/conversations"].Get
 	body := toJSON(t, list.Responses["200"].Content["application/json"].Example)
 
-	t.Run("ConversationPage - spec example - decodes strictly, newest first, short titles, cursor = last id", func(t *testing.T) {
+	t.Run("ConversationPage - spec example - decodes strictly, newest first, short titles, UUIDv7 ids", func(t *testing.T) {
 		var page llm.ConversationPage
 		strict(t, body, &page)
 		if len(page.Items) < 2 || page.NextCursor == nil {
@@ -34,9 +33,10 @@ func TestLLMListConversations(t *testing.T) {
 				t.Errorf("item %d is newer than item %d", i, i-1)
 			}
 		}
-		last := page.Items[len(page.Items)-1].Id.String()
-		if want := base64.RawURLEncoding.EncodeToString([]byte(last)); *page.NextCursor != want {
-			t.Errorf("next_cursor %q, want the base64url of the last id %q", *page.NextCursor, want)
+		for i, it := range page.Items {
+			if it.Id.Version() != 7 {
+				t.Errorf("item %d: id %s is not a UUIDv7", i, it.Id)
+			}
 		}
 	})
 

@@ -856,13 +856,13 @@ export interface operations {
                      *           "created_at": "2026-11-16T09:30:00Z"
                      *         },
                      *         {
-                     *           "id": "6f1c2d3e-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+                     *           "id": "0199f3b0-0a1b-7c2d-8e3f-4a5b6c7d8e9f",
                      *           "model": "default",
                      *           "title": "What does pulse check?",
                      *           "created_at": "2026-10-23T09:00:00Z"
                      *         }
                      *       ],
-                     *       "next_cursor": "NmYxYzJkM2UtNGE1Yi00YzZkLThlN2YtOWEwYjFjMmQzZTRm"
+                     *       "next_cursor": "MDE5OWYzYjAtMGExYi03YzJkLThlM2YtNGE1YjZjN2Q4ZTlm"
                      *     }
                      */
                     "application/json": components["schemas"]["ConversationPage"];
