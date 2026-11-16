@@ -8,7 +8,7 @@ paths: ["rules/**", "tools/**", "scripts/**"]
 api: []
 events: []
 mcp: []
-updated: 2026-10-30
+updated: 2026-11-16
 ---
 
 # Contract checks
@@ -49,7 +49,7 @@ updated: 2026-10-30
 |---|---|
 | `synthwerk-operation-id` | `<service>.<verb><Noun>` |
 | `synthwerk-path` | `/v<N>/<plural-noun>`, kebab-case, `:verb`; `/healthz`, `/readyz` allowed |
-| `synthwerk-security` | non-empty `security` on each operation, except `/healthz`, `/readyz` and `/v1/apps/{appId}/widget-settings` (public widget settings, synthwerk#38). A new public route needs an entry in the rule |
+| `synthwerk-security` | non-empty `security` on each operation, except `/healthz`, `/readyz` `/v1/apps/{appId}/widget-settings` (public widget settings, synthwerk#38) and `/v1/public-stats` (public numbers of pulse, synthwerk#47). A new public route needs an entry in the rule |
 | `synthwerk-string-max-length` | `maxLength` on every string without `enum` or `const` |
 | `synthwerk-array-max-items` | `maxItems` on every array |
 | `synthwerk-property-snake-case` | schema properties in `snake_case` |
@@ -78,3 +78,4 @@ updated: 2026-10-30
 |---|---|
 | 2026-10-21 | First version. |
 | 2026-10-30 | `synthwerk-security` allows the public widget settings route (synthwerk#38). |
+| 2026-11-16 | `synthwerk-security` allows the public numbers route of pulse (synthwerk#47). |
