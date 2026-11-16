@@ -1003,7 +1003,9 @@ type ClientInterface interface {
 	// - `title` is the start of the first user message: at most 80 characters, white space joined to one space. Plain text, never HTML.
 	// - Order: the creation time, newest first (the id is a UUIDv7). A new message does not move a conversation.
 	// - Cursor paging, max 50 per page. The cursor is opaque.
-	// - A user token and a widget token both work. The widget shows the list to the signed-in user.
+	// - Origin binding (synthwerk#54): a conversation keeps the `synthwerk:origin` of the widget token that created it. A user token creates it without an origin.
+	// - A widget token lists only the conversations of its own `synthwerk:origin`. Conversations of another origin and of a user token never appear.
+	// - A user token (no `synthwerk:origin`) lists every own conversation of the org, from every origin.
 	// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: GET` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: GET`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
 	// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
 	// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
@@ -1014,6 +1016,7 @@ type ClientInterface interface {
 	// LlmCreateConversationWithBody Create a conversation
 	//
 	// Creates an empty conversation for the caller in the org of the token.
+	// - A widget token binds the conversation to its `synthwerk:origin` (synthwerk#54). A user token creates it without an origin.
 	// - Without `model` the conversation gets the default model of the org (AI settings).
 	// - A `model` the org does not allow: 400 `invalid_request`.
 	// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
@@ -1028,6 +1031,7 @@ type ClientInterface interface {
 	// LlmCreateConversation Create a conversation
 	//
 	// Creates an empty conversation for the caller in the org of the token.
+	// - A widget token binds the conversation to its `synthwerk:origin` (synthwerk#54). A user token creates it without an origin.
 	// - Without `model` the conversation gets the default model of the org (AI settings).
 	// - A `model` the org does not allow: 400 `invalid_request`.
 	// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
@@ -1043,6 +1047,7 @@ type ClientInterface interface {
 	//
 	// The conversation with its messages, oldest first.
 	// An unknown id and another owner's id both answer 404 with the same body.
+	// - Origin binding (synthwerk#54): a widget token reads only a conversation of its own `synthwerk:origin`. A conversation of another origin, or one a user token created, answers 404 with the same body. A user token reads every own conversation of the org.
 	// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: GET` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: GET`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
 	// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
 	// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
@@ -1053,6 +1058,7 @@ type ClientInterface interface {
 	// LlmSendMessageWithBody Send a message and stream the answer
 	//
 	// Stores the user message and streams the assistant answer as Server-Sent Events.
+	// - Origin binding (synthwerk#54): a widget token sends only to a conversation of its own `synthwerk:origin`. Another origin answers 404, before any model call.
 	// - Refusals before the first byte answer with a status code and `application/problem+json`.
 	// - After the first byte the status stays 200. A failure is an `error` event, then the stream ends.
 	// - Order of events: zero or more `delta`, then `usage`, then `done`. Or an `error` event at any point.
@@ -1070,6 +1076,7 @@ type ClientInterface interface {
 	// LlmSendMessage Send a message and stream the answer
 	//
 	// Stores the user message and streams the assistant answer as Server-Sent Events.
+	// - Origin binding (synthwerk#54): a widget token sends only to a conversation of its own `synthwerk:origin`. Another origin answers 404, before any model call.
 	// - Refusals before the first byte answer with a status code and `application/problem+json`.
 	// - After the first byte the status stays 200. A failure is an `error` event, then the stream ends.
 	// - Order of events: zero or more `delta`, then `usage`, then `done`. Or an `error` event at any point.
@@ -1178,7 +1185,9 @@ func (c *Client) LlmUpdateAiSettings(ctx context.Context, body LlmUpdateAiSettin
 // - `title` is the start of the first user message: at most 80 characters, white space joined to one space. Plain text, never HTML.
 // - Order: the creation time, newest first (the id is a UUIDv7). A new message does not move a conversation.
 // - Cursor paging, max 50 per page. The cursor is opaque.
-// - A user token and a widget token both work. The widget shows the list to the signed-in user.
+// - Origin binding (synthwerk#54): a conversation keeps the `synthwerk:origin` of the widget token that created it. A user token creates it without an origin.
+// - A widget token lists only the conversations of its own `synthwerk:origin`. Conversations of another origin and of a user token never appear.
+// - A user token (no `synthwerk:origin`) lists every own conversation of the org, from every origin.
 // - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: GET` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: GET`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
 // - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
 // - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
@@ -1199,6 +1208,7 @@ func (c *Client) LlmListConversations(ctx context.Context, params *LlmListConver
 // LlmCreateConversationWithBody Create a conversation
 //
 // Creates an empty conversation for the caller in the org of the token.
+// - A widget token binds the conversation to its `synthwerk:origin` (synthwerk#54). A user token creates it without an origin.
 // - Without `model` the conversation gets the default model of the org (AI settings).
 // - A `model` the org does not allow: 400 `invalid_request`.
 // - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
@@ -1223,6 +1233,7 @@ func (c *Client) LlmCreateConversationWithBody(ctx context.Context, contentType 
 // LlmCreateConversation Create a conversation
 //
 // Creates an empty conversation for the caller in the org of the token.
+// - A widget token binds the conversation to its `synthwerk:origin` (synthwerk#54). A user token creates it without an origin.
 // - Without `model` the conversation gets the default model of the org (AI settings).
 // - A `model` the org does not allow: 400 `invalid_request`.
 // - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
@@ -1248,6 +1259,7 @@ func (c *Client) LlmCreateConversation(ctx context.Context, body LlmCreateConver
 //
 // The conversation with its messages, oldest first.
 // An unknown id and another owner's id both answer 404 with the same body.
+// - Origin binding (synthwerk#54): a widget token reads only a conversation of its own `synthwerk:origin`. A conversation of another origin, or one a user token created, answers 404 with the same body. A user token reads every own conversation of the org.
 // - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: GET` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: GET`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
 // - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
 // - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
@@ -1268,6 +1280,7 @@ func (c *Client) LlmGetConversation(ctx context.Context, id ConversationId, reqE
 // LlmSendMessageWithBody Send a message and stream the answer
 //
 // Stores the user message and streams the assistant answer as Server-Sent Events.
+// - Origin binding (synthwerk#54): a widget token sends only to a conversation of its own `synthwerk:origin`. Another origin answers 404, before any model call.
 // - Refusals before the first byte answer with a status code and `application/problem+json`.
 // - After the first byte the status stays 200. A failure is an `error` event, then the stream ends.
 // - Order of events: zero or more `delta`, then `usage`, then `done`. Or an `error` event at any point.
@@ -1295,6 +1308,7 @@ func (c *Client) LlmSendMessageWithBody(ctx context.Context, id ConversationId, 
 // LlmSendMessage Send a message and stream the answer
 //
 // Stores the user message and streams the assistant answer as Server-Sent Events.
+// - Origin binding (synthwerk#54): a widget token sends only to a conversation of its own `synthwerk:origin`. Another origin answers 404, before any model call.
 // - Refusals before the first byte answer with a status code and `application/problem+json`.
 // - After the first byte the status stays 200. A failure is an `error` event, then the stream ends.
 // - Order of events: zero or more `delta`, then `usage`, then `done`. Or an `error` event at any point.
@@ -1719,7 +1733,9 @@ type ClientWithResponsesInterface interface {
 	// - `title` is the start of the first user message: at most 80 characters, white space joined to one space. Plain text, never HTML.
 	// - Order: the creation time, newest first (the id is a UUIDv7). A new message does not move a conversation.
 	// - Cursor paging, max 50 per page. The cursor is opaque.
-	// - A user token and a widget token both work. The widget shows the list to the signed-in user.
+	// - Origin binding (synthwerk#54): a conversation keeps the `synthwerk:origin` of the widget token that created it. A user token creates it without an origin.
+	// - A widget token lists only the conversations of its own `synthwerk:origin`. Conversations of another origin and of a user token never appear.
+	// - A user token (no `synthwerk:origin`) lists every own conversation of the org, from every origin.
 	// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: GET` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: GET`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
 	// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
 	// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
@@ -1732,6 +1748,7 @@ type ClientWithResponsesInterface interface {
 	// LlmCreateConversationWithBodyWithResponse Create a conversation
 	//
 	// Creates an empty conversation for the caller in the org of the token.
+	// - A widget token binds the conversation to its `synthwerk:origin` (synthwerk#54). A user token creates it without an origin.
 	// - Without `model` the conversation gets the default model of the org (AI settings).
 	// - A `model` the org does not allow: 400 `invalid_request`.
 	// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
@@ -1746,6 +1763,7 @@ type ClientWithResponsesInterface interface {
 	// LlmCreateConversationWithResponse Create a conversation
 	//
 	// Creates an empty conversation for the caller in the org of the token.
+	// - A widget token binds the conversation to its `synthwerk:origin` (synthwerk#54). A user token creates it without an origin.
 	// - Without `model` the conversation gets the default model of the org (AI settings).
 	// - A `model` the org does not allow: 400 `invalid_request`.
 	// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
@@ -1761,6 +1779,7 @@ type ClientWithResponsesInterface interface {
 	//
 	// The conversation with its messages, oldest first.
 	// An unknown id and another owner's id both answer 404 with the same body.
+	// - Origin binding (synthwerk#54): a widget token reads only a conversation of its own `synthwerk:origin`. A conversation of another origin, or one a user token created, answers 404 with the same body. A user token reads every own conversation of the org.
 	// - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: GET` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: GET`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
 	// - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
 	// - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
@@ -1773,6 +1792,7 @@ type ClientWithResponsesInterface interface {
 	// LlmSendMessageWithBodyWithResponse Send a message and stream the answer
 	//
 	// Stores the user message and streams the assistant answer as Server-Sent Events.
+	// - Origin binding (synthwerk#54): a widget token sends only to a conversation of its own `synthwerk:origin`. Another origin answers 404, before any model call.
 	// - Refusals before the first byte answer with a status code and `application/problem+json`.
 	// - After the first byte the status stays 200. A failure is an `error` event, then the stream ends.
 	// - Order of events: zero or more `delta`, then `usage`, then `done`. Or an `error` event at any point.
@@ -1790,6 +1810,7 @@ type ClientWithResponsesInterface interface {
 	// LlmSendMessageWithResponse Send a message and stream the answer
 	//
 	// Stores the user message and streams the assistant answer as Server-Sent Events.
+	// - Origin binding (synthwerk#54): a widget token sends only to a conversation of its own `synthwerk:origin`. Another origin answers 404, before any model call.
 	// - Refusals before the first byte answer with a status code and `application/problem+json`.
 	// - After the first byte the status stays 200. A failure is an `error` event, then the stream ends.
 	// - Order of events: zero or more `delta`, then `usage`, then `done`. Or an `error` event at any point.
@@ -2472,7 +2493,9 @@ func (c *ClientWithResponses) LlmUpdateAiSettingsWithResponse(ctx context.Contex
 // - `title` is the start of the first user message: at most 80 characters, white space joined to one space. Plain text, never HTML.
 // - Order: the creation time, newest first (the id is a UUIDv7). A new message does not move a conversation.
 // - Cursor paging, max 50 per page. The cursor is opaque.
-// - A user token and a widget token both work. The widget shows the list to the signed-in user.
+// - Origin binding (synthwerk#54): a conversation keeps the `synthwerk:origin` of the widget token that created it. A user token creates it without an origin.
+// - A widget token lists only the conversations of its own `synthwerk:origin`. Conversations of another origin and of a user token never appear.
+// - A user token (no `synthwerk:origin`) lists every own conversation of the org, from every origin.
 // - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: GET` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: GET`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
 // - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
 // - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
@@ -2491,6 +2514,7 @@ func (c *ClientWithResponses) LlmListConversationsWithResponse(ctx context.Conte
 // LlmCreateConversationWithBodyWithResponse Create a conversation
 //
 // Creates an empty conversation for the caller in the org of the token.
+// - A widget token binds the conversation to its `synthwerk:origin` (synthwerk#54). A user token creates it without an origin.
 // - Without `model` the conversation gets the default model of the org (AI settings).
 // - A `model` the org does not allow: 400 `invalid_request`.
 // - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
@@ -2511,6 +2535,7 @@ func (c *ClientWithResponses) LlmCreateConversationWithBodyWithResponse(ctx cont
 // LlmCreateConversationWithResponse Create a conversation
 //
 // Creates an empty conversation for the caller in the org of the token.
+// - A widget token binds the conversation to its `synthwerk:origin` (synthwerk#54). A user token creates it without an origin.
 // - Without `model` the conversation gets the default model of the org (AI settings).
 // - A `model` the org does not allow: 400 `invalid_request`.
 // - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: POST` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
@@ -2532,6 +2557,7 @@ func (c *ClientWithResponses) LlmCreateConversationWithResponse(ctx context.Cont
 //
 // The conversation with its messages, oldest first.
 // An unknown id and another owner's id both answer 404 with the same body.
+// - Origin binding (synthwerk#54): a widget token reads only a conversation of its own `synthwerk:origin`. A conversation of another origin, or one a user token created, answers 404 with the same body. A user token reads every own conversation of the org.
 // - CORS (infra#21): llm answers the preflight (`OPTIONS`, no token). An allowed origin with `Access-Control-Request-Method: GET` gets 204 with `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods: GET`, `Access-Control-Allow-Headers: Authorization, Content-Type` and `Access-Control-Max-Age: 600`. Else 403 without CORS headers.
 // - Allowed origin: a first-party origin of llm's static list, or an origin that an app of an active org lists in identity. No `Access-Control-Allow-Credentials`.
 // - Every answer sends `Vary: Origin`. An allowed origin also gets `Access-Control-Allow-Origin` and `Access-Control-Expose-Headers: Retry-After`, refusals included.
@@ -2550,6 +2576,7 @@ func (c *ClientWithResponses) LlmGetConversationWithResponse(ctx context.Context
 // LlmSendMessageWithBodyWithResponse Send a message and stream the answer
 //
 // Stores the user message and streams the assistant answer as Server-Sent Events.
+// - Origin binding (synthwerk#54): a widget token sends only to a conversation of its own `synthwerk:origin`. Another origin answers 404, before any model call.
 // - Refusals before the first byte answer with a status code and `application/problem+json`.
 // - After the first byte the status stays 200. A failure is an `error` event, then the stream ends.
 // - Order of events: zero or more `delta`, then `usage`, then `done`. Or an `error` event at any point.
@@ -2573,6 +2600,7 @@ func (c *ClientWithResponses) LlmSendMessageWithBodyWithResponse(ctx context.Con
 // LlmSendMessageWithResponse Send a message and stream the answer
 //
 // Stores the user message and streams the assistant answer as Server-Sent Events.
+// - Origin binding (synthwerk#54): a widget token sends only to a conversation of its own `synthwerk:origin`. Another origin answers 404, before any model call.
 // - Refusals before the first byte answer with a status code and `application/problem+json`.
 // - After the first byte the status stays 200. A failure is an `error` event, then the stream ends.
 // - Order of events: zero or more `delta`, then `usage`, then `done`. Or an `error` event at any point.

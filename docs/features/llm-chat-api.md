@@ -25,6 +25,8 @@ updated: 2026-11-16
 
 - `GET /v1/conversations` lists the caller's own conversations in the token org, newest first (`ConversationPage`, synthwerk#54). Each item has the id, the model, a title and the creation time. No messages.
 - The list shows only conversations with a user message. The title is the start of the first user message, at most 80 characters.
+- Origin binding: a widget token creates a conversation bound to its `synthwerk:origin`. It lists, reads and sends only on conversations of that origin. Another origin gets 404.
+- A user token has no origin. It lists and reads every own conversation of the org.
 - The list pages with an opaque cursor: `limit` 1 to 50, default 20. Pass `next_cursor` as `cursor`.
 - `POST /v1/conversations` creates an empty conversation for the caller.
 - `GET /v1/conversations/{id}` returns the conversation with its messages, oldest first.
@@ -151,6 +153,7 @@ A send over quota answers `429` before any model call (synthwerk#33):
 - `tests/contract/identity_account_test.go` — `LLM ExportMe - spec example - conversations, messages with tokens, own quota rows`; `LLM ExportMe - widget token - 403 forbidden`
 - `tests/contract/llm_settings_test.go` — `AiSettings - each 200 example - decodes strictly and stays inside its bounds`; `UpdateAiSettings - spec request example - client sends PUT /v1/ai-settings with the body`; `UpdateAiSettings - stale version - 409 version_conflict`; `GetAiSettings - identity down - 503 settings_unavailable`; `GetAiSettings - member token - 403 forbidden`
 - `tests/contract/llm_list_test.go` — `ConversationPage - spec example - decodes strictly, newest first, short titles, UUIDv7 ids`; `ListConversations - limit and cursor - client sends GET /v1/conversations with both`; `ListConversations - bad limit - 400 invalid_request`
+- `tests/contract/llm_cors_test.go` — `Origin binding listConversations - widget token of origin A - never sees a conversation of origin B` (also create, get, send)
 - `tests/contract/llm_cors_test.go` — `CORS answer createConversation 201 - Vary documented, preflight described` (also listConversations, getConversation, sendMessage)
 - `tests/contract/events_test.go` — `Catalog - each entry - names, schema $id and example match`; `AuditEvent.type - every identity event and every event identity consumes - matches the spec pattern`
 
@@ -164,4 +167,4 @@ A send over quota answers `429` before any model call (synthwerk#33):
 | 2026-10-30 | Add `GET /v1/me/export` and `LlmExport` (synthwerk#41). llm consumes `dev.synthwerk.identity.user.deleted.v1`. Spec version 0.3.0. |
 | 2026-10-30 | Add `GET`/`PUT /v1/ai-settings`, `AiSettings`, problem codes `version_conflict` and `settings_unavailable`, and `llm.ai_settings.changed.v1` (synthwerk#39). Spec version 0.4.0. |
 | 2026-10-30 | Describe the CORS answers of create, read and send; `Vary` on their success answers (infra#21). Spec version 0.5.0. |
-| 2026-11-16 | Add `GET /v1/conversations`, `ConversationSummary` and `ConversationPage`: the own past conversations, with CORS for the widget (synthwerk#54). Spec version 0.6.0. |
+| 2026-11-16 | Add `GET /v1/conversations`, `ConversationSummary` and `ConversationPage`: the own past conversations, with CORS for the widget. A widget token sees only conversations of its own `synthwerk:origin` (synthwerk#54). Spec version 0.6.0. |
