@@ -1,0 +1,10 @@
+# oapi-codegen v2 config: Go types and client for openapi/pulse/openapi.yaml.
+# Run: just gen
+package: pulse
+generate:
+  models: true
+  client: true
+output: go/pulse/pulse.gen.go
+compatibility:
+  # Enum constants carry their type name: no clashes across schemas.
+  always-prefix-enum-values: true

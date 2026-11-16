@@ -1,0 +1,899 @@
+openapi: 3.1.0
+info:
+  title: Synthwerk pulse
+  version: 0.1.0
+  summary: Live status, platform and org numbers, AI cost per day and active alerts of synthwerk-pulse.
+  description: |
+    The contract of synthwerk-pulse for the studio health view (synthwerk#26, synthwerk#40, synthwerk#57).
+    - Every `/v1` route needs a Bearer token (Zitadel access token). Members get 403.
+    - `operator` counts only when the grant is in the platform org (`SYNTHWERK_PULSE_PLATFORM_ORG_ID`). An `owner` or `admin` grant counts only in the org of the token.
+    - The status of platform parts and the alerts hold no org data. Operators and the owners and admins of any org may read them.
+    - Trace links (`trace_id`, `trace_url`) go to operators only: a trace can hold data of every org.
+    - A part that pulse cannot read is `null`. The other parts stay.
+    - Errors are RFC 9457 problems with `type` `about:blank` and a stable `code`. Clients branch on `code`.
+    - The probes `/healthz` and `/readyz` are in `openapi/_shared/health.yaml`.
+  license:
+    name: MIT
+    identifier: MIT
+  contact:
+    name: Velimir Mueller
+    url: https://github.com/VelimirMueller/synthwerk-contracts
+tags:
+  - name: status
+    description: Live status of every service and infra part.
+  - name: metrics
+    description: Rates, p95, host, database, bus, AI numbers and AI cost per day.
+  - name: alerts
+    description: Active alerts with trace links.
+security:
+  - bearer: []
+paths:
+  /v1/health:
+    get:
+      operationId: pulse.getHealth
+      summary: Live status, once
+      description: |
+        Every target with its status. The same data as the first `snapshot` event of the stream.
+        Roles: operator, owner, admin.
+      tags: [status]
+      security:
+        - bearer: []
+      responses:
+        "200":
+          description: The status of every target.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Snapshot"
+              example:
+                targets:
+                  - target: llm
+                    status: ok
+                    since: "2026-11-16T08:00:05Z"
+                    checked_at: "2026-11-16T08:02:10Z"
+                    latency_ms: 4
+                    checks:
+                      - name: postgres
+                        status: ok
+                  - target: bus
+                    status: down
+                    since: "2026-11-16T08:02:15Z"
+                    checked_at: null
+                    latency_ms: 0
+                    checks: []
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+  /v1/health/stream:
+    get:
+      operationId: pulse.streamHealth
+      summary: Live status as Server-Sent Events
+      description: |
+        A `snapshot` event first, then one `status` event per change. Roles: operator, owner, admin.
+        - The stream starts with `retry: 3000`. A `: ping` comment comes every 15 s.
+        - The `id:` grows by one per change and starts at 0 in each pulse process.
+        - Every stream starts with a snapshot, also after a reconnect with `Last-Event-ID`.
+        - The stream ends after 1 h. The client reconnects.
+        - Max 50 open streams per process. Then 503 with `Retry-After: 5` and a plain text body.
+      tags: [status]
+      security:
+        - bearer: []
+      responses:
+        "200":
+          description: |
+            The status as a `text/event-stream`. Each frame is one `StatusStreamEvent`:
+            the SSE `event:` field holds `event`, the `data:` field holds `data` as one line of JSON. On the wire:
+
+            ```text
+            retry: 3000
+
+            id: 0
+            event: snapshot
+            data: {"targets":[{"target":"bus","status":"ok","since":"2026-11-16T08:00:05Z","checked_at":"2026-11-16T08:02:10Z","latency_ms":2,"checks":[]}]}
+
+            id: 1
+            event: status
+            data: {"target":"bus","from":"ok","status":"down","since":"2026-11-16T08:02:15Z","checks":[]}
+
+            : ping
+            ```
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            text/event-stream:
+              schema:
+                $ref: "#/components/schemas/StatusStreamEvent"
+              examples:
+                snapshot:
+                  summary: The full state, first on every stream.
+                  value:
+                    event: snapshot
+                    data:
+                      targets:
+                        - target: bus
+                          status: ok
+                          since: "2026-11-16T08:00:05Z"
+                          checked_at: "2026-11-16T08:02:10Z"
+                          latency_ms: 2
+                          checks: []
+                status:
+                  summary: One target changed its status.
+                  value:
+                    event: status
+                    data:
+                      target: bus
+                      from: ok
+                      status: down
+                      since: "2026-11-16T08:02:15Z"
+                      checks: []
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: The max number of streams is open, or pulse shuts down (plain text), or the token keys are not available (problem, code `auth_unavailable`).
+          headers:
+            Retry-After:
+              description: Seconds to wait. Sent when the stream limit is reached.
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 3600
+          content:
+            text/plain:
+              schema:
+                type: string
+                maxLength: 64
+              example: stream not available
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+              example:
+                type: about:blank
+                title: Service Unavailable
+                status: 503
+                code: auth_unavailable
+                detail: The token keys are not available.
+  /v1/metrics:
+    get:
+      operationId: pulse.getPlatformMetrics
+      summary: Platform numbers
+      description: |
+        The numbers of the whole platform, every org. Operators only.
+        Pulse reads the platform parts once per interval (default 10 s). The AI numbers and the AI cost are live.
+      tags: [metrics]
+      security:
+        - bearer: []
+      responses:
+        "200":
+          description: The platform numbers.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformMetrics"
+              example:
+                generated_at: "2026-11-16T08:00:10Z"
+                window_seconds: 300
+                services:
+                  - service: llm
+                    requests_per_second: 2
+                    error_ratio: 0.01
+                    p95_ms: 250
+                host:
+                  cpu_ratio: 0.12
+                  memory_used_bytes: 4100000000
+                  memory_total_bytes: 16000000000
+                  disk_used_bytes: 51000000000
+                  disk_total_bytes: 250000000000
+                database:
+                  connections: 14
+                  max_connections: 100
+                bus:
+                  pending_messages: 3
+                  streams:
+                    - stream: EVT_LLM
+                      messages: 120
+                      pending: 3
+                ai:
+                  tokens_per_minute: 840.5
+                  answers: 12
+                  failed: 1
+                  latency_p95_ms: 2300
+                ai_cost:
+                  currency: USD
+                  days:
+                    - date: "2026-11-10"
+                      cost: 0
+                      answers: 0
+                      input_tokens: 0
+                      output_tokens: 0
+                      unpriced_answers: 0
+                    - date: "2026-11-11"
+                      cost: 0.12
+                      answers: 40
+                      input_tokens: 16000
+                      output_tokens: 3000
+                      unpriced_answers: 0
+                    - date: "2026-11-12"
+                      cost: 0
+                      answers: 0
+                      input_tokens: 0
+                      output_tokens: 0
+                      unpriced_answers: 0
+                    - date: "2026-11-13"
+                      cost: 0.05
+                      answers: 15
+                      input_tokens: 6000
+                      output_tokens: 1200
+                      unpriced_answers: 0
+                    - date: "2026-11-14"
+                      cost: 0
+                      answers: 0
+                      input_tokens: 0
+                      output_tokens: 0
+                      unpriced_answers: 0
+                    - date: "2026-11-15"
+                      cost: 0.2
+                      answers: 60
+                      input_tokens: 24000
+                      output_tokens: 4800
+                      unpriced_answers: 1
+                    - date: "2026-11-16"
+                      cost: 0.4215
+                      answers: 120
+                      input_tokens: 48000
+                      output_tokens: 9100
+                      unpriced_answers: 2
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+  /v1/orgs/{orgId}/metrics:
+    get:
+      operationId: pulse.getOrgMetrics
+      summary: Numbers of one org
+      description: |
+        The AI numbers and the AI cost per day of one org only. Never data of another org.
+        Roles: an owner or admin of that org (the org of the token), or an operator.
+      tags: [metrics]
+      security:
+        - bearer: []
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      responses:
+        "200":
+          description: The numbers of the org.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrgMetrics"
+              example:
+                generated_at: "2026-11-16T08:00:12Z"
+                window_seconds: 300
+                org_id: "339201"
+                ai:
+                  tokens_per_minute: 120
+                  answers: 3
+                  failed: 0
+                  latency_p95_ms: 900
+                ai_cost:
+                  currency: USD
+                  days:
+                    - date: "2026-11-10"
+                      cost: 0
+                      answers: 0
+                      input_tokens: 0
+                      output_tokens: 0
+                      unpriced_answers: 0
+                    - date: "2026-11-11"
+                      cost: 0
+                      answers: 0
+                      input_tokens: 0
+                      output_tokens: 0
+                      unpriced_answers: 0
+                    - date: "2026-11-12"
+                      cost: 0
+                      answers: 0
+                      input_tokens: 0
+                      output_tokens: 0
+                      unpriced_answers: 0
+                    - date: "2026-11-13"
+                      cost: 0
+                      answers: 0
+                      input_tokens: 0
+                      output_tokens: 0
+                      unpriced_answers: 0
+                    - date: "2026-11-14"
+                      cost: 0
+                      answers: 0
+                      input_tokens: 0
+                      output_tokens: 0
+                      unpriced_answers: 0
+                    - date: "2026-11-15"
+                      cost: 0.01
+                      answers: 4
+                      input_tokens: 1600
+                      output_tokens: 300
+                      unpriced_answers: 0
+                    - date: "2026-11-16"
+                      cost: 0.02
+                      answers: 6
+                      input_tokens: 2400
+                      output_tokens: 500
+                      unpriced_answers: 0
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+  /v1/alerts:
+    get:
+      operationId: pulse.listAlerts
+      summary: Active alerts
+      description: |
+        The alerts that are active now. Roles: operator, owner, admin.
+        - `target_down`: a target is `down`. Severity `critical`.
+        - `service_errors`: the share of `5xx` answers of a service at the edge is at or above the threshold, with at least one error in the window. Severity `warning`.
+        - `ai_failed`: the share of failed llm answers is at or above the threshold, with at least one failed answer in the window. Severity `warning`, subject `llm`.
+        - Critical alerts come first, then the oldest `since`.
+        - `trace_id` and `trace_url` are null when pulse knows no trace, or when the caller is not an operator.
+      tags: [alerts]
+      security:
+        - bearer: []
+      responses:
+        "200":
+          description: The active alerts. An empty list when nothing is wrong.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertList"
+              example:
+                generated_at: "2026-11-16T10:00:10Z"
+                alerts:
+                  - id: target_down:bus
+                    rule: target_down
+                    severity: critical
+                    subject: bus
+                    summary: bus is down.
+                    value: null
+                    threshold: null
+                    since: "2026-11-16T09:57:00Z"
+                    trace_id: null
+                    trace_url: null
+                  - id: service_errors:llm
+                    rule: service_errors
+                    severity: warning
+                    subject: llm
+                    summary: 12.5 % of llm requests failed at the edge in the last 5 min.
+                    value: 0.125
+                    threshold: 0.05
+                    since: "2026-11-16T09:58:40Z"
+                    trace_id: d40c39905663a1bcaa36ad07693a23d8
+                    trace_url: http://localhost:3000/explore?schemaVersion=1&orgId=1&panes=%7B%22t%22%3A%7B%22datasource%22%3A%22tempo%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22queryType%22%3A%22traceql%22%2C%22query%22%3A%22d40c39905663a1bcaa36ad07693a23d8%22%7D%5D%7D%7D
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Zitadel access token of an operator, owner or admin. The roles and the org come from its claims.
+  parameters:
+    OrgId:
+      name: orgId
+      in: path
+      required: true
+      description: Zitadel org id (`urn:zitadel:iam:user:resourceowner:id`).
+      schema:
+        type: string
+        maxLength: 64
+        pattern: "^[A-Za-z0-9_-]{1,64}$"
+  headers:
+    NoStore:
+      description: Always `no-store`.
+      schema:
+        type: string
+        maxLength: 16
+  responses:
+    Unauthenticated:
+      description: No Bearer token, or the token is not valid. Code `unauthenticated`.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Unauthorized
+            status: 401
+            code: unauthenticated
+            detail: A valid Bearer token is required.
+    Forbidden:
+      description: The role does not allow the route or the org. Code `forbidden`.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Forbidden
+            status: 403
+            code: forbidden
+            detail: The token does not allow this request.
+    AuthUnavailable:
+      description: Pulse cannot load the token keys. Code `auth_unavailable`.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Service Unavailable
+            status: 503
+            code: auth_unavailable
+            detail: The token keys are not available.
+  schemas:
+    TargetStatus:
+      type: string
+      enum: [unknown, ok, degraded, down]
+      description: "`unknown` until the first result. `down` after 2 failed checks in a row."
+    CheckItem:
+      type: object
+      additionalProperties: false
+      required: [name, status]
+      description: One check from the target's `/readyz` body.
+      properties:
+        name:
+          type: string
+          maxLength: 64
+        status:
+          $ref: "#/components/schemas/TargetStatus"
+    Target:
+      type: object
+      additionalProperties: false
+      required: [target, status, since, checked_at, latency_ms, checks]
+      properties:
+        target:
+          type: string
+          maxLength: 64
+          pattern: "^[a-z][a-z0-9-]{0,63}$"
+        status:
+          $ref: "#/components/schemas/TargetStatus"
+        since:
+          type: string
+          format: date-time
+          maxLength: 64
+          description: Time of the last status change, or the start of pulse.
+        checked_at:
+          type: [string, "null"]
+          format: date-time
+          maxLength: 64
+          description: Time of the last check. Null before the first check.
+        latency_ms:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Latency of the last check.
+        checks:
+          type: array
+          maxItems: 32
+          description: Checks of the last `/readyz` body. Empty for other targets.
+          items:
+            $ref: "#/components/schemas/CheckItem"
+    Snapshot:
+      type: object
+      additionalProperties: false
+      required: [targets]
+      properties:
+        targets:
+          type: array
+          maxItems: 64
+          items:
+            $ref: "#/components/schemas/Target"
+    StatusChange:
+      type: object
+      additionalProperties: false
+      required: [target, from, status, since, checks]
+      properties:
+        target:
+          type: string
+          maxLength: 64
+          pattern: "^[a-z][a-z0-9-]{0,63}$"
+        from:
+          $ref: "#/components/schemas/TargetStatus"
+        status:
+          $ref: "#/components/schemas/TargetStatus"
+        since:
+          type: string
+          format: date-time
+          maxLength: 64
+        checks:
+          type: array
+          maxItems: 32
+          items:
+            $ref: "#/components/schemas/CheckItem"
+    StatusStreamEvent:
+      description: One Server-Sent Event of the status stream. `event` is the SSE event name.
+      oneOf:
+        - $ref: "#/components/schemas/SnapshotEvent"
+        - $ref: "#/components/schemas/StatusEvent"
+      discriminator:
+        propertyName: event
+        mapping:
+          snapshot: "#/components/schemas/SnapshotEvent"
+          status: "#/components/schemas/StatusEvent"
+    SnapshotEvent:
+      type: object
+      additionalProperties: false
+      required: [event, data]
+      properties:
+        event:
+          type: string
+          const: snapshot
+        data:
+          $ref: "#/components/schemas/Snapshot"
+    StatusEvent:
+      type: object
+      additionalProperties: false
+      required: [event, data]
+      properties:
+        event:
+          type: string
+          const: status
+        data:
+          $ref: "#/components/schemas/StatusChange"
+    ServiceMetrics:
+      type: object
+      additionalProperties: false
+      required: [service, requests_per_second, error_ratio, p95_ms]
+      description: Rate, error share and p95 of one service at the edge over the window.
+      properties:
+        service:
+          type: string
+          maxLength: 64
+          description: Edge service name without the provider suffix (`llm@file` becomes `llm`).
+        requests_per_second:
+          type: number
+          format: double
+          minimum: 0
+        error_ratio:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: Share of `5xx` answers.
+        p95_ms:
+          type: [number, "null"]
+          format: double
+          minimum: 0
+          description: Null without traffic.
+    Host:
+      type: object
+      additionalProperties: false
+      required: [cpu_ratio, memory_used_bytes, memory_total_bytes, disk_used_bytes, disk_total_bytes]
+      properties:
+        cpu_ratio:
+          type: [number, "null"]
+          format: double
+          minimum: 0
+          maximum: 1
+          description: Busy share of all CPUs since the last refresh. Null on the first refresh.
+        memory_used_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        memory_total_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        disk_used_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        disk_total_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+    Database:
+      type: object
+      additionalProperties: false
+      required: [connections, max_connections]
+      properties:
+        connections:
+          type: integer
+          minimum: 0
+          description: Client connections in `pg_stat_activity`.
+        max_connections:
+          type: integer
+          minimum: 0
+    BusStream:
+      type: object
+      additionalProperties: false
+      required: [stream, messages, pending]
+      properties:
+        stream:
+          type: string
+          maxLength: 64
+        messages:
+          type: integer
+          format: int64
+          minimum: 0
+        pending:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Not delivered plus not acked, summed over the consumers.
+    Bus:
+      type: object
+      additionalProperties: false
+      required: [pending_messages, streams]
+      properties:
+        pending_messages:
+          type: integer
+          format: int64
+          minimum: 0
+        streams:
+          type: array
+          maxItems: 256
+          items:
+            $ref: "#/components/schemas/BusStream"
+    AiNumbers:
+      type: object
+      additionalProperties: false
+      required: [tokens_per_minute, answers, failed, latency_p95_ms]
+      description: Tokens and model latency of every llm answer in the window.
+      properties:
+        tokens_per_minute:
+          type: number
+          format: double
+          minimum: 0
+          description: Input plus output tokens per minute of the window.
+        answers:
+          type: integer
+          minimum: 0
+          description: Answers in every end state.
+        failed:
+          type: integer
+          minimum: 0
+        latency_p95_ms:
+          type: [integer, "null"]
+          format: int64
+          minimum: 0
+          description: p95 of completed answers. Null without one.
+    AiCostDay:
+      type: object
+      additionalProperties: false
+      required: [date, cost, answers, input_tokens, output_tokens, unpriced_answers]
+      properties:
+        date:
+          type: string
+          format: date
+          maxLength: 10
+          description: UTC day.
+        cost:
+          type: number
+          format: double
+          minimum: 0
+          description: Cost in `currency`, from the price table of pulse. Unpriced answers add 0.
+        answers:
+          type: integer
+          format: int64
+          minimum: 0
+        input_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+        output_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+        unpriced_answers:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Answers whose provider and model alias have no price.
+    AiCost:
+      type: object
+      additionalProperties: false
+      required: [currency, days]
+      description: AI cost per day of the last 7 UTC days, oldest first, today last. Days without answers are in the list with zeros.
+      properties:
+        currency:
+          type: string
+          maxLength: 3
+          pattern: "^[A-Z]{3}$"
+          description: ISO 4217 code of the price table, default `USD`.
+        days:
+          type: array
+          minItems: 7
+          maxItems: 7
+          items:
+            $ref: "#/components/schemas/AiCostDay"
+    PlatformMetrics:
+      type: object
+      additionalProperties: false
+      required: [generated_at, window_seconds, services, host, database, bus, ai, ai_cost]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+          maxLength: 64
+        window_seconds:
+          type: integer
+          minimum: 60
+          maximum: 3600
+          description: Window of the rates, the p95 values and the AI numbers.
+        services:
+          type: [array, "null"]
+          maxItems: 256
+          description: Null without a Prometheus URL or when the query fails.
+          items:
+            $ref: "#/components/schemas/ServiceMetrics"
+        host:
+          oneOf:
+            - $ref: "#/components/schemas/Host"
+            - type: "null"
+        database:
+          oneOf:
+            - $ref: "#/components/schemas/Database"
+            - type: "null"
+        bus:
+          oneOf:
+            - $ref: "#/components/schemas/Bus"
+            - type: "null"
+        ai:
+          description: Every org. Null while pulse does not read the llm stream.
+          oneOf:
+            - $ref: "#/components/schemas/AiNumbers"
+            - type: "null"
+        ai_cost:
+          description: Every org. Null when pulse cannot read its usage table.
+          oneOf:
+            - $ref: "#/components/schemas/AiCost"
+            - type: "null"
+    OrgMetrics:
+      type: object
+      additionalProperties: false
+      required: [generated_at, window_seconds, org_id, ai, ai_cost]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+          maxLength: 64
+        window_seconds:
+          type: integer
+          minimum: 60
+          maximum: 3600
+        org_id:
+          type: string
+          maxLength: 64
+        ai:
+          description: This org only. Null while pulse does not read the llm stream.
+          oneOf:
+            - $ref: "#/components/schemas/AiNumbers"
+            - type: "null"
+        ai_cost:
+          description: This org only. Null when pulse cannot read its usage table.
+          oneOf:
+            - $ref: "#/components/schemas/AiCost"
+            - type: "null"
+    AlertRule:
+      type: string
+      enum: [target_down, service_errors, ai_failed]
+      description: Clients must accept unknown rules.
+    AlertSeverity:
+      type: string
+      enum: [critical, warning]
+    Alert:
+      type: object
+      additionalProperties: false
+      required: [id, rule, severity, subject, summary, value, threshold, since, trace_id, trace_url]
+      properties:
+        id:
+          type: string
+          maxLength: 160
+          description: "`<rule>:<subject>`. Stable while the alert is active."
+        rule:
+          $ref: "#/components/schemas/AlertRule"
+        severity:
+          $ref: "#/components/schemas/AlertSeverity"
+        subject:
+          type: string
+          maxLength: 64
+          description: The target or the service.
+        summary:
+          type: string
+          maxLength: 256
+          description: One sentence for people. Never parse it.
+        value:
+          type: [number, "null"]
+          format: double
+          description: The measured share, 0 to 1. Null for `target_down`.
+        threshold:
+          type: [number, "null"]
+          format: double
+          description: The share that raises the alert. Null for `target_down`.
+        since:
+          type: string
+          format: date-time
+          maxLength: 64
+          description: When the alert became active. For `target_down` the time the target went down.
+        trace_id:
+          type: [string, "null"]
+          maxLength: 32
+          pattern: "^[0-9a-f]{32}$"
+          description: W3C trace id of one failed request. Null when unknown or when the caller is not an operator.
+        trace_url:
+          type: [string, "null"]
+          format: uri
+          maxLength: 2048
+          description: Opens the trace in the trace UI (`SYNTHWERK_PULSE_TRACE_URL_TEMPLATE`). Null when `trace_id` is null or no template is set.
+    AlertList:
+      type: object
+      additionalProperties: false
+      required: [generated_at, alerts]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+          maxLength: 64
+        alerts:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/Alert"
+    Problem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, code]
+      description: |
+        RFC 9457 problem details with the stable Synthwerk `code`. Pulse sends `type` `about:blank`.
+        Clients branch on `code`, never on `title` or `detail`, and must accept unknown codes.
+
+        | Code | Status | Cause |
+        |---|---|---|
+        | `unauthenticated` | 401 | No Bearer token, or the token is not valid. |
+        | `forbidden` | 403 | The role does not allow the route or the org. |
+        | `auth_unavailable` | 503 | Pulse cannot load the token keys. |
+      properties:
+        type:
+          type: string
+          maxLength: 256
+          description: "`about:blank`."
+        title:
+          type: string
+          maxLength: 128
+        status:
+          type: integer
+          minimum: 100
+          maximum: 599
+        code:
+          type: string
+          maxLength: 64
+          pattern: "^[a-z][a-z0-9_]*$"
+        detail:
+          type: string
+          maxLength: 1024
