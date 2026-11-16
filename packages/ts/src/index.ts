@@ -3,6 +3,7 @@ import createClient, { type ClientOptions } from "openapi-fetch";
 import type { components, paths } from "./gen/health.ts";
 import type { components as IdentityComponents, paths as IdentityPaths } from "./gen/identity.ts";
 import type { components as LlmComponents, paths as LlmPaths } from "./gen/llm.ts";
+import type { components as PulseComponents, paths as PulsePaths } from "./gen/pulse.ts";
 import type { components as VisionComponents, paths as VisionPaths } from "./gen/vision.ts";
 
 export type HealthPaths = paths;
@@ -78,4 +79,34 @@ export type VisionError = VisionComponents["schemas"]["Error"];
  */
 export function createVisionClient(options: ClientOptions) {
   return createClient<VisionPaths>(options);
+}
+
+export type { PulsePaths };
+export type HealthSnapshot = PulseComponents["schemas"]["Snapshot"];
+export type HealthTarget = PulseComponents["schemas"]["Target"];
+export type TargetStatus = PulseComponents["schemas"]["TargetStatus"];
+/** One Server-Sent Event of the pulse status stream: `snapshot` first, then `status`. */
+export type StatusStreamEvent = PulseComponents["schemas"]["StatusStreamEvent"];
+export type StatusChange = PulseComponents["schemas"]["StatusChange"];
+export type PlatformMetrics = PulseComponents["schemas"]["PlatformMetrics"];
+export type OrgMetrics = PulseComponents["schemas"]["OrgMetrics"];
+export type ServiceMetrics = PulseComponents["schemas"]["ServiceMetrics"];
+export type AiNumbers = PulseComponents["schemas"]["AiNumbers"];
+/** AI cost per day of the last 7 UTC days, oldest first. */
+export type AiCost = PulseComponents["schemas"]["AiCost"];
+export type AiCostDay = PulseComponents["schemas"]["AiCostDay"];
+/** An active alert. `trace_id` and `trace_url` are null for callers who are not operators. */
+export type Alert = PulseComponents["schemas"]["Alert"];
+export type AlertList = PulseComponents["schemas"]["AlertList"];
+export type AlertRule = PulseComponents["schemas"]["AlertRule"];
+/** `about:blank` problem of pulse with the stable `code`. */
+export type PulseProblem = PulseComponents["schemas"]["Problem"];
+
+/**
+ * Client for synthwerk-pulse: live status, numbers, AI cost and alerts. Every route needs the
+ * access token of an operator, owner or admin. Server side (BFF) only. The stream route answers
+ * with `text/event-stream`: read it with `parseAs: "stream"`.
+ */
+export function createPulseClient(options: ClientOptions) {
+  return createClient<PulsePaths>(options);
 }
