@@ -80,7 +80,7 @@ updated: 2026-11-16
 | App origin | `scheme://host[:port]`; `https`, or `http` for `localhost`, `127.0.0.1`, `[::1]`; no path, query, fragment, user info or wildcard |
 | Origin match | Exact on the canonical form (lower-case host, default port removed). No prefix, suffix or subdomain match |
 | Allow-list size | 1 to 20 origins per app, no duplicates |
-| Widget token | JWT, `typ` `at+jwt`, `ES256`, signed by identity; `expires_in` 900 s or less; claim `synthwerk:origin` = the canonical origin; no roles |
+| Widget token | JWT, `typ` `at+jwt`, `ES256`, signed by identity; `expires_in` 900 s or less; claim `synthwerk:origin` = the canonical origin; no roles. A service checks it against `Origin`, or accepts a configured widget frame origin (synthwerk-widgets#33). A frame `GET` or `HEAD` without `Origin` passes only with `Sec-Fetch-Site: same-origin` |
 | App limit | `apps_per_org` of the entitlements; `0` means no limit; one more gets 403 `app_limit_reached` |
 | Widget settings | `position` `bottom-right`/`bottom-left`, `theme` `default`/`contrast`, `mode` `system`/`light`/`dark`, `lang` `auto`/`de`/`en`, `accent` `flagship`/`lab`/`ops`/`venture`, `greeting` 0 to 280 characters, plain text |
 | Widget settings read | No token. `Origin` must be in the allow-list. `Cache-Control: no-cache`, refusals `no-store`. Settings only: no origins, org or name |
@@ -179,3 +179,4 @@ updated: 2026-11-16
 | 2026-10-30 | The five routes that write to Zitadel also list 503 `upstream_unavailable` with `Retry-After`: identity answers it until it knows the Zitadel project id (synthwerk#37). Spec 0.7.1. |
 | 2026-10-30 | The audit list also shows `dev.synthwerk.studio.page.created.v1`, `page.published.v1` and `page.rolled_back.v1`, which identity reads from `EVT_STUDIO` (synthwerk#106). Spec 0.8.0. |
 | 2026-11-16 | The audit list also shows `dev.synthwerk.llm.toolcall.executed.v3`: each admin AI tool call of llm, read from `EVT_LLM` (synthwerk#53). Spec 0.9.0. |
+| 2026-11-16 | Widget token: a service may also accept it from a configured widget frame origin, the widget host on the edge (synthwerk-widgets#33). A frame `GET` or `HEAD` without `Origin` passes only with `Sec-Fetch-Site: same-origin`. Wording only. Spec 0.9.1. |
