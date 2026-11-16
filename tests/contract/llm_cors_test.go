@@ -83,6 +83,16 @@ func TestLlmOriginBinding(t *testing.T) {
 		{"getConversation", spec.Paths["/v1/conversations/{id}"].Get.Description, []string{"Origin binding", "another origin", "404"}},
 		{"sendMessage", spec.Paths["/v1/conversations/{id}/messages"].Post.Description, []string{"Origin binding", "Another origin answers 404"}},
 	}
+	// Read and send declare the 404 that another origin gets (machine-readable part).
+	ops := loadSpec(t, "../../openapi/llm/openapi.yaml")
+	for name, o := range map[string]specOp{
+		"getConversation": ops.Paths["/v1/conversations/{id}"].Get,
+		"sendMessage":     ops.Paths["/v1/conversations/{id}/messages"].Post,
+	} {
+		if o.Responses["404"].Ref != "#/components/responses/NotFound" {
+			t.Errorf("%s: no 404 NotFound response for another origin", name)
+		}
+	}
 	for _, c := range cases {
 		t.Run("Origin binding "+c.name+" - widget token of origin A - never sees a conversation of origin B", func(t *testing.T) {
 			for _, w := range c.want {
