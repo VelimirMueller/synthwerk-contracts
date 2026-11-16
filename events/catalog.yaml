@@ -164,3 +164,30 @@ events:
     status: draft
     schema: studio/page.rolled_back.v1.schema.json
     example: examples/dev.synthwerk.studio.page.rolled_back.v1.json
+
+  - type: dev.synthwerk.studio.page.unpublished.v1
+    nats_subject: evt.studio.page.unpublished.v1
+    stream: EVT_STUDIO
+    producer: studio
+    consumers: []
+    status: draft
+    schema: studio/page.unpublished.v1.schema.json
+    example: examples/dev.synthwerk.studio.page.unpublished.v1.json
+
+  - type: dev.synthwerk.studio.page.deleted.v1
+    nats_subject: evt.studio.page.deleted.v1
+    stream: EVT_STUDIO
+    producer: studio
+    consumers: []
+    status: draft
+    schema: studio/page.deleted.v1.schema.json
+    example: examples/dev.synthwerk.studio.page.deleted.v1.json
+
+  - type: dev.synthwerk.studio.page.version_copied.v1
+    nats_subject: evt.studio.page.version_copied.v1
+    stream: EVT_STUDIO
+    producer: studio
+    consumers: []
+    status: draft
+    schema: studio/page.version_copied.v1.schema.json
+    example: examples/dev.synthwerk.studio.page.version_copied.v1.json
