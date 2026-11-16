@@ -1301,10 +1301,10 @@ type ClientInterface interface {
 
 	// IdentityListAuditEvents List the audit events of an org
 	//
-	// The admin actions of the org, newest first. Each item is an event identity wrote to its outbox for the org, kept after the outbox row is gone, an AI settings change of llm that identity received from `EVT_LLM` (synthwerk#39), or a page builder change of studio that identity received from `EVT_STUDIO` (synthwerk#106).
+	// The admin actions of the org, newest first. Each item is an event identity wrote to its outbox for the org, kept after the outbox row is gone, an AI settings change of llm that identity received from `EVT_LLM` (synthwerk#39), an admin AI tool call of llm from `EVT_LLM` (synthwerk#53), or a page builder change of studio that identity received from `EVT_STUDIO` (synthwerk#106).
 	// - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` gets 403. An `operator` gets 403.
-	// - Event types: `org.created`, `member.invited`, `member.role_changed`, `member.deactivated`, `member.reactivated`, `app.created`, `org.entitlements_changed`, `dev.synthwerk.llm.ai_settings.changed.v1`, `dev.synthwerk.studio.page.created.v1`, `dev.synthwerk.studio.page.published.v1`, `dev.synthwerk.studio.page.rolled_back.v1`, and later org events. Clients must accept types they do not know.
-	// - `data` is the event data, as its schema in `events/identity`, `events/llm` or `events/studio` says. No email, no personal name, no system prompt text, no page content.
+	// - Event types: `org.created`, `member.invited`, `member.role_changed`, `member.deactivated`, `member.reactivated`, `app.created`, `org.entitlements_changed`, `dev.synthwerk.llm.ai_settings.changed.v1`, `dev.synthwerk.llm.toolcall.executed.v3`, `dev.synthwerk.studio.page.created.v1`, `dev.synthwerk.studio.page.published.v1`, `dev.synthwerk.studio.page.rolled_back.v1`, and later org events. Clients must accept types they do not know.
+	// - `data` is the event data, as its schema in `events/identity`, `events/llm` or `events/studio` says. No email, no personal name, no system prompt text, no page content, no tool arguments or results.
 	// - An llm or studio event shows a few seconds after the change: identity reads it from the bus.
 	// - Cursor paging, max 100 per page.
 	//
@@ -1780,10 +1780,10 @@ func (c *Client) IdentityUpdateApp(ctx context.Context, orgId OrgId, appId AppId
 
 // IdentityListAuditEvents List the audit events of an org
 //
-// The admin actions of the org, newest first. Each item is an event identity wrote to its outbox for the org, kept after the outbox row is gone, an AI settings change of llm that identity received from `EVT_LLM` (synthwerk#39), or a page builder change of studio that identity received from `EVT_STUDIO` (synthwerk#106).
+// The admin actions of the org, newest first. Each item is an event identity wrote to its outbox for the org, kept after the outbox row is gone, an AI settings change of llm that identity received from `EVT_LLM` (synthwerk#39), an admin AI tool call of llm from `EVT_LLM` (synthwerk#53), or a page builder change of studio that identity received from `EVT_STUDIO` (synthwerk#106).
 // - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` gets 403. An `operator` gets 403.
-// - Event types: `org.created`, `member.invited`, `member.role_changed`, `member.deactivated`, `member.reactivated`, `app.created`, `org.entitlements_changed`, `dev.synthwerk.llm.ai_settings.changed.v1`, `dev.synthwerk.studio.page.created.v1`, `dev.synthwerk.studio.page.published.v1`, `dev.synthwerk.studio.page.rolled_back.v1`, and later org events. Clients must accept types they do not know.
-// - `data` is the event data, as its schema in `events/identity`, `events/llm` or `events/studio` says. No email, no personal name, no system prompt text, no page content.
+// - Event types: `org.created`, `member.invited`, `member.role_changed`, `member.deactivated`, `member.reactivated`, `app.created`, `org.entitlements_changed`, `dev.synthwerk.llm.ai_settings.changed.v1`, `dev.synthwerk.llm.toolcall.executed.v3`, `dev.synthwerk.studio.page.created.v1`, `dev.synthwerk.studio.page.published.v1`, `dev.synthwerk.studio.page.rolled_back.v1`, and later org events. Clients must accept types they do not know.
+// - `data` is the event data, as its schema in `events/identity`, `events/llm` or `events/studio` says. No email, no personal name, no system prompt text, no page content, no tool arguments or results.
 // - An llm or studio event shows a few seconds after the change: identity reads it from the bus.
 // - Cursor paging, max 100 per page.
 //
@@ -3354,10 +3354,10 @@ type ClientWithResponsesInterface interface {
 
 	// IdentityListAuditEventsWithResponse List the audit events of an org
 	//
-	// The admin actions of the org, newest first. Each item is an event identity wrote to its outbox for the org, kept after the outbox row is gone, an AI settings change of llm that identity received from `EVT_LLM` (synthwerk#39), or a page builder change of studio that identity received from `EVT_STUDIO` (synthwerk#106).
+	// The admin actions of the org, newest first. Each item is an event identity wrote to its outbox for the org, kept after the outbox row is gone, an AI settings change of llm that identity received from `EVT_LLM` (synthwerk#39), an admin AI tool call of llm from `EVT_LLM` (synthwerk#53), or a page builder change of studio that identity received from `EVT_STUDIO` (synthwerk#106).
 	// - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` gets 403. An `operator` gets 403.
-	// - Event types: `org.created`, `member.invited`, `member.role_changed`, `member.deactivated`, `member.reactivated`, `app.created`, `org.entitlements_changed`, `dev.synthwerk.llm.ai_settings.changed.v1`, `dev.synthwerk.studio.page.created.v1`, `dev.synthwerk.studio.page.published.v1`, `dev.synthwerk.studio.page.rolled_back.v1`, and later org events. Clients must accept types they do not know.
-	// - `data` is the event data, as its schema in `events/identity`, `events/llm` or `events/studio` says. No email, no personal name, no system prompt text, no page content.
+	// - Event types: `org.created`, `member.invited`, `member.role_changed`, `member.deactivated`, `member.reactivated`, `app.created`, `org.entitlements_changed`, `dev.synthwerk.llm.ai_settings.changed.v1`, `dev.synthwerk.llm.toolcall.executed.v3`, `dev.synthwerk.studio.page.created.v1`, `dev.synthwerk.studio.page.published.v1`, `dev.synthwerk.studio.page.rolled_back.v1`, and later org events. Clients must accept types they do not know.
+	// - `data` is the event data, as its schema in `events/identity`, `events/llm` or `events/studio` says. No email, no personal name, no system prompt text, no page content, no tool arguments or results.
 	// - An llm or studio event shows a few seconds after the change: identity reads it from the bus.
 	// - Cursor paging, max 100 per page.
 	//
@@ -5553,10 +5553,10 @@ func (c *ClientWithResponses) IdentityUpdateAppWithResponse(ctx context.Context,
 
 // IdentityListAuditEventsWithResponse List the audit events of an org
 //
-// The admin actions of the org, newest first. Each item is an event identity wrote to its outbox for the org, kept after the outbox row is gone, an AI settings change of llm that identity received from `EVT_LLM` (synthwerk#39), or a page builder change of studio that identity received from `EVT_STUDIO` (synthwerk#106).
+// The admin actions of the org, newest first. Each item is an event identity wrote to its outbox for the org, kept after the outbox row is gone, an AI settings change of llm that identity received from `EVT_LLM` (synthwerk#39), an admin AI tool call of llm from `EVT_LLM` (synthwerk#53), or a page builder change of studio that identity received from `EVT_STUDIO` (synthwerk#106).
 // - Needs the role `owner` or `admin` in the org. The stored membership must be an active `owner` or `admin`. A `member` gets 403. An `operator` gets 403.
-// - Event types: `org.created`, `member.invited`, `member.role_changed`, `member.deactivated`, `member.reactivated`, `app.created`, `org.entitlements_changed`, `dev.synthwerk.llm.ai_settings.changed.v1`, `dev.synthwerk.studio.page.created.v1`, `dev.synthwerk.studio.page.published.v1`, `dev.synthwerk.studio.page.rolled_back.v1`, and later org events. Clients must accept types they do not know.
-// - `data` is the event data, as its schema in `events/identity`, `events/llm` or `events/studio` says. No email, no personal name, no system prompt text, no page content.
+// - Event types: `org.created`, `member.invited`, `member.role_changed`, `member.deactivated`, `member.reactivated`, `app.created`, `org.entitlements_changed`, `dev.synthwerk.llm.ai_settings.changed.v1`, `dev.synthwerk.llm.toolcall.executed.v3`, `dev.synthwerk.studio.page.created.v1`, `dev.synthwerk.studio.page.published.v1`, `dev.synthwerk.studio.page.rolled_back.v1`, and later org events. Clients must accept types they do not know.
+// - `data` is the event data, as its schema in `events/identity`, `events/llm` or `events/studio` says. No email, no personal name, no system prompt text, no page content, no tool arguments or results.
 // - An llm or studio event shows a few seconds after the change: identity reads it from the bus.
 // - Cursor paging, max 100 per page.
 //

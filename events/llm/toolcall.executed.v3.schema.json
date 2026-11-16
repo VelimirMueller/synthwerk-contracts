@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.synthwerk.dev/events/llm/toolcall.executed.v3.json",
+  "title": "llm.toolcall.executed.v3",
+  "description": "Audit fact (D-26, FR-54, synthwerk#53): the admin AI called one read-only MCP tool. llm emits it for every call of an org-scope tool; identity shows it in the org audit list. Replaces llm.toolcall.executed.v2 (deprecated, never produced): data.org_id names the identity org, so identity can list the call. CloudEvents orgid: data.org_id. Subject: the conversation id. The actor extension names the user (user:<sub>). No tool arguments and no tool results: they can hold personal data.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tool", "scope", "org_id", "conversation_id", "outcome", "duration_ms"],
+  "properties": {
+    "tool": {
+      "description": "MCP tool name, <service>_<verb>_<noun>.",
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[a-z]+_[a-z]+_[a-z_]+$"
+    },
+    "scope": {
+      "description": "Token scope of the tool (D-14, D-44). Only org: user tools read the caller's own data and are not audited. A later version may add operator.",
+      "enum": ["org"]
+    },
+    "org_id": {
+      "description": "Identity org id (UUID). Equals the orgid extension.",
+      "type": "string",
+      "format": "uuid",
+      "maxLength": 36
+    },
+    "conversation_id": {
+      "description": "The conversation the call ran in. Equals the subject.",
+      "type": "string",
+      "format": "uuid",
+      "maxLength": 36
+    },
+    "outcome": {
+      "description": "ok: the tool answered. denied: the scope or the membership did not allow the tool, or the model sent arguments the tool does not take. error: the tool failed.",
+      "enum": ["ok", "denied", "error"]
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 600000
+    }
+  }
+}

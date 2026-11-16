@@ -6,9 +6,9 @@ epic: E1
 owner: contracts
 paths: ["events/**"]
 api: []
-events: ["dev.synthwerk.pulse.target.status_changed.v1", "dev.synthwerk.llm.toolcall.executed.v1", "dev.synthwerk.llm.toolcall.executed.v2", "dev.synthwerk.llm.message.completed.v1", "dev.synthwerk.llm.ai_settings.changed.v1", "dev.synthwerk.identity.org.created.v1", "dev.synthwerk.identity.user.created.v1", "dev.synthwerk.identity.member.role_changed.v1", "dev.synthwerk.identity.app.created.v1", "dev.synthwerk.identity.org.entitlements_changed.v1", "dev.synthwerk.identity.member.invited.v1", "dev.synthwerk.identity.member.invite_revoked.v1", "dev.synthwerk.identity.member.deactivated.v1", "dev.synthwerk.identity.member.reactivated.v1", "dev.synthwerk.identity.user.deleted.v1", "dev.synthwerk.studio.page.created.v1", "dev.synthwerk.studio.page.published.v1", "dev.synthwerk.studio.page.rolled_back.v1", "dev.synthwerk.studio.page.unpublished.v1", "dev.synthwerk.studio.page.deleted.v1", "dev.synthwerk.studio.page.version_copied.v1"]
+events: ["dev.synthwerk.pulse.target.status_changed.v1", "dev.synthwerk.llm.toolcall.executed.v1", "dev.synthwerk.llm.toolcall.executed.v2", "dev.synthwerk.llm.toolcall.executed.v3", "dev.synthwerk.llm.message.completed.v1", "dev.synthwerk.llm.ai_settings.changed.v1", "dev.synthwerk.identity.org.created.v1", "dev.synthwerk.identity.user.created.v1", "dev.synthwerk.identity.member.role_changed.v1", "dev.synthwerk.identity.app.created.v1", "dev.synthwerk.identity.org.entitlements_changed.v1", "dev.synthwerk.identity.member.invited.v1", "dev.synthwerk.identity.member.invite_revoked.v1", "dev.synthwerk.identity.member.deactivated.v1", "dev.synthwerk.identity.member.reactivated.v1", "dev.synthwerk.identity.user.deleted.v1", "dev.synthwerk.studio.page.created.v1", "dev.synthwerk.studio.page.published.v1", "dev.synthwerk.studio.page.rolled_back.v1", "dev.synthwerk.studio.page.unpublished.v1", "dev.synthwerk.studio.page.deleted.v1", "dev.synthwerk.studio.page.version_copied.v1"]
 mcp: []
-updated: 2026-10-30
+updated: 2026-11-16
 ---
 
 # Event schemas
@@ -47,7 +47,8 @@ updated: 2026-10-30
 |---|---|
 | `dev.synthwerk.pulse.target.status_changed.v1` | Pulse sees a new readiness status of a target. |
 | `dev.synthwerk.llm.toolcall.executed.v1` | Audit fact (D-26): the AI called one read-only MCP tool. Deprecated (D-44): the scope vocabulary moved to v2. |
-| `dev.synthwerk.llm.toolcall.executed.v2` | Same audit fact. Scope is `org`, `user`, `operator` (D-44). Replaces deprecated v1. |
+| `dev.synthwerk.llm.toolcall.executed.v2` | Same audit fact. Scope is `org`, `user`, `operator` (D-44). Deprecated, never produced: use v3. |
+| `dev.synthwerk.llm.toolcall.executed.v3` | The admin AI called one read-only MCP tool (synthwerk#53). Adds `org_id`, the identity org. `orgid` = `data.org_id`, subject = conversation id. Consumer: identity, for the audit list. |
 | `dev.synthwerk.llm.message.completed.v1` | An LLM answer ends: completed, failed or canceled. Metadata only. |
 | `dev.synthwerk.identity.org.created.v1` | Identity created an org and its first owner. |
 | `dev.synthwerk.identity.user.created.v1` | Zitadel created a human user (Action webhook). Zitadel ids only, no `orgid` until #29. |
@@ -74,6 +75,7 @@ updated: 2026-10-30
 
 ## Tests
 
+- `tests/contract/llm_toolcall_test.go` — `ToolCall v3 example - org scope - orgid = data.org_id, subject = conversation id, actor user`
 - `tests/contract/events_test.go` — `Catalog - each entry - names, schema $id and example match`
 - `tests/contract/events_test.go` — `Catalog - schema file not listed - fails`
 - `tests/contract/events_test.go` — `envelope - type without version suffix - rejected` (and 4 more reject cases)
@@ -94,3 +96,4 @@ updated: 2026-10-30
 | 2026-10-30 | Add `llm.ai_settings.changed.v1` (synthwerk#39). Consumer: identity, for the audit list. |
 | 2026-10-30 | Add `studio.page.created.v1`, `studio.page.published.v1`, `studio.page.rolled_back.v1` on the new stream `EVT_STUDIO` (synthwerk#106). Consumer: identity, for the audit list. |
 | 2026-10-30 | Add `studio.page.unpublished.v1`, `studio.page.deleted.v1`, `studio.page.version_copied.v1` (synthwerk#108). No consumer yet. |
+| 2026-11-16 | Add `llm.toolcall.executed.v3` with `org_id` (synthwerk#53). Consumer: identity, for the audit list. `v2` is deprecated; nobody produced it. |
